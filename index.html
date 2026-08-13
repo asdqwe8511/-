@@ -311,6 +311,7 @@
     <div class="chip active" data-type="ALL">전체 길이</div>
     <div class="chip" data-type="LONG">🎬 롱폼</div>
     <div class="chip" data-type="SHORT">⚡ 숏폼</div>
+    <button class="icon-btn" id="forceRefreshBtn" title="오늘 캐시를 무시하고 다시 수집 (검색 API 비용 발생)">🔄 다시 불러오기</button>
     <div class="spacer"></div>
     <div class="status-text" id="statusText">데이터를 불러오는 중입니다...</div>
   </div>
@@ -336,27 +337,6 @@
     </div>
   </div>
 
-  <div class="panel" id="durationCollectPanel" style="margin-top:24px;">
-    <h2>롱폼 200개 · 숏폼 50개 개별 수집</h2>
-    <div class="sub" id="durationCollectSub">
-      최근 7일 이내 게시물 중 조회수 순으로, 국가당 롱폼은 최대 200개, 숏폼은 최대 50개를 검색 API로 따로 가져옵니다.
-      위 국가 필터가 <b>전체</b>면 4개국 전부, 특정 국가가 선택돼 있으면 그 국가만 수집돼요.
-      롱폼/숏폼 중 하나가 실패해도 나머지는 그대로 표시됩니다. 국가당 최대 약 1,400유닛 정도 씁니다
-      (검색 API가 회당 100유닛이라 꽤 비쌉니다). 자동 실행되지 않고 버튼을 눌렀을 때만 동작합니다.
-    </div>
-    <button class="icon-btn" id="collectDurationBtn" style="margin-bottom:18px;">🎯 롱폼/숏폼 수집 시작</button>
-
-    <div id="durationResults" class="hidden">
-      <div style="margin-bottom:22px;">
-        <h2 style="font-size:15px;">🎬 롱폼 (20분 이상, 조회수 순)</h2>
-        <div id="longResultsByRegion"></div>
-      </div>
-      <div>
-        <h2 style="font-size:15px;">⚡ 숏폼 (실제 60초 이하만, 조회수 순)</h2>
-        <div id="shortResultsByRegion"></div>
-      </div>
-    </div>
-  </div>
 
 </div>
 
@@ -534,7 +514,6 @@ const REGIONS = [
   {code:'JP', label:'일본', flag:'🇯🇵'},
   {code:'IN', label:'인도', flag:'🇮🇳'},
 ];
-const VIDEOS_PER_REGION = 200; // YouTube API caps a single request at 50, so this paginates
 const CAT_COLORS = ['#7c5cff','#2dd4bf','#ff5470','#f5a524','#3b82f6','#ec4899','#22c55e'];
 
 // localStorage can throw (privacy settings, browser policy, etc).
@@ -660,28 +639,6 @@ async function loadCategoryMap(regionCode){
   return map;
 }
 
-async function fetchMostPopular(regionCode, target){
-  // YouTube caps a single request at 50 items, so page through until we
-  // hit the target count or run out of results (mostPopular charts top out
-  // around 200 per region anyway).
-  let items = [];
-  let pageToken = '';
-  while(items.length < target){
-    const params = {
-      part: 'snippet,statistics,contentDetails,topicDetails',
-      chart: 'mostPopular',
-      regionCode,
-      maxResults: Math.min(50, target - items.length),
-    };
-    if(pageToken) params.pageToken = pageToken;
-    const data = await ytFetch('videos', params);
-    items = items.concat(data.items || []);
-    if(!data.nextPageToken) break;
-    pageToken = data.nextPageToken;
-  }
-  return items;
-}
-
 // Shared mapper from a raw videos.list item (part=snippet,statistics,
 // contentDetails,topicDetails) to our internal video shape.
 function mapRawVideo(v, regionCode, categoryMap){
@@ -702,28 +659,68 @@ function mapRawVideo(v, regionCode, categoryMap){
   };
 }
 
-async function loadRegion(regionCode){
-  const [rawVideos, categoryMap] = await Promise.all([
-    fetchMostPopular(regionCode, VIDEOS_PER_REGION),
-    loadCategoryMap(regionCode)
+function todayKey(){ return new Date().toISOString().slice(0,10); }
+
+// Each region's video list is now "롱폼 최대 200개 + 숏폼 최대 50개, 최근 7일
+// 조회수 순" via search.list — real but expensive (search.list is 100
+// units/call). Cache it per browser, per day, so opening/refreshing the site
+// repeatedly the same day reuses the result instead of re-spending quota.
+// (Use forceRefresh to bypass the cache and pull fresh data on demand.)
+async function loadRegion(regionCode, onProgress, forceRefresh){
+  const cacheKey = `yt_region_v2_${regionCode}`;
+  if(!forceRefresh){
+    try{
+      const cached = JSON.parse(safeGet(cacheKey) || 'null');
+      if(cached && cached.date === todayKey() && Array.isArray(cached.videos)){
+        if(onProgress) onProgress('cache');
+        return { videos: cached.videos, categoryMap: cached.categoryMap || {} };
+      }
+    }catch(e){ /* corrupt cache entry — fall through and refetch */ }
+  }
+
+  const categoryMap = await loadCategoryMap(regionCode);
+  const [longVids, shortVids] = await Promise.all([
+    collectLongForRegion(regionCode, categoryMap),
+    collectShortForRegion(regionCode, categoryMap, (page, found) => {
+      if(onProgress) onProgress('short', page, found);
+    }),
   ]);
-  const videos = rawVideos.map(v => mapRawVideo(v, regionCode, categoryMap));
+  const videos = [...longVids, ...shortVids];
+  safeSet(cacheKey, JSON.stringify({date: todayKey(), videos, categoryMap}));
   return { videos, categoryMap };
 }
 
-async function loadAll(){
-  $('statusText').textContent = '불러오는 중...';
+async function loadAll(forceRefresh){
+  const refreshBtn = $('forceRefreshBtn');
+  refreshBtn.disabled = true;
   $('regionRankings').innerHTML = '<div class="loading">불러오는 중...</div>';
   $('categoryTop').innerHTML = '<div class="loading">불러오는 중...</div>';
+
   try{
-    const results = await Promise.all(REGIONS.map(r => loadRegion(r.code)));
-    REGIONS.forEach((r, i) => dataByRegion[r.code] = results[i]);
-    $('statusText').innerHTML = `업데이트 완료 · <b>${new Date().toLocaleTimeString('ko-KR')}</b>`;
-    render();
-  }catch(e){
-    $('statusText').textContent = '오류: ' + e.message;
-    $('regionRankings').innerHTML = `<div class="empty">데이터를 불러오지 못했습니다.<br>${e.message}</div>`;
-    $('categoryTop').innerHTML = '';
+    for(let i = 0; i < REGIONS.length; i++){
+      const r = REGIONS[i];
+      const baseStatus = `불러오는 중... (${i+1}/${REGIONS.length}개국 · ${r.label})`;
+      $('statusText').textContent = baseStatus;
+      try{
+        const result = await loadRegion(r.code, (stage, page, found) => {
+          if(stage === 'cache'){
+            $('statusText').textContent = `${baseStatus} · 오늘 이미 수집된 데이터 재사용`;
+          } else if(stage === 'short'){
+            $('statusText').textContent = `${baseStatus} · 숏폼 탐색 ${page}페이지, ${found}개 발견`;
+          }
+        }, forceRefresh);
+        dataByRegion[r.code] = result;
+      }catch(e){
+        dataByRegion[r.code] = dataByRegion[r.code] || { videos: [], categoryMap: {} };
+        console.error(`${r.label} 로드 실패:`, e);
+        $('statusText').textContent = `${r.label} 로드 실패: ${e.message}`;
+      }
+      render(); // show each region as soon as it's ready instead of waiting for all 4
+    }
+
+    $('statusText').innerHTML = `업데이트 완료 · <b>${new Date().toLocaleTimeString('ko-KR')}</b> · 국가당 롱폼 최대 200개 / 숏폼 최대 50개 (최근 7일, 조회수 순)`;
+  }finally{
+    refreshBtn.disabled = false;
   }
 }
 
@@ -862,10 +859,10 @@ async function searchIdsByDuration(regionCode, videoDuration, maxPages){
   return ids;
 }
 
-async function collectLongForRegion(code){
+async function collectLongForRegion(code, categoryMap){
   const ids = await searchIdsByDuration(code, 'long', 4); // 4 pages × 50 = target 200
   const raw = await fetchVideosByIds(ids.slice(0, 200));
-  const videos = raw.map(v => mapRawVideo(v, code));
+  const videos = raw.map(v => mapRawVideo(v, code, categoryMap));
   videos.sort((a,b) => b.views - a.views);
   return videos;
 }
@@ -879,7 +876,7 @@ async function collectLongForRegion(code){
 const SHORT_TARGET = 50;
 const SHORT_SAFETY_MAX_PAGES = 10;
 
-async function collectShortForRegion(code, onProgress){
+async function collectShortForRegion(code, categoryMap, onProgress){
   const publishedAfter = new Date(Date.now() - 7*24*60*60*1000).toISOString();
   let trueShorts = [];
   let pageToken = '';
@@ -895,7 +892,7 @@ async function collectShortForRegion(code, onProgress){
 
     if(ids.length){
       const raw = await fetchVideosByIds(ids);
-      const found = raw.map(v => mapRawVideo(v, code)).filter(v => v.durationSec <= 60);
+      const found = raw.map(v => mapRawVideo(v, code, categoryMap)).filter(v => v.durationSec <= 60);
       trueShorts = trueShorts.concat(found);
     }
     if(onProgress) onProgress(p+1, trueShorts.length);
@@ -905,87 +902,6 @@ async function collectShortForRegion(code, onProgress){
 
   trueShorts.sort((a,b) => b.views - a.views);
   return trueShorts.slice(0, SHORT_TARGET);
-}
-
-function regionGroupHTML(code, videos){
-  const r = REGIONS.find(x => x.code === code);
-  return `
-  <div class="region-block">
-    <div class="region-title">${r.flag} ${r.label} <span class="region-flag">${videos.length}개</span></div>
-    <div class="region-list-scroll" style="height:420px;">
-      <div class="video-grid">
-        ${videos.map((v,i) => videoCardHTML(v, i+1)).join('') || '<div class="empty">결과 없음</div>'}
-      </div>
-    </div>
-  </div>`;
-}
-
-async function collectDurationSplit(){
-  const btn = $('collectDurationBtn');
-
-  try{
-    const regions = currentRegionFilter === 'ALL' ? REGIONS.map(r => r.code) : [currentRegionFilter];
-
-    btn.disabled = true;
-    $('durationResults').classList.remove('hidden');
-    $('longResultsByRegion').innerHTML = '<div class="loading">수집 중...</div>';
-    $('shortResultsByRegion').innerHTML = '<div class="loading">수집 중...</div>';
-
-    const longByRegion = {};
-    const shortByRegion = {};
-    const errors = [];
-
-    const rerenderLong = () => {
-      $('longResultsByRegion').innerHTML = Object.keys(longByRegion).map(c => regionGroupHTML(c, longByRegion[c])).join('');
-      bindVideoCardClicks($('longResultsByRegion'));
-    };
-    const rerenderShort = () => {
-      $('shortResultsByRegion').innerHTML = Object.keys(shortByRegion).map(c => regionGroupHTML(c, shortByRegion[c])).join('');
-      bindVideoCardClicks($('shortResultsByRegion'));
-    };
-
-    for(let i = 0; i < regions.length; i++){
-      const code = regions[i];
-      const label = REGIONS.find(r=>r.code===code).label;
-      const baseStatus = `수집 중... (${i+1}/${regions.length}개국 · ${label})`;
-
-      // Long and short run independently — if one fails (timeout, quota, etc.)
-      // the other's results still make it to the screen instead of the whole
-      // thing being wiped out.
-      $('durationCollectSub').textContent = `${baseStatus} · 롱폼 수집 중`;
-      try{
-        longByRegion[code] = await collectLongForRegion(code);
-      }catch(e){
-        longByRegion[code] = [];
-        errors.push(`${label} 롱폼: ${e.message}`);
-      }
-      rerenderLong();
-
-      $('durationCollectSub').textContent = `${baseStatus} · 숏폼 수집 중`;
-      try{
-        shortByRegion[code] = await collectShortForRegion(code, (page, found) => {
-          $('durationCollectSub').textContent = `${baseStatus} · 숏폼 탐색 중 ${page}페이지, 지금까지 ${found}개 발견`;
-        });
-      }catch(e){
-        shortByRegion[code] = [];
-        errors.push(`${label} 숏폼: ${e.message}`);
-      }
-      rerenderShort();
-    }
-
-    const totalLong = Object.values(longByRegion).reduce((s,v) => s+v.length, 0);
-    const totalShort = Object.values(shortByRegion).reduce((s,v) => s+v.length, 0);
-    const doneAt = new Date().toLocaleTimeString('ko-KR');
-    if(errors.length){
-      $('durationCollectSub').innerHTML =
-        `완료(일부 오류 있음) · 롱폼 <b>${totalLong}</b>개 / 숏폼 <b>${totalShort}</b>개 · <b>${doneAt}</b>` +
-        `<br><span style="color:var(--danger);">${errors.map(escapeHtml).join('<br>')}</span>`;
-    } else {
-      $('durationCollectSub').innerHTML = `최근 7일 이내 게시물 중 조회수 순 · 롱폼 <b>${totalLong}</b>개 / 숏폼 <b>${totalShort}</b>개 수집 완료 · <b>${doneAt}</b>`;
-    }
-  }finally{
-    btn.disabled = false;
-  }
 }
 
 // name -> {count, views, sample, videos:[...]}, refreshed on every render
@@ -1464,7 +1380,10 @@ document.querySelectorAll('.chip[data-type]').forEach(chip => {
   });
 });
 
-$('collectDurationBtn').addEventListener('click', collectDurationSplit);
+$('forceRefreshBtn').addEventListener('click', () => {
+  channelPoolLoaded = false; // let the channel finder tab pick up fresh data too if reopened
+  loadAll(true); // bypass today's cache and re-spend quota on demand
+});
 
 $('logoutBtn').addEventListener('click', async () => {
   try{ await fetch('/api/logout', {method:'POST'}); }catch(e){}
@@ -1603,12 +1522,10 @@ window.addEventListener('error', (e) => {
 window.addEventListener('unhandledrejection', (e) => {
   const msg = '처리되지 않은 오류: ' + (e.reason?.message || e.reason);
   console.error(msg, e.reason);
-  const sub = document.getElementById('durationCollectSub');
-  if(sub) sub.innerHTML = `<span style="color:var(--danger);">${escapeHtml(msg)}</span>`;
   const status = document.getElementById('statusText');
   if(status) status.textContent = msg;
-  const btn = document.getElementById('collectDurationBtn');
-  if(btn) btn.disabled = false;
+  const refreshBtn = document.getElementById('forceRefreshBtn');
+  if(refreshBtn) refreshBtn.disabled = false;
 });
 
 // init
