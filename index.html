@@ -22,6 +22,7 @@
     color: var(--text);
     font-family: "Pretendard","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
     line-height:1.5;
+    overflow-x:hidden; /* belt-and-suspenders: never let a stray element cause sideways page scroll */
   }
   a{color:inherit; text-decoration:none;}
 
@@ -233,6 +234,40 @@
   .range-row span{color:var(--text-dim);}
 
   #catFilterChips.chip-row{max-height:280px; overflow-y:auto;}
+
+  /* ---------- Mobile ---------- */
+  @media(max-width:640px){
+    header.topbar{
+      flex-wrap:wrap; row-gap:8px; padding:10px 14px;
+    }
+    .brand{font-size:14.5px; gap:8px;}
+    .brand-badge{width:26px; height:26px; font-size:13px;}
+    .gear-btn{font-size:12px; padding:6px 10px;}
+    .tab-nav{order:3; width:100%; justify-content:center;}
+    .tab-btn{font-size:12.5px; padding:7px 10px;}
+
+    .hero{padding:32px 16px 24px;}
+    .hero h1{font-size:23px;}
+    .hero p{font-size:12.5px;}
+
+    .container{padding:0 12px 40px;}
+    .filter-bar{padding:12px; gap:8px;}
+    .chip{padding:6px 12px; font-size:12px;}
+
+    .stats-row{grid-template-columns:repeat(2,1fr); gap:10px;}
+    .stat-card{padding:14px 16px;}
+    .stat-card .value{font-size:21px;}
+
+    .region-list-scroll{height:400px;}
+    .thumb{width:72px; height:44px;}
+    .vinfo .title{font-size:12.5px;}
+    .vinfo .meta{font-size:11px; gap:6px;}
+
+    .search-input{min-width:0; flex:1 1 100%;}
+
+    .modal{padding:18px;}
+    .ch-info{min-width:170px;}
+  }
 </style>
 </head>
 <body>
