@@ -337,13 +337,12 @@
   </div>
 
   <div class="panel" id="durationCollectPanel" style="margin-top:24px;">
-    <h2>롱폼 200개 · 숏폼 200개 개별 수집</h2>
+    <h2>롱폼 200개 · 숏폼 50개 개별 수집</h2>
     <div class="sub" id="durationCollectSub">
-      최근 7일 이내 게시물 중 조회수 순으로, 국가당 롱폼/숏폼을 각각 최대 200개씩 검색 API로 따로 가져옵니다.
+      최근 7일 이내 게시물 중 조회수 순으로, 국가당 롱폼은 최대 200개, 숏폼은 최대 50개를 검색 API로 따로 가져옵니다.
       위 국가 필터가 <b>전체</b>면 4개국 전부, 특정 국가가 선택돼 있으면 그 국가만 수집돼요.
-      숏폼은 200개를 채울 때까지(최대 20페이지) 계속 더 찾아보기 때문에, 국가당 최대 <b>약 2,000유닛</b>까지 쓸 수 있고
-      롱폼까지 합치면 국가당 최대 약 2,400유닛이에요 (검색 API가 회당 100유닛이라 꽤 비쌉니다).
-      자동 실행되지 않고 버튼을 눌렀을 때만 동작합니다.
+      롱폼/숏폼 중 하나가 실패해도 나머지는 그대로 표시됩니다. 국가당 최대 약 1,400유닛 정도 씁니다
+      (검색 API가 회당 100유닛이라 꽤 비쌉니다). 자동 실행되지 않고 버튼을 눌렀을 때만 동작합니다.
     </div>
     <button class="icon-btn" id="collectDurationBtn" style="margin-bottom:18px;">🎯 롱폼/숏폼 수집 시작</button>
 
@@ -586,7 +585,21 @@ function formatDuration(sec){
 async function ytFetch(path, params){
   const url = new URL(`/api/yt/${path}`, location.origin);
   Object.entries(params).forEach(([k,v]) => url.searchParams.set(k,v));
-  const res = await fetch(url);
+
+  // Never let a single request hang forever — surface a clear timeout error
+  // instead of the UI silently looking "stuck".
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  let res;
+  try{
+    res = await fetch(url, { signal: controller.signal });
+  }catch(e){
+    if(e.name === 'AbortError') throw new Error(`요청 시간 초과 (15초): ${path}`);
+    throw e;
+  }finally{
+    clearTimeout(timeoutId);
+  }
+
   if(res.status === 401){
     location.href = '/login.html';
     throw new Error('로그인이 필요합니다.');
@@ -863,8 +876,8 @@ async function collectLongForRegion(code){
 // we actually reach the 200 target. SHORT_SAFETY_MAX_PAGES is only there so
 // a region with almost no real Shorts trending this week can't loop forever;
 // each page here costs 100 units (search.list) + ~1 unit (videos.list).
-const SHORT_TARGET = 200;
-const SHORT_SAFETY_MAX_PAGES = 20;
+const SHORT_TARGET = 50;
+const SHORT_SAFETY_MAX_PAGES = 10;
 
 async function collectShortForRegion(code, onProgress){
   const publishedAfter = new Date(Date.now() - 7*24*60*60*1000).toISOString();
@@ -916,34 +929,59 @@ async function collectDurationSplit(){
   $('longResultsByRegion').innerHTML = '<div class="loading">수집 중...</div>';
   $('shortResultsByRegion').innerHTML = '<div class="loading">수집 중...</div>';
 
+  const longByRegion = {};
+  const shortByRegion = {};
+  const errors = [];
+
+  const rerenderLong = () => {
+    $('longResultsByRegion').innerHTML = Object.keys(longByRegion).map(c => regionGroupHTML(c, longByRegion[c])).join('');
+    bindVideoCardClicks($('longResultsByRegion'));
+  };
+  const rerenderShort = () => {
+    $('shortResultsByRegion').innerHTML = Object.keys(shortByRegion).map(c => regionGroupHTML(c, shortByRegion[c])).join('');
+    bindVideoCardClicks($('shortResultsByRegion'));
+  };
+
   try{
-    const longByRegion = {};
-    const shortByRegion = {};
     for(let i = 0; i < regions.length; i++){
       const code = regions[i];
       const label = REGIONS.find(r=>r.code===code).label;
       const baseStatus = `수집 중... (${i+1}/${regions.length}개국 · ${label})`;
-      $('durationCollectSub').textContent = baseStatus;
-      const [longVids, shortVids] = await Promise.all([
-        collectLongForRegion(code),
-        collectShortForRegion(code, (page, found) => {
-          $('durationCollectSub').textContent = `${baseStatus} · 숏폼 탐색 중 ${page}페이지, 지금까지 ${found}개 발견`;
-        }),
-      ]);
-      longByRegion[code] = longVids;
-      shortByRegion[code] = shortVids;
-    }
 
-    $('longResultsByRegion').innerHTML = regions.map(code => regionGroupHTML(code, longByRegion[code])).join('');
-    $('shortResultsByRegion').innerHTML = regions.map(code => regionGroupHTML(code, shortByRegion[code])).join('');
-    bindVideoCardClicks($('longResultsByRegion'));
-    bindVideoCardClicks($('shortResultsByRegion'));
+      // Long and short run independently — if one fails (timeout, quota, etc.)
+      // the other's results still make it to the screen instead of the whole
+      // thing being wiped out.
+      $('durationCollectSub').textContent = `${baseStatus} · 롱폼 수집 중`;
+      try{
+        longByRegion[code] = await collectLongForRegion(code);
+      }catch(e){
+        longByRegion[code] = [];
+        errors.push(`${label} 롱폼: ${e.message}`);
+      }
+      rerenderLong();
+
+      $('durationCollectSub').textContent = `${baseStatus} · 숏폼 수집 중`;
+      try{
+        shortByRegion[code] = await collectShortForRegion(code, (page, found) => {
+          $('durationCollectSub').textContent = `${baseStatus} · 숏폼 탐색 중 ${page}페이지, 지금까지 ${found}개 발견`;
+        });
+      }catch(e){
+        shortByRegion[code] = [];
+        errors.push(`${label} 숏폼: ${e.message}`);
+      }
+      rerenderShort();
+    }
 
     const totalLong = Object.values(longByRegion).reduce((s,v) => s+v.length, 0);
     const totalShort = Object.values(shortByRegion).reduce((s,v) => s+v.length, 0);
-    $('durationCollectSub').innerHTML = `최근 7일 이내 게시물 중 조회수 순 · 롱폼 <b>${totalLong}</b>개 / 숏폼 <b>${totalShort}</b>개 수집 완료 · <b>${new Date().toLocaleTimeString('ko-KR')}</b>`;
-  }catch(e){
-    $('durationCollectSub').textContent = '오류: ' + e.message;
+    const doneAt = new Date().toLocaleTimeString('ko-KR');
+    if(errors.length){
+      $('durationCollectSub').innerHTML =
+        `완료(일부 오류 있음) · 롱폼 <b>${totalLong}</b>개 / 숏폼 <b>${totalShort}</b>개 · <b>${doneAt}</b>` +
+        `<br><span style="color:var(--danger);">${errors.map(escapeHtml).join('<br>')}</span>`;
+    } else {
+      $('durationCollectSub').innerHTML = `최근 7일 이내 게시물 중 조회수 순 · 롱폼 <b>${totalLong}</b>개 / 숏폼 <b>${totalShort}</b>개 수집 완료 · <b>${doneAt}</b>`;
+    }
   }finally{
     btn.disabled = false;
   }
