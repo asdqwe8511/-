@@ -307,6 +307,10 @@
     <div class="chip" data-region="US">🇺🇸 미국</div>
     <div class="chip" data-region="JP">🇯🇵 일본</div>
     <div class="chip" data-region="IN">🇮🇳 인도</div>
+    <div style="width:1px; align-self:stretch; background:var(--border); margin:0 2px;"></div>
+    <div class="chip active" data-type="ALL">전체 길이</div>
+    <div class="chip" data-type="LONG">🎬 롱폼</div>
+    <div class="chip" data-type="SHORT">⚡ 숏폼</div>
     <div class="spacer"></div>
     <div class="status-text" id="statusText">데이터를 불러오는 중입니다...</div>
   </div>
@@ -521,7 +525,14 @@ function safeSet(key, val){
 }
 
 let currentRegionFilter = 'ALL';
+let currentTypeFilter = 'ALL'; // 'ALL' | 'LONG' | 'SHORT' — splits the already-fetched pool, no extra API calls
 let dataByRegion = {}; // { KR: { videos:[...], categoryMap:{} } }
+
+function typeFilterVideos(vids){
+  if(currentTypeFilter === 'SHORT') return vids.filter(v => v.durationSec <= 60);
+  if(currentTypeFilter === 'LONG') return vids.filter(v => v.durationSec > 60);
+  return vids;
+}
 
 const $ = (id) => document.getElementById(id);
 
@@ -679,7 +690,7 @@ function activeRegions(){
 }
 
 function allActiveVideos(){
-  return activeRegions().flatMap(code => (dataByRegion[code]?.videos || []));
+  return typeFilterVideos(activeRegions().flatMap(code => (dataByRegion[code]?.videos || [])));
 }
 
 function renderStats(){
@@ -730,7 +741,7 @@ function renderRegionRankings(){
   const codes = activeRegions();
   const html = codes.map(code => {
     const r = REGIONS.find(x=>x.code===code);
-    const vids = dataByRegion[code]?.videos || [];
+    const vids = typeFilterVideos(dataByRegion[code]?.videos || []);
     return `
     <div class="region-block">
       <div class="region-title">${r.flag} ${r.label} <span class="region-flag">${vids.length}개</span></div>
@@ -1236,6 +1247,15 @@ document.querySelectorAll('.chip[data-region]').forEach(chip => {
     document.querySelectorAll('.chip[data-region]').forEach(c => c.classList.remove('active'));
     chip.classList.add('active');
     currentRegionFilter = chip.dataset.region;
+    if(Object.keys(dataByRegion).length) render();
+  });
+});
+
+document.querySelectorAll('.chip[data-type]').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.chip[data-type]').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    currentTypeFilter = chip.dataset.type;
     if(Object.keys(dataByRegion).length) render();
   });
 });
