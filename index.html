@@ -922,27 +922,28 @@ function regionGroupHTML(code, videos){
 
 async function collectDurationSplit(){
   const btn = $('collectDurationBtn');
-  const regions = currentRegionFilter === 'ALL' ? REGIONS.map(r => r.code) : [currentRegionFilter];
-
-  btn.disabled = true;
-  $('durationResults').classList.remove('hidden');
-  $('longResultsByRegion').innerHTML = '<div class="loading">수집 중...</div>';
-  $('shortResultsByRegion').innerHTML = '<div class="loading">수집 중...</div>';
-
-  const longByRegion = {};
-  const shortByRegion = {};
-  const errors = [];
-
-  const rerenderLong = () => {
-    $('longResultsByRegion').innerHTML = Object.keys(longByRegion).map(c => regionGroupHTML(c, longByRegion[c])).join('');
-    bindVideoCardClicks($('longResultsByRegion'));
-  };
-  const rerenderShort = () => {
-    $('shortResultsByRegion').innerHTML = Object.keys(shortByRegion).map(c => regionGroupHTML(c, shortByRegion[c])).join('');
-    bindVideoCardClicks($('shortResultsByRegion'));
-  };
 
   try{
+    const regions = currentRegionFilter === 'ALL' ? REGIONS.map(r => r.code) : [currentRegionFilter];
+
+    btn.disabled = true;
+    $('durationResults').classList.remove('hidden');
+    $('longResultsByRegion').innerHTML = '<div class="loading">수집 중...</div>';
+    $('shortResultsByRegion').innerHTML = '<div class="loading">수집 중...</div>';
+
+    const longByRegion = {};
+    const shortByRegion = {};
+    const errors = [];
+
+    const rerenderLong = () => {
+      $('longResultsByRegion').innerHTML = Object.keys(longByRegion).map(c => regionGroupHTML(c, longByRegion[c])).join('');
+      bindVideoCardClicks($('longResultsByRegion'));
+    };
+    const rerenderShort = () => {
+      $('shortResultsByRegion').innerHTML = Object.keys(shortByRegion).map(c => regionGroupHTML(c, shortByRegion[c])).join('');
+      bindVideoCardClicks($('shortResultsByRegion'));
+    };
+
     for(let i = 0; i < regions.length; i++){
       const code = regions[i];
       const label = REGIONS.find(r=>r.code===code).label;
@@ -1594,6 +1595,20 @@ $('catDetailOverlay').addEventListener('click', (e) => { if(e.target.id === 'cat
 window.addEventListener('error', (e) => {
   const el = document.getElementById('statusText');
   if(el) el.textContent = '오류 발생: ' + e.message;
+});
+
+// Async functions (like the button handlers below) that throw before/outside
+// their own try/catch reject silently into the console by default — surface
+// those too, wherever on screen makes sense.
+window.addEventListener('unhandledrejection', (e) => {
+  const msg = '처리되지 않은 오류: ' + (e.reason?.message || e.reason);
+  console.error(msg, e.reason);
+  const sub = document.getElementById('durationCollectSub');
+  if(sub) sub.innerHTML = `<span style="color:var(--danger);">${escapeHtml(msg)}</span>`;
+  const status = document.getElementById('statusText');
+  if(status) status.textContent = msg;
+  const btn = document.getElementById('collectDurationBtn');
+  if(btn) btn.disabled = false;
 });
 
 // init
