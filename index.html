@@ -341,7 +341,9 @@
     <div class="sub" id="durationCollectSub">
       최근 7일 이내 게시물 중 조회수 순으로, 국가당 롱폼/숏폼을 각각 최대 200개씩 검색 API로 따로 가져옵니다.
       위 국가 필터가 <b>전체</b>면 4개국 전부, 특정 국가가 선택돼 있으면 그 국가만 수집돼요.
-      검색 API는 호출당 비용이 훨씬 커서(회당 100유닛) 자동 실행하지 않고 버튼을 눌렀을 때만 동작합니다.
+      숏폼은 200개를 채울 때까지(최대 20페이지) 계속 더 찾아보기 때문에, 국가당 최대 <b>약 2,000유닛</b>까지 쓸 수 있고
+      롱폼까지 합치면 국가당 최대 약 2,400유닛이에요 (검색 API가 회당 100유닛이라 꽤 비쌉니다).
+      자동 실행되지 않고 버튼을 눌렀을 때만 동작합니다.
     </div>
     <button class="icon-btn" id="collectDurationBtn" style="margin-bottom:18px;">🎯 롱폼/숏폼 수집 시작</button>
 
@@ -855,14 +857,41 @@ async function collectLongForRegion(code){
   return videos;
 }
 
-async function collectShortForRegion(code){
-  // videoDuration=short covers <4min, which is broader than a real Shorts
-  // (≤60s) — scan a few extra pages and filter down to the genuine ones.
-  const candidateIds = await searchIdsByDuration(code, 'short', 8); // up to 400 candidates
-  const raw = await fetchVideosByIds(candidateIds);
-  const videos = raw.map(v => mapRawVideo(v, code)).filter(v => v.durationSec <= 60);
-  videos.sort((a,b) => b.views - a.views);
-  return videos.slice(0, 200);
+// videoDuration=short covers <4min, which is broader than a real Shorts
+// (≤60s), so the true-shorts yield per page varies. Rather than grabbing a
+// fixed batch upfront, keep paging — spending more quota as needed — until
+// we actually reach the 200 target. SHORT_SAFETY_MAX_PAGES is only there so
+// a region with almost no real Shorts trending this week can't loop forever;
+// each page here costs 100 units (search.list) + ~1 unit (videos.list).
+const SHORT_TARGET = 200;
+const SHORT_SAFETY_MAX_PAGES = 20;
+
+async function collectShortForRegion(code, onProgress){
+  const publishedAfter = new Date(Date.now() - 7*24*60*60*1000).toISOString();
+  let trueShorts = [];
+  let pageToken = '';
+
+  for(let p = 0; p < SHORT_SAFETY_MAX_PAGES && trueShorts.length < SHORT_TARGET; p++){
+    const params = {
+      part: 'snippet', type: 'video', order: 'viewCount',
+      videoDuration: 'short', regionCode: code, publishedAfter, maxResults: 50,
+    };
+    if(pageToken) params.pageToken = pageToken;
+    const data = await ytFetch('search', params);
+    const ids = (data.items || []).map(it => it.id?.videoId).filter(Boolean);
+
+    if(ids.length){
+      const raw = await fetchVideosByIds(ids);
+      const found = raw.map(v => mapRawVideo(v, code)).filter(v => v.durationSec <= 60);
+      trueShorts = trueShorts.concat(found);
+    }
+    if(onProgress) onProgress(p+1, trueShorts.length);
+    if(!data.nextPageToken) break; // no more results at all, even if under target
+    pageToken = data.nextPageToken;
+  }
+
+  trueShorts.sort((a,b) => b.views - a.views);
+  return trueShorts.slice(0, SHORT_TARGET);
 }
 
 function regionGroupHTML(code, videos){
@@ -892,10 +921,14 @@ async function collectDurationSplit(){
     const shortByRegion = {};
     for(let i = 0; i < regions.length; i++){
       const code = regions[i];
-      $('durationCollectSub').textContent = `수집 중... (${i+1}/${regions.length}개국 · ${REGIONS.find(r=>r.code===code).label})`;
+      const label = REGIONS.find(r=>r.code===code).label;
+      const baseStatus = `수집 중... (${i+1}/${regions.length}개국 · ${label})`;
+      $('durationCollectSub').textContent = baseStatus;
       const [longVids, shortVids] = await Promise.all([
         collectLongForRegion(code),
-        collectShortForRegion(code),
+        collectShortForRegion(code, (page, found) => {
+          $('durationCollectSub').textContent = `${baseStatus} · 숏폼 탐색 중 ${page}페이지, 지금까지 ${found}개 발견`;
+        }),
       ]);
       longByRegion[code] = longVids;
       shortByRegion[code] = shortVids;
