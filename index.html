@@ -100,7 +100,9 @@
   }
   .video-card{
     background:var(--panel-2); border:1px solid var(--border); border-radius:10px; overflow:hidden;
+    cursor:pointer; transition:.15s;
   }
+  .video-card:hover{border-color:var(--accent);}
   .vcard-thumb-wrap{position:relative; width:100%; aspect-ratio:16/9; background:#000;}
   .vcard-thumb{width:100%; height:100%; object-fit:cover; display:block;}
   .vcard-rank{
@@ -133,8 +135,10 @@
   .cat-card{
     display:flex; gap:12px; align-items:center; padding:14px; border-radius:12px;
     background:var(--panel-2); border:1px solid var(--border); margin-bottom:12px;
+    cursor:pointer; transition:.15s;
   }
   .cat-card:last-child{margin-bottom:0;}
+  .cat-card:hover{border-color:var(--accent);}
   .cat-tag{
     font-size:11px; font-weight:700; padding:4px 9px; border-radius:6px; color:#fff; flex-shrink:0;
   }
@@ -458,6 +462,29 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="videoDetailOverlay">
+  <div class="modal wide">
+    <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:10px;">
+      <h3 id="vDetailTitle">영상 정보</h3>
+      <button id="vDetailClose">✕</button>
+    </div>
+    <div style="position:relative; width:100%; aspect-ratio:16/9; background:#000; border-radius:10px; overflow:hidden; margin-bottom:14px;">
+      <iframe id="vDetailIframe" style="width:100%; height:100%; border:0;" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen src=""></iframe>
+    </div>
+    <div id="vDetailInfo"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="catDetailOverlay">
+  <div class="modal wide">
+    <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:10px;">
+      <h3 id="catDetailTitle">카테고리 상세</h3>
+      <button id="catDetailClose">✕</button>
+    </div>
+    <div id="catDetailBody" style="max-height:65vh; overflow-y:auto;"></div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="chDetailOverlay">
   <div class="modal wide">
     <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:4px;">
@@ -673,9 +700,15 @@ function truncateTitle(title, n){
   return t.length > n ? t.slice(0, n) + '…' : t;
 }
 
+// id -> video object, refreshed on every render so click handlers can look
+// up the full record (region cards, category-detail cards, etc all share this).
+let videoIndex = {};
+
 function videoCardHTML(v, rank){
+  videoIndex[v.id] = v;
+  const hoverInfo = `${v.title}\n조회수 ${formatNum(v.views)} · 좋아요 ${formatNum(v.likes)}\n예상 누적 수익 ${formatWon(estimatedRevenueWon(v.views))} (클릭하면 상세 정보)`;
   return `
-  <div class="video-card" title="${escapeHtml(v.title)}">
+  <div class="video-card" data-video-id="${v.id}" title="${escapeHtml(hoverInfo)}">
     <div class="vcard-thumb-wrap">
       <img class="vcard-thumb" src="${v.thumb}" alt="" loading="lazy">
       <span class="vcard-rank">${rank}</span>
@@ -684,6 +717,13 @@ function videoCardHTML(v, rank){
     <div class="vcard-title">${escapeHtml(truncateTitle(v.title, 12))}</div>
     <div class="vcard-meta">${escapeHtml(v.channel)} · 조회 ${formatNum(v.views)}</div>
   </div>`;
+}
+
+// Delegate video-card clicks from a container into the shared detail modal.
+function bindVideoCardClicks(container){
+  container.querySelectorAll('.video-card').forEach(card => {
+    card.addEventListener('click', () => openVideoDetail(card.dataset.videoId));
+  });
 }
 
 function renderRegionRankings(){
@@ -702,16 +742,51 @@ function renderRegionRankings(){
     </div>`;
   }).join('');
   $('regionRankings').innerHTML = html || '<div class="empty">데이터 없음</div>';
+  bindVideoCardClicks($('regionRankings'));
 }
+
+function openVideoDetail(id){
+  const v = videoIndex[id];
+  if(!v) return;
+  $('vDetailTitle').textContent = v.title;
+  $('vDetailIframe').src = `https://www.youtube.com/embed/${v.id}?autoplay=1`;
+  $('vDetailInfo').innerHTML = `
+    <div style="margin-bottom:14px;">
+      <a href="https://www.youtube.com/channel/${v.channelId}" target="_blank" rel="noopener"
+         style="color:var(--accent-2); font-weight:700; font-size:14px;">
+        ${escapeHtml(v.channel)} 채널 정보 보기 →
+      </a>
+    </div>
+    <div class="stats-row" style="margin-bottom:14px;">
+      <div class="stat-card"><div class="label">조회수</div><div class="value">${formatNum(v.views)}</div></div>
+      <div class="stat-card"><div class="label">좋아요</div><div class="value teal">${formatNum(v.likes)}</div></div>
+      <div class="stat-card"><div class="label">댓글</div><div class="value">${formatNum(v.comments)}</div></div>
+      <div class="stat-card"><div class="label">예상 누적 수익</div><div class="value purple">${formatWon(estimatedRevenueWon(v.views))}</div></div>
+    </div>
+    <div style="font-size:11px; color:var(--text-dim); margin-bottom:14px;">
+      * 예상 수익은 실제 데이터가 아니라, 설정된 단가(1,000회당 ${rpm.toLocaleString('ko-KR')}원) 기준 추정치입니다.
+    </div>
+    <a class="icon-btn" href="https://www.youtube.com/watch?v=${v.id}" target="_blank" rel="noopener" style="display:inline-block;">
+      🔗 유튜브에서 바로 보기
+    </a>
+  `;
+  $('videoDetailOverlay').classList.add('open');
+}
+
+// name -> {count, views, sample, videos:[...]}, refreshed on every render
+// so the category-detail modal can list everything in that bucket.
+let categoryIndex = {};
 
 function renderCategoryTop(){
   const vids = allActiveVideos();
   const byCat = {};
   vids.forEach(v => {
-    if(!byCat[v.categoryName]) byCat[v.categoryName] = {count:0, views:0, sample:v};
+    if(!byCat[v.categoryName]) byCat[v.categoryName] = {count:0, views:0, sample:v, videos:[]};
     byCat[v.categoryName].count++;
     byCat[v.categoryName].views += v.views;
+    byCat[v.categoryName].videos.push(v);
   });
+  categoryIndex = byCat;
   const top = Object.entries(byCat)
     .sort((a,b) => b[1].count - a[1].count)
     .slice(0,5);
@@ -719,8 +794,8 @@ function renderCategoryTop(){
   if(!top.length){ $('categoryTop').innerHTML = '<div class="empty">데이터 없음</div>'; return; }
 
   $('categoryTop').innerHTML = top.map(([name, info], idx) => `
-    <div class="cat-card">
-      <div class="cat-tag" style="background:${CAT_COLORS[idx % CAT_COLORS.length]}">${name}</div>
+    <div class="cat-card" data-cat="${escapeHtml(name)}">
+      <div class="cat-tag" style="background:${CAT_COLORS[idx % CAT_COLORS.length]}">${escapeHtml(name)}</div>
       <img class="cthumb" src="${info.sample.thumb}" alt="">
       <div class="cinfo">
         <div class="cnum">${info.count}개</div>
@@ -728,6 +803,24 @@ function renderCategoryTop(){
       </div>
     </div>
   `).join('');
+  $('categoryTop').querySelectorAll('.cat-card').forEach(card => {
+    card.addEventListener('click', () => openCategoryDetail(card.dataset.cat));
+  });
+}
+
+function openCategoryDetail(name){
+  const info = categoryIndex[name];
+  if(!info) return;
+  $('catDetailTitle').textContent = `🏷 ${name} 인기 영상 (${info.count}개)`;
+  const sorted = info.videos.slice().sort((a,b) => b.views - a.views).slice(0,30);
+  $('catDetailBody').innerHTML = `<div class="video-grid">${sorted.map((v,i) => videoCardHTML(v,i+1)).join('')}</div>`;
+  $('catDetailBody').querySelectorAll('.video-card').forEach(card => {
+    card.addEventListener('click', () => {
+      $('catDetailOverlay').classList.remove('open');
+      openVideoDetail(card.dataset.videoId);
+    });
+  });
+  $('catDetailOverlay').classList.add('open');
 }
 
 function render(){
@@ -1259,6 +1352,18 @@ $('catApplyBtn').addEventListener('click', () => {
 // --- channel detail modal ---
 $('chDetailClose').addEventListener('click', () => $('chDetailOverlay').classList.remove('open'));
 $('chDetailOverlay').addEventListener('click', (e) => { if(e.target.id === 'chDetailOverlay') $('chDetailOverlay').classList.remove('open'); });
+
+// --- video detail modal (clicking a video card) ---
+function closeVideoDetail(){
+  $('videoDetailOverlay').classList.remove('open');
+  $('vDetailIframe').src = ''; // stop playback once the modal is closed
+}
+$('vDetailClose').addEventListener('click', closeVideoDetail);
+$('videoDetailOverlay').addEventListener('click', (e) => { if(e.target.id === 'videoDetailOverlay') closeVideoDetail(); });
+
+// --- category detail modal (clicking a "카테고리별 TOP" card) ---
+$('catDetailClose').addEventListener('click', () => $('catDetailOverlay').classList.remove('open'));
+$('catDetailOverlay').addEventListener('click', (e) => { if(e.target.id === 'catDetailOverlay') $('catDetailOverlay').classList.remove('open'); });
 
 // Surface any unexpected runtime error instead of failing silently.
 window.addEventListener('error', (e) => {
