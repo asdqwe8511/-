@@ -50,7 +50,10 @@ module.exports = async (req, res) => {
   const endpoint = segments[0];
 
   if (!ALLOWED_ENDPOINTS.has(endpoint)) {
-    res.status(400).json({ error: { message: '허용되지 않은 API 경로입니다.' } });
+    res.status(400).json({
+      error: { message: '허용되지 않은 API 경로입니다.' },
+      debug: { pathParam, segments, endpoint, query: req.query, url: req.url },
+    });
     return;
   }
 
