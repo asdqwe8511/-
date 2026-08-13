@@ -336,6 +336,27 @@
     </div>
   </div>
 
+  <div class="panel" id="durationCollectPanel" style="margin-top:24px;">
+    <h2>롱폼 200개 · 숏폼 200개 개별 수집</h2>
+    <div class="sub" id="durationCollectSub">
+      최근 7일 이내 게시물 중 조회수 순으로, 국가당 롱폼/숏폼을 각각 최대 200개씩 검색 API로 따로 가져옵니다.
+      위 국가 필터가 <b>전체</b>면 4개국 전부, 특정 국가가 선택돼 있으면 그 국가만 수집돼요.
+      검색 API는 호출당 비용이 훨씬 커서(회당 100유닛) 자동 실행하지 않고 버튼을 눌렀을 때만 동작합니다.
+    </div>
+    <button class="icon-btn" id="collectDurationBtn" style="margin-bottom:18px;">🎯 롱폼/숏폼 수집 시작</button>
+
+    <div id="durationResults" class="hidden">
+      <div style="margin-bottom:22px;">
+        <h2 style="font-size:15px;">🎬 롱폼 (20분 이상, 조회수 순)</h2>
+        <div id="longResultsByRegion"></div>
+      </div>
+      <div>
+        <h2 style="font-size:15px;">⚡ 숏폼 (실제 60초 이하만, 조회수 순)</h2>
+        <div id="shortResultsByRegion"></div>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 </section>
@@ -646,26 +667,32 @@ async function fetchMostPopular(regionCode, target){
   return items;
 }
 
-async function loadRegion(regionCode){
-  const [rawVideos, categoryMap] = await Promise.all([
-    fetchMostPopular(regionCode, VIDEOS_PER_REGION),
-    loadCategoryMap(regionCode)
-  ]);
-  const videos = rawVideos.map(v => ({
+// Shared mapper from a raw videos.list item (part=snippet,statistics,
+// contentDetails,topicDetails) to our internal video shape.
+function mapRawVideo(v, regionCode, categoryMap){
+  return {
     id: v.id,
     title: v.snippet.title,
     channel: v.snippet.channelTitle,
     channelId: v.snippet.channelId,
     thumb: v.snippet.thumbnails?.medium?.url || v.snippet.thumbnails?.default?.url,
-    views: Number(v.statistics.viewCount||0),
-    likes: Number(v.statistics.likeCount||0),
-    comments: Number(v.statistics.commentCount||0),
+    views: Number(v.statistics?.viewCount||0),
+    likes: Number(v.statistics?.likeCount||0),
+    comments: Number(v.statistics?.commentCount||0),
     categoryId: v.snippet.categoryId,
-    categoryName: categoryMap[v.snippet.categoryId] || '기타',
+    categoryName: (categoryMap && categoryMap[v.snippet.categoryId]) || '기타',
     topicCategories: (v.topicDetails?.topicCategories || []).map(parseTopicUrl),
     durationSec: parseISODuration(v.contentDetails.duration),
     seenInRegion: regionCode,
-  }));
+  };
+}
+
+async function loadRegion(regionCode){
+  const [rawVideos, categoryMap] = await Promise.all([
+    fetchMostPopular(regionCode, VIDEOS_PER_REGION),
+    loadCategoryMap(regionCode)
+  ]);
+  const videos = rawVideos.map(v => mapRawVideo(v, regionCode, categoryMap));
   return { videos, categoryMap };
 }
 
@@ -782,6 +809,111 @@ function openVideoDetail(id){
     </a>
   `;
   $('videoDetailOverlay').classList.add('open');
+}
+
+// ==================================================================
+// 롱폼/숏폼 개별 200개 수집 (manual — search.list costs 100 units/call,
+// so this never runs automatically, only when the button is clicked).
+// ==================================================================
+
+async function fetchVideosByIds(ids){
+  const out = [];
+  for(let i = 0; i < ids.length; i += 50){
+    const chunk = ids.slice(i, i+50);
+    if(!chunk.length) continue;
+    const data = await ytFetch('videos', {part: 'snippet,statistics,contentDetails,topicDetails', id: chunk.join(',')});
+    out.push(...(data.items || []));
+  }
+  return out;
+}
+
+// videoDuration: 'long' (>20min) or 'short' (<4min, YouTube's own bucket —
+// still need to filter down to true ≤60s Shorts afterward).
+async function searchIdsByDuration(regionCode, videoDuration, maxPages){
+  const publishedAfter = new Date(Date.now() - 7*24*60*60*1000).toISOString();
+  let ids = [];
+  let pageToken = '';
+  for(let p = 0; p < maxPages; p++){
+    const params = {
+      part: 'snippet', type: 'video', order: 'viewCount',
+      videoDuration, regionCode, publishedAfter, maxResults: 50,
+    };
+    if(pageToken) params.pageToken = pageToken;
+    const data = await ytFetch('search', params);
+    ids = ids.concat((data.items || []).map(it => it.id?.videoId).filter(Boolean));
+    if(!data.nextPageToken) break;
+    pageToken = data.nextPageToken;
+  }
+  return ids;
+}
+
+async function collectLongForRegion(code){
+  const ids = await searchIdsByDuration(code, 'long', 4); // 4 pages × 50 = target 200
+  const raw = await fetchVideosByIds(ids.slice(0, 200));
+  const videos = raw.map(v => mapRawVideo(v, code));
+  videos.sort((a,b) => b.views - a.views);
+  return videos;
+}
+
+async function collectShortForRegion(code){
+  // videoDuration=short covers <4min, which is broader than a real Shorts
+  // (≤60s) — scan a few extra pages and filter down to the genuine ones.
+  const candidateIds = await searchIdsByDuration(code, 'short', 8); // up to 400 candidates
+  const raw = await fetchVideosByIds(candidateIds);
+  const videos = raw.map(v => mapRawVideo(v, code)).filter(v => v.durationSec <= 60);
+  videos.sort((a,b) => b.views - a.views);
+  return videos.slice(0, 200);
+}
+
+function regionGroupHTML(code, videos){
+  const r = REGIONS.find(x => x.code === code);
+  return `
+  <div class="region-block">
+    <div class="region-title">${r.flag} ${r.label} <span class="region-flag">${videos.length}개</span></div>
+    <div class="region-list-scroll" style="height:420px;">
+      <div class="video-grid">
+        ${videos.map((v,i) => videoCardHTML(v, i+1)).join('') || '<div class="empty">결과 없음</div>'}
+      </div>
+    </div>
+  </div>`;
+}
+
+async function collectDurationSplit(){
+  const btn = $('collectDurationBtn');
+  const regions = currentRegionFilter === 'ALL' ? REGIONS.map(r => r.code) : [currentRegionFilter];
+
+  btn.disabled = true;
+  $('durationResults').classList.remove('hidden');
+  $('longResultsByRegion').innerHTML = '<div class="loading">수집 중...</div>';
+  $('shortResultsByRegion').innerHTML = '<div class="loading">수집 중...</div>';
+
+  try{
+    const longByRegion = {};
+    const shortByRegion = {};
+    for(let i = 0; i < regions.length; i++){
+      const code = regions[i];
+      $('durationCollectSub').textContent = `수집 중... (${i+1}/${regions.length}개국 · ${REGIONS.find(r=>r.code===code).label})`;
+      const [longVids, shortVids] = await Promise.all([
+        collectLongForRegion(code),
+        collectShortForRegion(code),
+      ]);
+      longByRegion[code] = longVids;
+      shortByRegion[code] = shortVids;
+    }
+
+    $('longResultsByRegion').innerHTML = regions.map(code => regionGroupHTML(code, longByRegion[code])).join('');
+    $('shortResultsByRegion').innerHTML = regions.map(code => regionGroupHTML(code, shortByRegion[code])).join('');
+    bindVideoCardClicks($('longResultsByRegion'));
+    bindVideoCardClicks($('shortResultsByRegion'));
+
+    const totalLong = Object.values(longByRegion).reduce((s,v) => s+v.length, 0);
+    const totalShort = Object.values(shortByRegion).reduce((s,v) => s+v.length, 0);
+    $('durationCollectSub').innerHTML = `최근 7일 이내 게시물 중 조회수 순 · 롱폼 <b>${totalLong}</b>개 / 숏폼 <b>${totalShort}</b>개 수집 완료 · <b>${new Date().toLocaleTimeString('ko-KR')}</b>`;
+  }catch(e){
+    $('durationCollectSub').textContent = '오류: ' + e.message;
+  }finally{
+    btn.disabled = false;
+  }
 }
 
 // name -> {count, views, sample, videos:[...]}, refreshed on every render
@@ -1259,6 +1391,8 @@ document.querySelectorAll('.chip[data-type]').forEach(chip => {
     if(Object.keys(dataByRegion).length) render();
   });
 });
+
+$('collectDurationBtn').addEventListener('click', collectDurationSplit);
 
 $('logoutBtn').addEventListener('click', async () => {
   try{ await fetch('/api/logout', {method:'POST'}); }catch(e){}
