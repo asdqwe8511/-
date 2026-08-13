@@ -1,0 +1,6 @@
+{
+  "name": "channel-finder-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Password-gated personal YouTube trending/channel dashboard, deployed on Vercel."
+}
