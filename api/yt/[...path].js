@@ -45,15 +45,15 @@ module.exports = async (req, res) => {
     return;
   }
 
-  const pathParam = req.query.path;
-  const segments = Array.isArray(pathParam) ? pathParam : [pathParam];
-  const endpoint = segments[0];
+  // Derive the target endpoint straight from the request path instead of the
+  // dynamic route's query param — on this platform Vercel has been observed
+  // to expose the catch-all value under a literal "...path" key rather than
+  // "path", so name-based lookup isn't reliable here.
+  const pathname = (req.url || '').split('?')[0];
+  const endpoint = pathname.replace(/^\/api\/yt\/?/, '').split('/').filter(Boolean)[0];
 
   if (!ALLOWED_ENDPOINTS.has(endpoint)) {
-    res.status(400).json({
-      error: { message: '허용되지 않은 API 경로입니다.' },
-      debug: { pathParam, segments, endpoint, query: req.query, url: req.url },
-    });
+    res.status(400).json({ error: { message: '허용되지 않은 API 경로입니다.' } });
     return;
   }
 
@@ -65,7 +65,7 @@ module.exports = async (req, res) => {
 
   const url = new URL(`https://www.googleapis.com/youtube/v3/${endpoint}`);
   Object.entries(req.query).forEach(([k, v]) => {
-    if (k === 'path') return; // Vercel's catch-all route param, not a real YouTube param
+    if (k === 'path' || k === '...path') return; // dynamic-route artifact, not a real YouTube param
     url.searchParams.set(k, Array.isArray(v) ? v[0] : v);
   });
   url.searchParams.set('key', apiKey);
