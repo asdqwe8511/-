@@ -83,7 +83,7 @@
   .stat-card .value.teal{color:var(--accent-2);}
   .stat-card .value.purple{color:var(--accent);}
 
-  .grid-2{display:grid; grid-template-columns:1.15fr .85fr; gap:18px;}
+  .grid-2{display:grid; grid-template-columns:1fr 1fr; gap:18px;}
   @media(max-width:900px){ .grid-2{grid-template-columns:1fr;} .stats-row{grid-template-columns:repeat(2,1fr);} }
 
   .panel{
@@ -92,24 +92,30 @@
   .panel h2{font-size:17px; margin-bottom:4px;}
   .panel .sub{font-size:13px; color:var(--text-dim); margin-bottom:16px;}
 
-  .video-row{
-    display:flex; gap:12px; align-items:center; padding:10px 8px; border-radius:10px;
-    border-bottom:1px solid var(--border);
+  /* Thumbnail-first video cards — title is truncated in JS (not just CSS
+     ellipsis) so it reads as a short, consistent label instead of a long
+     line that gets cut off awkwardly on narrow screens. */
+  .video-grid{
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(140px,1fr)); gap:10px;
   }
-  .video-row:last-child{border-bottom:none;}
-  .video-row:hover{background:var(--panel-2);}
-  .rank{width:20px; text-align:center; font-weight:800; color:var(--text-dim); font-size:13px;}
-  .thumb{
-    width:96px; height:54px; border-radius:8px; object-fit:cover; background:#000; flex-shrink:0;
+  .video-card{
+    background:var(--panel-2); border:1px solid var(--border); border-radius:10px; overflow:hidden;
   }
-  .vinfo{min-width:0; flex:1;}
-  .vinfo .title{
-    font-size:13.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  .vcard-thumb-wrap{position:relative; width:100%; aspect-ratio:16/9; background:#000;}
+  .vcard-thumb{width:100%; height:100%; object-fit:cover; display:block;}
+  .vcard-rank{
+    position:absolute; top:6px; left:6px; background:rgba(0,0,0,.72); color:#fff;
+    font-size:11px; font-weight:800; padding:2px 7px; border-radius:6px;
   }
-  .vinfo .meta{font-size:12px; color:var(--text-dim); margin-top:3px; display:flex; gap:8px; flex-wrap:wrap;}
-  .vinfo .meta span.dur-badge{
-    background:var(--panel-2); border:1px solid var(--border); border-radius:5px; padding:1px 5px;
+  .vcard-dur{
+    position:absolute; bottom:6px; right:6px; background:rgba(0,0,0,.72); color:#fff;
+    font-size:10.5px; padding:2px 6px; border-radius:5px;
   }
+  .vcard-title{
+    font-size:12.5px; font-weight:600; padding:9px 9px 2px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .vcard-meta{font-size:11px; color:var(--text-dim); padding:0 9px 10px;}
 
   .region-block{margin-bottom:22px;}
   .region-block:last-child{margin-bottom:0;}
@@ -258,11 +264,12 @@
     .stat-card{padding:14px 16px;}
     .stat-card .value{font-size:21px;}
 
-    .region-list-scroll{height:400px;}
-    .thumb{width:72px; height:44px;}
-    .vinfo .title{font-size:12.5px;}
-    .vinfo .meta{font-size:11px; gap:6px;}
+    .region-list-scroll{height:420px;}
+    .video-grid{grid-template-columns:repeat(auto-fill, minmax(120px,1fr)); gap:8px;}
+    .vcard-title{font-size:12px; padding:7px 7px 2px;}
+    .vcard-meta{font-size:10.5px; padding:0 7px 8px;}
 
+    .panel{padding:16px;}
     .search-input{min-width:0; flex:1 1 100%;}
 
     .modal{padding:18px;}
@@ -659,21 +666,23 @@ function renderStats(){
   $('statMaxView').textContent = vids.length ? formatNum(maxView) : '-';
 }
 
-function videoRowHTML(v, rank){
+// Character-count truncation (not just CSS ellipsis) so titles read as a
+// short, consistent label — e.g. "무한다이노…" — regardless of column width.
+function truncateTitle(title, n){
+  const t = (title || '').trim();
+  return t.length > n ? t.slice(0, n) + '…' : t;
+}
+
+function videoCardHTML(v, rank){
   return `
-  <div class="video-row">
-    <div class="rank">${rank}</div>
-    <img class="thumb" src="${v.thumb}" alt="">
-    <div class="vinfo">
-      <div class="title">${escapeHtml(v.title)}</div>
-      <div class="meta">
-        <span>${v.channel}</span>
-        <span class="dur-badge">${formatDuration(v.durationSec)}</span>
-        <span>조회 ${formatNum(v.views)}</span>
-        <span>좋아요 ${formatNum(v.likes)}</span>
-        <span>댓글 ${formatNum(v.comments)}</span>
-      </div>
+  <div class="video-card" title="${escapeHtml(v.title)}">
+    <div class="vcard-thumb-wrap">
+      <img class="vcard-thumb" src="${v.thumb}" alt="" loading="lazy">
+      <span class="vcard-rank">${rank}</span>
+      <span class="vcard-dur">${formatDuration(v.durationSec)}</span>
     </div>
+    <div class="vcard-title">${escapeHtml(truncateTitle(v.title, 12))}</div>
+    <div class="vcard-meta">${escapeHtml(v.channel)} · 조회 ${formatNum(v.views)}</div>
   </div>`;
 }
 
@@ -686,7 +695,9 @@ function renderRegionRankings(){
     <div class="region-block">
       <div class="region-title">${r.flag} ${r.label} <span class="region-flag">${vids.length}개</span></div>
       <div class="region-list-scroll">
-        ${vids.map((v,i) => videoRowHTML(v, i+1)).join('') || '<div class="empty">데이터 없음</div>'}
+        <div class="video-grid">
+          ${vids.map((v,i) => videoCardHTML(v, i+1)).join('') || '<div class="empty">데이터 없음</div>'}
+        </div>
       </div>
     </div>`;
   }).join('');
