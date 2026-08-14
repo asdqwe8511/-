@@ -296,7 +296,7 @@
 
 <section class="hero">
   <h1>지금 뜨는 <span class="accent">한국 유튜브 숏츠</span></h1>
-  <p>한국 유튜브에서 지금 인기 있는 숏츠(3분 이하)만 조회수 순으로 확인하세요. (다른 나라·롱폼 제외)</p>
+  <p>한국 유튜브에서 지금 인기 있는 숏츠(60초 이내 · 9:16 세로)만 조회수 순으로 확인하세요.</p>
 </section>
 
 <div class="container">
@@ -318,7 +318,7 @@
   <div class="grid-2">
     <div class="panel">
       <h2>🇰🇷 한국 숏폼 랭킹</h2>
-      <div class="sub">조회수 순 · 3분 이하 숏츠만.</div>
+      <div class="sub">조회수 순 · 60초 이내 세로 숏츠만.</div>
       <div id="regionRankings"><div class="loading">불러오는 중...</div></div>
     </div>
 
@@ -621,9 +621,22 @@ async function loadCategoryMap(regionCode){
   return map;
 }
 
-// Shared mapper from a raw videos.list item (part=snippet,statistics,
-// contentDetails,topicDetails) to our internal video shape.
+// The Data API has no "isShort" flag, but player.embedHtml carries the real
+// player proportions (we ask for maxHeight so they aren't a fixed default).
+// A 9:16 Short comes back portrait (height > width); normal 16:9 video comes
+// back landscape. Returns null when it can't be determined.
+function parseAspectRatio(embedHtml){
+  if(!embedHtml) return null;
+  const w = Number((embedHtml.match(/width="(\d+)"/) || [])[1]);
+  const h = Number((embedHtml.match(/height="(\d+)"/) || [])[1]);
+  if(!w || !h) return null;
+  return w / h;
+}
+
+// Shared mapper from a raw videos.list item to our internal video shape.
 function mapRawVideo(v, regionCode, categoryMap){
+  const aspect = parseAspectRatio(v.player?.embedHtml);
+  const text = `${v.snippet.title || ''} ${v.snippet.description || ''} ${(v.snippet.tags||[]).join(' ')}`;
   return {
     id: v.id,
     title: v.snippet.title,
@@ -637,6 +650,8 @@ function mapRawVideo(v, regionCode, categoryMap){
     categoryName: (categoryMap && categoryMap[v.snippet.categoryId]) || '기타',
     topicCategories: (v.topicDetails?.topicCategories || []).map(parseTopicUrl),
     durationSec: parseISODuration(v.contentDetails.duration),
+    aspect,                                   // <1 means portrait (9:16-ish)
+    hasShortsTag: /#shorts?\b/i.test(text),   // creators tag Shorts this way
     seenInRegion: regionCode,
   };
 }
@@ -651,7 +666,8 @@ async function fetchMostPopular(regionCode, target){
   let pageToken = '';
   while(items.length < target){
     const params = {
-      part: 'snippet,statistics,contentDetails,topicDetails',
+      part: 'snippet,statistics,contentDetails,topicDetails,player',
+      maxHeight: 720, // makes player.embedHtml report real proportions, so we can detect 9:16
       chart: 'mostPopular',
       regionCode,
       maxResults: Math.min(50, target - items.length),
@@ -700,24 +716,37 @@ async function fetchVideosByIds(ids){
   for(let i = 0; i < ids.length; i += 50){
     const chunk = ids.slice(i, i+50);
     if(!chunk.length) continue;
-    const data = await ytFetch('videos', {part: 'snippet,statistics,contentDetails,topicDetails', id: chunk.join(',')});
+    const data = await ytFetch('videos', {
+      part: 'snippet,statistics,contentDetails,topicDetails,player',
+      maxHeight: 720, // makes player.embedHtml report real proportions, so we can detect 9:16
+      id: chunk.join(','),
+    });
     out.push(...(data.items || []));
   }
   return out;
 }
 
-// YouTube raised the Shorts limit from 60s to 3 minutes in Oct 2024, so a
-// 60-second cutoff was throwing away a large share of genuine Shorts (and was
-// a big reason the trending chart looked like it contained "zero shorts").
-const SHORTS_MAX_SEC = 180;
-const isShort = (v) => v.durationSec > 0 && v.durationSec <= SHORTS_MAX_SEC;
+// A Short here means: 60초 이내 + 9:16 세로 영상.
+// (YouTube itself now permits Shorts up to 3 minutes, but that pulls in a lot
+// of clips that aren't what we're analysing, so we hold the 60s line.)
+// Aspect ratio is the vertical test; when the API doesn't give us usable
+// player dimensions we fall back to duration + the creator's #Shorts tag
+// rather than dropping the video outright.
+const SHORTS_MAX_SEC = 60;
+const PORTRAIT_MAX_ASPECT = 0.9; // width/height below this is clearly vertical
+
+function isShort(v){
+  if(!(v.durationSec > 0 && v.durationSec <= SHORTS_MAX_SEC)) return false;
+  if(v.aspect != null) return v.aspect < PORTRAIT_MAX_ASPECT;
+  return true; // unknown orientation — keep it, duration already qualifies
+}
 
 // Diagnostics from the last load, surfaced in the UI so an empty result is
 // explainable instead of just being a blank page.
 let lastLoadDiag = null;
 
 async function loadRegion(regionCode, onProgress, forceRefresh){
-  const cacheKey = `yt_kr_shorts_v3_${regionCode}`;
+  const cacheKey = `yt_kr_shorts_v4_${regionCode}`;
   if(!forceRefresh){
     try{
       const cached = JSON.parse(safeGet(cacheKey) || 'null');
@@ -766,8 +795,14 @@ async function loadRegion(regionCode, onProgress, forceRefresh){
   // view count from videos.list — never by search.list's own ordering.
   const byId = new Map();
   combinedRaw.forEach(v => byId.set(v.id, v));
-  const videos = Array.from(byId.values())
-    .map(v => mapRawVideo(v, regionCode, categoryMap))
+  const mapped = Array.from(byId.values()).map(v => mapRawVideo(v, regionCode, categoryMap));
+
+  const under60 = mapped.filter(v => v.durationSec > 0 && v.durationSec <= SHORTS_MAX_SEC);
+  diag.pooled = mapped.length;
+  diag.under60 = under60.length;
+  diag.droppedLandscape = under60.filter(v => v.aspect != null && v.aspect >= PORTRAIT_MAX_ASPECT).length;
+
+  const videos = under60
     .filter(isShort)
     .sort((a,b) => b.views - a.views)
     .slice(0, 60); // cap the display list to a manageable size
@@ -814,15 +849,15 @@ async function loadAll(forceRefresh){
     const found = allActiveVideos().length;
     const time = new Date().toLocaleTimeString('ko-KR');
     if(found){
-      $('statusText').innerHTML = `업데이트 완료 · <b>${time}</b> · 숏츠 <b>${found}</b>개 (3분 이하, 조회수 순)`;
+      $('statusText').innerHTML = `업데이트 완료 · <b>${time}</b> · 숏츠 <b>${found}</b>개 (60초 이내 세로, 조회수 순)`;
     } else {
       // Empty is a real outcome worth explaining, not a blank screen.
       const d = lastLoadDiag;
       let why = '';
       if(d){
-        why = ` (인기 급상승 ${d.trendingTotal}개 중 숏츠 ${d.trendingShorts}개`;
-        if(d.searchError) why += `, 숏츠 검색 실패: ${d.searchError}`;
-        else if(d.searchUsed) why += `, 검색 후보 ${d.searchCandidates}개`;
+        why = ` (후보 ${d.pooled ?? 0}개 · 60초 이내 ${d.under60 ?? 0}개 · 가로영상 제외 ${d.droppedLandscape ?? 0}개`;
+        if(d.searchError) why += ` · 숏츠 검색 실패: ${d.searchError}`;
+        else if(d.searchUsed) why += ` · 검색 후보 ${d.searchCandidates}개`;
         why += ')';
       }
       $('statusText').innerHTML = `<span style="color:var(--danger);">숏츠를 찾지 못했습니다 · <b>${time}</b>${escapeHtml(why)}</span>`;
