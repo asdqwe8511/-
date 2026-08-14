@@ -295,55 +295,38 @@
 <section id="tabVideos">
 
 <section class="hero">
-  <h1>지금 뜨는 <span class="accent">유튜브 인기 영상</span></h1>
-  <p>YouTube Data API로 국가별 · 카테고리별 실시간 인기 영상을 한눈에 확인하세요.</p>
+  <h1>지금 뜨는 <span class="accent">한국 유튜브 숏츠</span></h1>
+  <p>최근 7일 이내 게시물 중 실제 60초 이하 숏츠만, 조회수 순으로 확인하세요. (다른 나라·롱폼 제외)</p>
 </section>
 
 <div class="container">
 
   <div class="filter-bar">
-    <div class="chip active" data-region="ALL">전체</div>
-    <div class="chip" data-region="KR">🇰🇷 한국</div>
-    <div class="chip" data-region="US">🇺🇸 미국</div>
-    <div class="chip" data-region="JP">🇯🇵 일본</div>
-    <div class="chip" data-region="IN">🇮🇳 인도</div>
-    <div style="width:1px; align-self:stretch; background:var(--border); margin:0 2px;"></div>
-    <div class="chip active" data-type="ALL">전체 길이</div>
-    <div class="chip" data-type="LONG">🎬 롱폼</div>
-    <div class="chip" data-type="SHORT">⚡ 숏폼</div>
+    <div class="chip active">🇰🇷 한국 · ⚡ 숏폼</div>
+    <button class="icon-btn" id="forceRefreshBtn" title="오늘 캐시를 무시하고 다시 수집 (검색 API 비용 발생)">🔄 다시 불러오기</button>
     <div class="spacer"></div>
     <div class="status-text" id="statusText">데이터를 불러오는 중입니다...</div>
   </div>
 
   <div class="stats-row">
-    <div class="stat-card"><div class="label">전체 영상</div><div class="value" id="statTotal">-</div></div>
-    <div class="stat-card"><div class="label">숏폼(≤60초)</div><div class="value pink" id="statShorts">-</div></div>
-    <div class="stat-card"><div class="label">롱폼</div><div class="value teal" id="statLong">-</div></div>
+    <div class="stat-card"><div class="label">전체 숏츠</div><div class="value" id="statTotal">-</div></div>
     <div class="stat-card"><div class="label">최고 조회수</div><div class="value purple" id="statMaxView">-</div></div>
+    <div class="stat-card"><div class="label">평균 조회수</div><div class="value teal" id="statAvgView">-</div></div>
+    <div class="stat-card"><div class="label">채널 수</div><div class="value pink" id="statChannels">-</div></div>
   </div>
 
   <div class="grid-2">
     <div class="panel">
-      <h2>국가별 실시간 랭킹</h2>
-      <div class="sub">국가별로 지금 뜨는 영상을 바로 확인하세요.</div>
+      <h2>🇰🇷 한국 숏폼 랭킹</h2>
+      <div class="sub">최근 7일 · 조회수 순 · 실제 60초 이하만.</div>
       <div id="regionRankings"><div class="loading">불러오는 중...</div></div>
     </div>
 
     <div class="panel">
       <h2>카테고리별 TOP</h2>
-      <div class="sub">현재 필터 기준 영상이 가장 많이 몰린 카테고리입니다.</div>
+      <div class="sub">지금 목록에서 영상이 가장 많이 몰린 카테고리입니다.</div>
       <div id="categoryTop"><div class="loading">불러오는 중...</div></div>
     </div>
-  </div>
-
-  <div class="panel" id="krShortsPanel" style="margin-top:24px;">
-    <h2>🇰🇷 한국 숏츠 분석</h2>
-    <div class="sub" id="krShortsSub">
-      다른 나라는 빼고 <b>한국만</b>, 최근 7일 이내 게시물 중 실제 60초 이하 숏츠만 조회수 순으로 최대 50개 가져옵니다.
-      검색 API를 쓰기 때문에(회당 100유닛) 자동 실행되지 않고, 버튼을 눌렀을 때만 동작합니다 (최대 약 1,000유닛).
-    </div>
-    <button class="icon-btn" id="krShortsBtn" style="margin-bottom:16px;">🇰🇷 숏츠 분석 시작</button>
-    <div id="krShortsResults" class="video-grid"></div>
   </div>
 
 </div>
@@ -516,13 +499,12 @@
 </div>
 
 <script>
+// Scoped down to Korea + Shorts only, per request — no other countries, no long-form.
 const REGIONS = [
   {code:'KR', label:'한국', flag:'🇰🇷'},
-  {code:'US', label:'미국', flag:'🇺🇸'},
-  {code:'JP', label:'일본', flag:'🇯🇵'},
-  {code:'IN', label:'인도', flag:'🇮🇳'},
 ];
-const VIDEOS_PER_REGION = 200; // YouTube API caps a single request at 50, so this paginates
+const SHORTS_TARGET = 50;
+const SHORTS_MAX_PAGES = 10; // safety cap: worst case ~10 * 101 ≈ 1,010 units
 const CAT_COLORS = ['#7c5cff','#2dd4bf','#ff5470','#f5a524','#3b82f6','#ec4899','#22c55e'];
 
 // localStorage can throw (privacy settings, browser policy, etc).
@@ -534,15 +516,8 @@ function safeSet(key, val){
   try{ localStorage.setItem(key, val); return true; }catch(e){ console.warn('localStorage 저장 불가:', e); return false; }
 }
 
-let currentRegionFilter = 'ALL';
-let currentTypeFilter = 'ALL'; // 'ALL' | 'LONG' | 'SHORT' — splits the already-fetched pool, no extra API calls
+let currentRegionFilter = 'ALL'; // REGIONS only has Korea now, so this always resolves to ['KR']
 let dataByRegion = {}; // { KR: { videos:[...], categoryMap:{} } }
-
-function typeFilterVideos(vids){
-  if(currentTypeFilter === 'SHORT') return vids.filter(v => v.durationSec <= 60);
-  if(currentTypeFilter === 'LONG') return vids.filter(v => v.durationSec > 60);
-  return vids;
-}
 
 const $ = (id) => document.getElementById(id);
 
@@ -648,28 +623,6 @@ async function loadCategoryMap(regionCode){
   return map;
 }
 
-async function fetchMostPopular(regionCode, target){
-  // YouTube caps a single request at 50 items, so page through until we
-  // hit the target count or run out of results (mostPopular charts top out
-  // around 200 per region anyway).
-  let items = [];
-  let pageToken = '';
-  while(items.length < target){
-    const params = {
-      part: 'snippet,statistics,contentDetails,topicDetails',
-      chart: 'mostPopular',
-      regionCode,
-      maxResults: Math.min(50, target - items.length),
-    };
-    if(pageToken) params.pageToken = pageToken;
-    const data = await ytFetch('videos', params);
-    items = items.concat(data.items || []);
-    if(!data.nextPageToken) break;
-    pageToken = data.nextPageToken;
-  }
-  return items;
-}
-
 // Shared mapper from a raw videos.list item (part=snippet,statistics,
 // contentDetails,topicDetails) to our internal video shape.
 function mapRawVideo(v, regionCode, categoryMap){
@@ -701,42 +654,90 @@ async function fetchVideosByIds(ids){
   return out;
 }
 
-async function loadRegion(regionCode){
-  const [rawVideos, categoryMap] = await Promise.all([
-    fetchMostPopular(regionCode, VIDEOS_PER_REGION),
-    loadCategoryMap(regionCode)
-  ]);
-  const videos = rawVideos.map(v => ({
-    id: v.id,
-    title: v.snippet.title,
-    channel: v.snippet.channelTitle,
-    channelId: v.snippet.channelId,
-    thumb: v.snippet.thumbnails?.medium?.url || v.snippet.thumbnails?.default?.url,
-    views: Number(v.statistics.viewCount||0),
-    likes: Number(v.statistics.likeCount||0),
-    comments: Number(v.statistics.commentCount||0),
-    categoryId: v.snippet.categoryId,
-    categoryName: categoryMap[v.snippet.categoryId] || '기타',
-    topicCategories: (v.topicDetails?.topicCategories || []).map(parseTopicUrl),
-    durationSec: parseISODuration(v.contentDetails.duration),
-    seenInRegion: regionCode,
-  }));
+function todayKey(){ return new Date().toISOString().slice(0,10); }
+
+// videoDuration=short covers <4min, broader than a real Short (≤60s), so we
+// keep paging — spending more quota as needed — until we reach SHORTS_TARGET
+// true shorts, or run out of results, or hit the safety cap.
+async function collectShorts(regionCode, categoryMap, onProgress){
+  const publishedAfter = new Date(Date.now() - 7*24*60*60*1000).toISOString();
+  let trueShorts = [];
+  let pageToken = '';
+
+  for(let p = 0; p < SHORTS_MAX_PAGES && trueShorts.length < SHORTS_TARGET; p++){
+    const params = {
+      part: 'snippet', type: 'video', order: 'viewCount',
+      videoDuration: 'short', regionCode, publishedAfter, maxResults: 50,
+    };
+    if(pageToken) params.pageToken = pageToken;
+    const data = await ytFetch('search', params);
+    const ids = (data.items || []).map(it => it.id?.videoId).filter(Boolean);
+
+    if(ids.length){
+      const raw = await fetchVideosByIds(ids);
+      const found = raw.map(v => mapRawVideo(v, regionCode, categoryMap)).filter(v => v.durationSec <= 60);
+      trueShorts = trueShorts.concat(found);
+    }
+    if(onProgress) onProgress(p+1, trueShorts.length);
+    if(!data.nextPageToken) break;
+    pageToken = data.nextPageToken;
+  }
+
+  trueShorts.sort((a,b) => b.views - a.views);
+  return trueShorts.slice(0, SHORTS_TARGET);
+}
+
+// Real Shorts only, via search.list (100 units/call — not cheap), cached per
+// browser per day so repeat visits/refreshes the same day reuse the result.
+// Use forceRefresh to bypass the cache and pull fresh data on demand.
+async function loadRegion(regionCode, onProgress, forceRefresh){
+  const cacheKey = `yt_kr_shorts_v1_${regionCode}`;
+  if(!forceRefresh){
+    try{
+      const cached = JSON.parse(safeGet(cacheKey) || 'null');
+      if(cached && cached.date === todayKey() && Array.isArray(cached.videos)){
+        if(onProgress) onProgress('cache');
+        return { videos: cached.videos, categoryMap: cached.categoryMap || {} };
+      }
+    }catch(e){ /* corrupt cache entry — fall through and refetch */ }
+  }
+
+  const categoryMap = await loadCategoryMap(regionCode);
+  const videos = await collectShorts(regionCode, categoryMap, (page, found) => {
+    if(onProgress) onProgress('progress', page, found);
+  });
+  safeSet(cacheKey, JSON.stringify({date: todayKey(), videos, categoryMap}));
   return { videos, categoryMap };
 }
 
-async function loadAll(){
-  $('statusText').textContent = '불러오는 중...';
+async function loadAll(forceRefresh){
+  const refreshBtn = $('forceRefreshBtn');
+  if(refreshBtn) refreshBtn.disabled = true;
   $('regionRankings').innerHTML = '<div class="loading">불러오는 중...</div>';
   $('categoryTop').innerHTML = '<div class="loading">불러오는 중...</div>';
+
   try{
-    const results = await Promise.all(REGIONS.map(r => loadRegion(r.code)));
-    REGIONS.forEach((r, i) => dataByRegion[r.code] = results[i]);
-    $('statusText').innerHTML = `업데이트 완료 · <b>${new Date().toLocaleTimeString('ko-KR')}</b>`;
-    render();
-  }catch(e){
-    $('statusText').textContent = '오류: ' + e.message;
-    $('regionRankings').innerHTML = `<div class="empty">데이터를 불러오지 못했습니다.<br>${e.message}</div>`;
-    $('categoryTop').innerHTML = '';
+    for(const r of REGIONS){
+      $('statusText').textContent = `불러오는 중... (${r.label} 숏폼)`;
+      try{
+        const result = await loadRegion(r.code, (stage, page, found) => {
+          if(stage === 'cache'){
+            $('statusText').textContent = `${r.label} 숏폼 · 오늘 이미 수집된 데이터 재사용`;
+          } else if(stage === 'progress'){
+            $('statusText').textContent = `불러오는 중... (${r.label} 숏폼) · ${page}페이지, ${found}개 발견`;
+          }
+        }, forceRefresh);
+        dataByRegion[r.code] = result;
+      }catch(e){
+        dataByRegion[r.code] = dataByRegion[r.code] || { videos: [], categoryMap: {} };
+        console.error(`${r.label} 로드 실패:`, e);
+        $('statusText').textContent = `${r.label} 로드 실패: ${e.message}`;
+      }
+      render();
+    }
+    $('statusText').innerHTML = `업데이트 완료 · <b>${new Date().toLocaleTimeString('ko-KR')}</b> · 한국 숏폼 최대 ${SHORTS_TARGET}개 (최근 7일, 조회수 순)`;
+  }finally{
+    if(refreshBtn) refreshBtn.disabled = false;
   }
 }
 
@@ -745,18 +746,18 @@ function activeRegions(){
 }
 
 function allActiveVideos(){
-  return typeFilterVideos(activeRegions().flatMap(code => (dataByRegion[code]?.videos || [])));
+  return activeRegions().flatMap(code => (dataByRegion[code]?.videos || []));
 }
 
 function renderStats(){
   const vids = allActiveVideos();
-  const shorts = vids.filter(v => v.durationSec <= 60).length;
-  const long = vids.length - shorts;
   const maxView = vids.reduce((m,v) => Math.max(m, v.views), 0);
+  const avgView = vids.length ? Math.round(vids.reduce((s,v) => s+v.views, 0) / vids.length) : 0;
+  const channelCount = new Set(vids.map(v => v.channelId)).size;
   $('statTotal').textContent = vids.length ? vids.length + '개' : '-';
-  $('statShorts').textContent = vids.length ? shorts + '개' : '-';
-  $('statLong').textContent = vids.length ? long + '개' : '-';
   $('statMaxView').textContent = vids.length ? formatNum(maxView) : '-';
+  $('statAvgView').textContent = vids.length ? formatNum(avgView) : '-';
+  $('statChannels').textContent = vids.length ? channelCount + '개' : '-';
 }
 
 // Character-count truncation (not just CSS ellipsis) so titles read as a
@@ -792,65 +793,11 @@ function bindVideoCardClicks(container){
   });
 }
 
-// ==================================================================
-// 🇰🇷 한국 숏츠 분석 — scoped to just one country and just Shorts, so this
-// is much cheaper and simpler than the earlier multi-country version.
-// Manual button only (search.list is 100 units/call); never runs automatically.
-// ==================================================================
-const KR_SHORTS_TARGET = 50;
-const KR_SHORTS_MAX_PAGES = 10; // safety cap: worst case ~10 * 101 ≈ 1,010 units
-
-async function analyzeKoreaShorts(){
-  const btn = $('krShortsBtn');
-  btn.disabled = true;
-  $('krShortsResults').innerHTML = '<div class="loading">불러오는 중...</div>';
-  $('krShortsSub').textContent = '분석 중... (1페이지)';
-
-  try{
-    const categoryMap = await loadCategoryMap('KR');
-    const publishedAfter = new Date(Date.now() - 7*24*60*60*1000).toISOString();
-    let trueShorts = [];
-    let pageToken = '';
-
-    for(let p = 0; p < KR_SHORTS_MAX_PAGES && trueShorts.length < KR_SHORTS_TARGET; p++){
-      const params = {
-        part: 'snippet', type: 'video', order: 'viewCount',
-        videoDuration: 'short', regionCode: 'KR', publishedAfter, maxResults: 50,
-      };
-      if(pageToken) params.pageToken = pageToken;
-      const data = await ytFetch('search', params);
-      const ids = (data.items || []).map(it => it.id?.videoId).filter(Boolean);
-
-      if(ids.length){
-        const raw = await fetchVideosByIds(ids);
-        const found = raw.map(v => mapRawVideo(v, 'KR', categoryMap)).filter(v => v.durationSec <= 60);
-        trueShorts = trueShorts.concat(found);
-      }
-      $('krShortsSub').textContent = `분석 중... (${p+1}페이지, 지금까지 ${trueShorts.length}개 발견)`;
-      if(!data.nextPageToken) break;
-      pageToken = data.nextPageToken;
-    }
-
-    trueShorts.sort((a,b) => b.views - a.views);
-    trueShorts = trueShorts.slice(0, KR_SHORTS_TARGET);
-
-    $('krShortsResults').innerHTML = trueShorts.map((v,i) => videoCardHTML(v,i+1)).join('') || '<div class="empty">조건에 맞는 숏츠를 찾지 못했습니다.</div>';
-    bindVideoCardClicks($('krShortsResults'));
-    $('krShortsSub').innerHTML = `최근 7일 이내 게시물 중 실제 60초 이하만, 조회수 순 · 총 <b>${trueShorts.length}</b>개 · <b>${new Date().toLocaleTimeString('ko-KR')}</b>`;
-  }catch(e){
-    console.error('한국 숏츠 분석 실패:', e);
-    $('krShortsSub').innerHTML = `<span style="color:var(--danger);">오류: ${escapeHtml(e.message)}</span>`;
-    $('krShortsResults').innerHTML = '';
-  }finally{
-    btn.disabled = false;
-  }
-}
-
 function renderRegionRankings(){
   const codes = activeRegions();
   const html = codes.map(code => {
     const r = REGIONS.find(x=>x.code===code);
-    const vids = typeFilterVideos(dataByRegion[code]?.videos || []);
+    const vids = dataByRegion[code]?.videos || [];
     return `
     <div class="region-block">
       <div class="region-title">${r.flag} ${r.label} <span class="region-flag">${vids.length}개</span></div>
@@ -1351,25 +1298,10 @@ function openChannelDetail(channelId){
 }
 
 // --- UI events ---
-document.querySelectorAll('.chip[data-region]').forEach(chip => {
-  chip.addEventListener('click', () => {
-    document.querySelectorAll('.chip[data-region]').forEach(c => c.classList.remove('active'));
-    chip.classList.add('active');
-    currentRegionFilter = chip.dataset.region;
-    if(Object.keys(dataByRegion).length) render();
-  });
+$('forceRefreshBtn').addEventListener('click', () => {
+  channelPoolLoaded = false; // let the channel finder tab pick up fresh data too if reopened
+  loadAll(true); // bypass today's cache and re-spend quota on demand
 });
-
-document.querySelectorAll('.chip[data-type]').forEach(chip => {
-  chip.addEventListener('click', () => {
-    document.querySelectorAll('.chip[data-type]').forEach(c => c.classList.remove('active'));
-    chip.classList.add('active');
-    currentTypeFilter = chip.dataset.type;
-    if(Object.keys(dataByRegion).length) render();
-  });
-});
-
-$('krShortsBtn').addEventListener('click', analyzeKoreaShorts);
 
 $('logoutBtn').addEventListener('click', async () => {
   try{ await fetch('/api/logout', {method:'POST'}); }catch(e){}
@@ -1508,12 +1440,10 @@ window.addEventListener('error', (e) => {
 window.addEventListener('unhandledrejection', (e) => {
   const msg = '처리되지 않은 오류: ' + (e.reason?.message || e.reason);
   console.error(msg, e.reason);
-  const krSub = document.getElementById('krShortsSub');
-  if(krSub) krSub.innerHTML = `<span style="color:var(--danger);">${escapeHtml(msg)}</span>`;
-  const krBtn = document.getElementById('krShortsBtn');
-  if(krBtn) krBtn.disabled = false;
   const status = document.getElementById('statusText');
   if(status) status.textContent = msg;
+  const refreshBtn = document.getElementById('forceRefreshBtn');
+  if(refreshBtn) refreshBtn.disabled = false;
 });
 
 // init
