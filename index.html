@@ -308,10 +308,8 @@
     <div class="chip" data-region="JP">🇯🇵 일본</div>
     <div class="chip" data-region="IN">🇮🇳 인도</div>
     <div style="width:1px; align-self:stretch; background:var(--border); margin:0 2px;"></div>
-    <div class="chip active" data-type="ALL">전체 길이</div>
-    <div class="chip" data-type="LONG">🎬 롱폼</div>
-    <div class="chip" data-type="SHORT">⚡ 숏폼</div>
-    <button class="icon-btn" id="forceRefreshBtn" title="오늘 캐시를 무시하고 다시 수집 (검색 API 비용 발생)">🔄 다시 불러오기</button>
+    <button class="icon-btn" id="shortsPopupBtn" title="현재 선택된 국가의 숏폼을 그때 가져와서 팝업으로 보여줍니다 (클릭 시에만 검색 API 비용 발생)">⚡ 숏폼 보기</button>
+    <button class="icon-btn" id="forceRefreshBtn" title="오늘 캐시를 무시하고 롱폼을 다시 수집 (검색 API 비용 발생)">🔄 다시 불러오기</button>
     <div class="spacer"></div>
     <div class="status-text" id="statusText">데이터를 불러오는 중입니다...</div>
   </div>
@@ -491,6 +489,17 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="shortsPopupOverlay">
+  <div class="modal wide">
+    <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:4px;">
+      <h3>⚡ 숏폼 (최근 7일, 실제 60초 이하, 조회수 순)</h3>
+      <button id="shortsPopupClose">✕</button>
+    </div>
+    <p id="shortsPopupSub" style="font-size:12.5px; color:var(--text-dim); margin-bottom:12px;"></p>
+    <div id="shortsPopupBody" style="max-height:65vh; overflow-y:auto;"></div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="chDetailOverlay">
   <div class="modal wide">
     <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:4px;">
@@ -526,14 +535,7 @@ function safeSet(key, val){
 }
 
 let currentRegionFilter = 'ALL';
-let currentTypeFilter = 'ALL'; // 'ALL' | 'LONG' | 'SHORT' — splits the already-fetched pool, no extra API calls
-let dataByRegion = {}; // { KR: { videos:[...], categoryMap:{} } }
-
-function typeFilterVideos(vids){
-  if(currentTypeFilter === 'SHORT') return vids.filter(v => v.durationSec <= 60);
-  if(currentTypeFilter === 'LONG') return vids.filter(v => v.durationSec > 60);
-  return vids;
-}
+let dataByRegion = {}; // { KR: { videos:[...], categoryMap:{} } } — long-form only; shorts are fetched on demand
 
 const $ = (id) => document.getElementById(id);
 
@@ -661,13 +663,14 @@ function mapRawVideo(v, regionCode, categoryMap){
 
 function todayKey(){ return new Date().toISOString().slice(0,10); }
 
-// Each region's video list is now "롱폼 최대 200개 + 숏폼 최대 50개, 최근 7일
-// 조회수 순" via search.list — real but expensive (search.list is 100
-// units/call). Cache it per browser, per day, so opening/refreshing the site
-// repeatedly the same day reuses the result instead of re-spending quota.
-// (Use forceRefresh to bypass the cache and pull fresh data on demand.)
+// The default view is long-form only — up to 200 per country, most recent 7
+// days, sorted by views, via search.list (100 units/call, so still not
+// cheap). Shorts are NOT auto-loaded here; they're fetched on demand when
+// the "⚡ 숏폼 보기" button is clicked (see loadShortsForRegion below), to
+// avoid paying for shorts data nobody asked to see. Cached per browser, per
+// day, so repeat visits/refreshes the same day reuse the result.
 async function loadRegion(regionCode, onProgress, forceRefresh){
-  const cacheKey = `yt_region_v2_${regionCode}`;
+  const cacheKey = `yt_region_long_v1_${regionCode}`;
   if(!forceRefresh){
     try{
       const cached = JSON.parse(safeGet(cacheKey) || 'null');
@@ -679,15 +682,27 @@ async function loadRegion(regionCode, onProgress, forceRefresh){
   }
 
   const categoryMap = await loadCategoryMap(regionCode);
-  const [longVids, shortVids] = await Promise.all([
-    collectLongForRegion(regionCode, categoryMap),
-    collectShortForRegion(regionCode, categoryMap, (page, found) => {
-      if(onProgress) onProgress('short', page, found);
-    }),
-  ]);
-  const videos = [...longVids, ...shortVids];
+  const videos = await collectLongForRegion(regionCode, categoryMap);
   safeSet(cacheKey, JSON.stringify({date: todayKey(), videos, categoryMap}));
   return { videos, categoryMap };
+}
+
+// Fetches (and caches, per day) shorts for one region only — called from the
+// "⚡ 숏폼 보기" button, not automatically.
+async function loadShortsForRegion(regionCode, onProgress, forceRefresh){
+  const cacheKey = `yt_region_short_v1_${regionCode}`;
+  if(!forceRefresh){
+    try{
+      const cached = JSON.parse(safeGet(cacheKey) || 'null');
+      if(cached && cached.date === todayKey() && Array.isArray(cached.videos)){
+        return cached.videos;
+      }
+    }catch(e){ /* corrupt cache entry — fall through and refetch */ }
+  }
+  const categoryMap = (dataByRegion[regionCode]?.categoryMap) || await loadCategoryMap(regionCode);
+  const videos = await collectShortForRegion(regionCode, categoryMap, onProgress);
+  safeSet(cacheKey, JSON.stringify({date: todayKey(), videos}));
+  return videos;
 }
 
 async function loadAll(forceRefresh){
@@ -718,7 +733,7 @@ async function loadAll(forceRefresh){
       render(); // show each region as soon as it's ready instead of waiting for all 4
     }
 
-    $('statusText').innerHTML = `업데이트 완료 · <b>${new Date().toLocaleTimeString('ko-KR')}</b> · 국가당 롱폼 최대 200개 / 숏폼 최대 50개 (최근 7일, 조회수 순)`;
+    $('statusText').innerHTML = `업데이트 완료 · <b>${new Date().toLocaleTimeString('ko-KR')}</b> · 국가당 롱폼 최대 200개 (최근 7일, 조회수 순) · 숏폼은 "⚡ 숏폼 보기"로 확인`;
   }finally{
     refreshBtn.disabled = false;
   }
@@ -729,7 +744,7 @@ function activeRegions(){
 }
 
 function allActiveVideos(){
-  return typeFilterVideos(activeRegions().flatMap(code => (dataByRegion[code]?.videos || [])));
+  return activeRegions().flatMap(code => (dataByRegion[code]?.videos || []));
 }
 
 function renderStats(){
@@ -780,7 +795,7 @@ function renderRegionRankings(){
   const codes = activeRegions();
   const html = codes.map(code => {
     const r = REGIONS.find(x=>x.code===code);
-    const vids = typeFilterVideos(dataByRegion[code]?.videos || []);
+    const vids = dataByRegion[code]?.videos || [];
     return `
     <div class="region-block">
       <div class="region-title">${r.flag} ${r.label} <span class="region-flag">${vids.length}개</span></div>
@@ -902,6 +917,58 @@ async function collectShortForRegion(code, categoryMap, onProgress){
 
   trueShorts.sort((a,b) => b.views - a.views);
   return trueShorts.slice(0, SHORT_TARGET);
+}
+
+// Triggered only by the "⚡ 숏폼 보기" button — fetches shorts for whichever
+// country/countries the region filter currently points at (ALL = all 4,
+// which is the expensive case), shows them in a popup, and caches per
+// region/day so re-opening the popup later the same day is free.
+async function openShortsPopup(){
+  const btn = $('shortsPopupBtn');
+  const regions = currentRegionFilter === 'ALL' ? REGIONS.map(r => r.code) : [currentRegionFilter];
+
+  $('shortsPopupOverlay').classList.add('open');
+  $('shortsPopupSub').textContent = '불러오는 중...';
+  $('shortsPopupBody').innerHTML = '<div class="loading">불러오는 중...</div>';
+  btn.disabled = true;
+
+  const byRegion = {};
+  const errors = [];
+
+  try{
+    for(let i = 0; i < regions.length; i++){
+      const code = regions[i];
+      const label = REGIONS.find(r=>r.code===code).label;
+      $('shortsPopupSub').textContent = `불러오는 중... (${i+1}/${regions.length}개국 · ${label})`;
+      try{
+        byRegion[code] = await loadShortsForRegion(code, (page, found) => {
+          $('shortsPopupSub').textContent = `불러오는 중... (${i+1}/${regions.length}개국 · ${label}) · ${page}페이지, ${found}개 발견`;
+        });
+      }catch(e){
+        byRegion[code] = [];
+        errors.push(`${label}: ${e.message}`);
+      }
+      $('shortsPopupBody').innerHTML = regions
+        .filter(c => byRegion[c])
+        .map(c => {
+          const r = REGIONS.find(x => x.code === c);
+          const vids = byRegion[c];
+          return `
+          <div class="region-block">
+            <div class="region-title">${r.flag} ${r.label} <span class="region-flag">${vids.length}개</span></div>
+            <div class="video-grid">${vids.map((v,i) => videoCardHTML(v,i+1)).join('') || '<div class="empty">결과 없음</div>'}</div>
+          </div>`;
+        }).join('');
+      bindVideoCardClicks($('shortsPopupBody'));
+    }
+
+    const total = Object.values(byRegion).reduce((s,v) => s+v.length, 0);
+    $('shortsPopupSub').innerHTML = errors.length
+      ? `총 <b>${total}</b>개 · 일부 오류: <span style="color:var(--danger);">${errors.map(escapeHtml).join(', ')}</span>`
+      : `최근 7일 이내 게시물 중 실제 60초 이하만, 조회수 순 · 총 <b>${total}</b>개`;
+  }finally{
+    btn.disabled = false;
+  }
 }
 
 // name -> {count, views, sample, videos:[...]}, refreshed on every render
@@ -1371,19 +1438,15 @@ document.querySelectorAll('.chip[data-region]').forEach(chip => {
   });
 });
 
-document.querySelectorAll('.chip[data-type]').forEach(chip => {
-  chip.addEventListener('click', () => {
-    document.querySelectorAll('.chip[data-type]').forEach(c => c.classList.remove('active'));
-    chip.classList.add('active');
-    currentTypeFilter = chip.dataset.type;
-    if(Object.keys(dataByRegion).length) render();
-  });
-});
 
 $('forceRefreshBtn').addEventListener('click', () => {
   channelPoolLoaded = false; // let the channel finder tab pick up fresh data too if reopened
   loadAll(true); // bypass today's cache and re-spend quota on demand
 });
+
+$('shortsPopupBtn').addEventListener('click', openShortsPopup);
+$('shortsPopupClose').addEventListener('click', () => $('shortsPopupOverlay').classList.remove('open'));
+$('shortsPopupOverlay').addEventListener('click', (e) => { if(e.target.id === 'shortsPopupOverlay') $('shortsPopupOverlay').classList.remove('open'); });
 
 $('logoutBtn').addEventListener('click', async () => {
   try{ await fetch('/api/logout', {method:'POST'}); }catch(e){}
