@@ -643,16 +643,9 @@ function mapRawVideo(v, regionCode, categoryMap){
 
 function todayKey(){ return new Date().toISOString().slice(0,10); }
 
-// YouTube's own curated "실시간 인기 급상승(mostPopular)" chart — this is real
-// trending data (millions of views on top items), and only 1 unit/call versus
-// search.list's 100. We fetch up to 200 (YouTube's own cap per region anyway)
-// and keep just the ones that are real Shorts (≤60s).
-//
-// (We tried search.list with order=viewCount + videoDuration=short earlier —
-// that "order by views" is well known to be unreliable for very recent videos,
-// which is why it was surfacing barely-viewed clips instead of genuinely
-// popular ones. mostPopular is YouTube's real trending signal, so this fixes
-// the accuracy problem, not just the cost.)
+// Source 1: YouTube's own curated "실시간 인기 급상승(mostPopular)" chart —
+// real trending data, 1 unit/call. Very accurate when it has Shorts in it,
+// but some days it's almost entirely long-form, so it can come back near-empty.
 async function fetchMostPopular(regionCode, target){
   let items = [];
   let pageToken = '';
@@ -672,8 +665,46 @@ async function fetchMostPopular(regionCode, target){
   return items;
 }
 
+// Source 2: search.list filtered to short videos, published in the last 30
+// days (wide enough that a genuinely viral Short has had time to rack up
+// real views) so this actually finds Shorts instead of coming back empty.
+// search.list's own "order=viewCount" is known to be unreliable, so we don't
+// trust it for ranking — we only use it to gather candidates, then fetch each
+// candidate's real statistics via videos.list and sort by that. That combo
+// fixes both problems: mostPopular's "often has zero Shorts" and search's
+// "sorted by views" not actually being sorted by views.
+const SEARCH_CANDIDATE_PAGES = 6; // ~6*100 + ~6 ≈ 606 units
+async function fetchShortCandidateIds(regionCode){
+  const publishedAfter = new Date(Date.now() - 30*24*60*60*1000).toISOString();
+  let ids = [];
+  let pageToken = '';
+  for(let p = 0; p < SEARCH_CANDIDATE_PAGES; p++){
+    const params = {
+      part: 'snippet', type: 'video', order: 'viewCount',
+      videoDuration: 'short', regionCode, publishedAfter, maxResults: 50,
+    };
+    if(pageToken) params.pageToken = pageToken;
+    const data = await ytFetch('search', params);
+    ids = ids.concat((data.items || []).map(it => it.id?.videoId).filter(Boolean));
+    if(!data.nextPageToken) break;
+    pageToken = data.nextPageToken;
+  }
+  return ids;
+}
+
+async function fetchVideosByIds(ids){
+  const out = [];
+  for(let i = 0; i < ids.length; i += 50){
+    const chunk = ids.slice(i, i+50);
+    if(!chunk.length) continue;
+    const data = await ytFetch('videos', {part: 'snippet,statistics,contentDetails,topicDetails', id: chunk.join(',')});
+    out.push(...(data.items || []));
+  }
+  return out;
+}
+
 async function loadRegion(regionCode, onProgress, forceRefresh){
-  const cacheKey = `yt_kr_mostpopular_shorts_v1_${regionCode}`;
+  const cacheKey = `yt_kr_shorts_hybrid_v1_${regionCode}`;
   if(!forceRefresh){
     try{
       const cached = JSON.parse(safeGet(cacheKey) || 'null');
@@ -684,14 +715,24 @@ async function loadRegion(regionCode, onProgress, forceRefresh){
     }catch(e){ /* corrupt cache entry — fall through and refetch */ }
   }
 
-  const [rawVideos, categoryMap] = await Promise.all([
-    fetchMostPopular(regionCode, 200),
-    loadCategoryMap(regionCode),
-  ]);
-  const videos = rawVideos
+  const categoryMap = await loadCategoryMap(regionCode);
+  if(onProgress) onProgress('mostpopular');
+  const mostPopularRaw = await fetchMostPopular(regionCode, 200);
+
+  if(onProgress) onProgress('search');
+  const candidateIds = await fetchShortCandidateIds(regionCode);
+  const searchRaw = await fetchVideosByIds(candidateIds);
+
+  // Merge both sources, dedupe by video id, keep only real Shorts (≤60s),
+  // and always sort by the *actual* view count from videos.list — never by
+  // search.list's own ordering.
+  const byId = new Map();
+  [...mostPopularRaw, ...searchRaw].forEach(v => byId.set(v.id, v));
+  const videos = Array.from(byId.values())
     .map(v => mapRawVideo(v, regionCode, categoryMap))
-    .filter(v => v.durationSec <= 60) // real Shorts only
-    .sort((a,b) => b.views - a.views);
+    .filter(v => v.durationSec <= 60)
+    .sort((a,b) => b.views - a.views)
+    .slice(0, 60); // cap the display list to a manageable size
 
   safeSet(cacheKey, JSON.stringify({date: todayKey(), videos, categoryMap}));
   return { videos, categoryMap };
@@ -705,11 +746,15 @@ async function loadAll(forceRefresh){
 
   try{
     for(const r of REGIONS){
-      $('statusText').textContent = `불러오는 중... (${r.label} 인기 급상승 확인 중)`;
+      $('statusText').textContent = `불러오는 중... (${r.label})`;
       try{
         const result = await loadRegion(r.code, (stage) => {
           if(stage === 'cache'){
             $('statusText').textContent = `${r.label} · 오늘 이미 수집된 데이터 재사용`;
+          } else if(stage === 'mostpopular'){
+            $('statusText').textContent = `${r.label} · 인기 급상승 차트 확인 중...`;
+          } else if(stage === 'search'){
+            $('statusText').textContent = `${r.label} · 추가로 숏츠 검색 중... (몇 초 더 걸려요)`;
           }
         }, forceRefresh);
         dataByRegion[r.code] = result;
@@ -720,7 +765,7 @@ async function loadAll(forceRefresh){
       }
       render();
     }
-    $('statusText').innerHTML = `업데이트 완료 · <b>${new Date().toLocaleTimeString('ko-KR')}</b> · 한국 실시간 인기 급상승 차트 중 실제 60초 이하 숏츠만`;
+    $('statusText').innerHTML = `업데이트 완료 · <b>${new Date().toLocaleTimeString('ko-KR')}</b> · 한국 실제 60초 이하 숏츠, 조회수 순`;
   }finally{
     if(refreshBtn) refreshBtn.disabled = false;
   }
