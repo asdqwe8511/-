@@ -673,7 +673,10 @@ async function fetchMostPopular(regionCode, target){
 // candidate's real statistics via videos.list and sort by that. That combo
 // fixes both problems: mostPopular's "often has zero Shorts" and search's
 // "sorted by views" not actually being sorted by views.
-const SEARCH_CANDIDATE_PAGES = 6; // ~6*100 + ~6 ≈ 606 units
+// search.list's separate daily quota (as low as ~100 calls/day) is much more
+// precious than the general unit budget, so keep this small — it's only
+// spent when the trending chart didn't have enough real Shorts anyway.
+const SEARCH_CANDIDATE_PAGES = 3; // 3 search.list calls per fallback trigger
 async function fetchShortCandidateIds(regionCode){
   const publishedAfter = new Date(Date.now() - 30*24*60*60*1000).toISOString();
   let ids = [];
@@ -719,15 +722,27 @@ async function loadRegion(regionCode, onProgress, forceRefresh){
   if(onProgress) onProgress('mostpopular');
   const mostPopularRaw = await fetchMostPopular(regionCode, 200);
 
-  if(onProgress) onProgress('search');
-  const candidateIds = await fetchShortCandidateIds(regionCode);
-  const searchRaw = await fetchVideosByIds(candidateIds);
+  let mostPopularShorts = mostPopularRaw
+    .map(v => mapRawVideo(v, regionCode, categoryMap))
+    .filter(v => v.durationSec <= 60);
 
-  // Merge both sources, dedupe by video id, keep only real Shorts (≤60s),
-  // and always sort by the *actual* view count from videos.list — never by
-  // search.list's own ordering.
+  // search.list has its own separate, much stricter daily quota (as low as
+  // ~100 calls/day, independent of the general 10,000-unit budget) — so only
+  // spend it when the trending chart genuinely didn't have enough Shorts,
+  // instead of on every single load.
+  const MIN_BEFORE_SEARCH_FALLBACK = 10;
+  let combinedRaw = mostPopularRaw;
+  if(mostPopularShorts.length < MIN_BEFORE_SEARCH_FALLBACK){
+    if(onProgress) onProgress('search');
+    const candidateIds = await fetchShortCandidateIds(regionCode);
+    const searchRaw = await fetchVideosByIds(candidateIds);
+    combinedRaw = [...mostPopularRaw, ...searchRaw];
+  }
+
+  // Dedupe by video id, keep only real Shorts (≤60s), and always sort by the
+  // *actual* view count from videos.list — never by search.list's own ordering.
   const byId = new Map();
-  [...mostPopularRaw, ...searchRaw].forEach(v => byId.set(v.id, v));
+  combinedRaw.forEach(v => byId.set(v.id, v));
   const videos = Array.from(byId.values())
     .map(v => mapRawVideo(v, regionCode, categoryMap))
     .filter(v => v.durationSec <= 60)
