@@ -296,7 +296,7 @@
 
 <section class="hero">
   <h1>지금 뜨는 <span class="accent">한국 유튜브 숏츠</span></h1>
-  <p>YouTube 한국 실시간 인기 급상승 차트 중 실제 60초 이하 숏츠만, 조회수 순으로 확인하세요. (다른 나라·롱폼 제외)</p>
+  <p>한국 유튜브에서 지금 인기 있는 숏츠(3분 이하)만 조회수 순으로 확인하세요. (다른 나라·롱폼 제외)</p>
 </section>
 
 <div class="container">
@@ -318,7 +318,7 @@
   <div class="grid-2">
     <div class="panel">
       <h2>🇰🇷 한국 숏폼 랭킹</h2>
-      <div class="sub">최근 7일 · 조회수 순 · 실제 60초 이하만.</div>
+      <div class="sub">조회수 순 · 3분 이하 숏츠만.</div>
       <div id="regionRankings"><div class="loading">불러오는 중...</div></div>
     </div>
 
@@ -706,50 +706,78 @@ async function fetchVideosByIds(ids){
   return out;
 }
 
+// YouTube raised the Shorts limit from 60s to 3 minutes in Oct 2024, so a
+// 60-second cutoff was throwing away a large share of genuine Shorts (and was
+// a big reason the trending chart looked like it contained "zero shorts").
+const SHORTS_MAX_SEC = 180;
+const isShort = (v) => v.durationSec > 0 && v.durationSec <= SHORTS_MAX_SEC;
+
+// Diagnostics from the last load, surfaced in the UI so an empty result is
+// explainable instead of just being a blank page.
+let lastLoadDiag = null;
+
 async function loadRegion(regionCode, onProgress, forceRefresh){
-  const cacheKey = `yt_kr_shorts_hybrid_v1_${regionCode}`;
+  const cacheKey = `yt_kr_shorts_v3_${regionCode}`;
   if(!forceRefresh){
     try{
       const cached = JSON.parse(safeGet(cacheKey) || 'null');
-      if(cached && cached.date === todayKey() && Array.isArray(cached.videos)){
+      // Only reuse a cache entry that actually has results. Caching an empty
+      // list used to pin the page to "no results" for the rest of the day,
+      // even after a fix shipped.
+      if(cached && cached.date === todayKey() && Array.isArray(cached.videos) && cached.videos.length){
         if(onProgress) onProgress('cache');
+        lastLoadDiag = cached.diag || null;
         return { videos: cached.videos, categoryMap: cached.categoryMap || {} };
       }
     }catch(e){ /* corrupt cache entry — fall through and refetch */ }
   }
 
+  const diag = { trendingTotal: 0, trendingShorts: 0, searchUsed: false, searchCandidates: 0, searchError: null };
+
   const categoryMap = await loadCategoryMap(regionCode);
   if(onProgress) onProgress('mostpopular');
   const mostPopularRaw = await fetchMostPopular(regionCode, 200);
-
-  let mostPopularShorts = mostPopularRaw
-    .map(v => mapRawVideo(v, regionCode, categoryMap))
-    .filter(v => v.durationSec <= 60);
+  diag.trendingTotal = mostPopularRaw.length;
+  diag.trendingShorts = mostPopularRaw
+    .map(v => mapRawVideo(v, regionCode, categoryMap)).filter(isShort).length;
 
   // search.list has its own separate, much stricter daily quota (as low as
   // ~100 calls/day, independent of the general 10,000-unit budget) — so only
-  // spend it when the trending chart genuinely didn't have enough Shorts,
-  // instead of on every single load.
+  // spend it when the trending chart genuinely didn't have enough Shorts.
+  // A failure here (e.g. that quota running out) must not wipe out the
+  // trending results we already have.
   const MIN_BEFORE_SEARCH_FALLBACK = 10;
   let combinedRaw = mostPopularRaw;
-  if(mostPopularShorts.length < MIN_BEFORE_SEARCH_FALLBACK){
+  if(diag.trendingShorts < MIN_BEFORE_SEARCH_FALLBACK){
     if(onProgress) onProgress('search');
-    const candidateIds = await fetchShortCandidateIds(regionCode);
-    const searchRaw = await fetchVideosByIds(candidateIds);
-    combinedRaw = [...mostPopularRaw, ...searchRaw];
+    diag.searchUsed = true;
+    try{
+      const candidateIds = await fetchShortCandidateIds(regionCode);
+      diag.searchCandidates = candidateIds.length;
+      const searchRaw = await fetchVideosByIds(candidateIds);
+      combinedRaw = [...mostPopularRaw, ...searchRaw];
+    }catch(e){
+      diag.searchError = e.message;
+      console.error('숏츠 검색 실패(인기 급상승 결과만 사용):', e);
+    }
   }
 
-  // Dedupe by video id, keep only real Shorts (≤60s), and always sort by the
-  // *actual* view count from videos.list — never by search.list's own ordering.
+  // Dedupe by video id, keep only real Shorts, and always sort by the *actual*
+  // view count from videos.list — never by search.list's own ordering.
   const byId = new Map();
   combinedRaw.forEach(v => byId.set(v.id, v));
   const videos = Array.from(byId.values())
     .map(v => mapRawVideo(v, regionCode, categoryMap))
-    .filter(v => v.durationSec <= 60)
+    .filter(isShort)
     .sort((a,b) => b.views - a.views)
     .slice(0, 60); // cap the display list to a manageable size
 
-  safeSet(cacheKey, JSON.stringify({date: todayKey(), videos, categoryMap}));
+  lastLoadDiag = diag;
+  // Never persist an empty result — otherwise the next load short-circuits on
+  // the cache and can never recover until the date rolls over.
+  if(videos.length){
+    safeSet(cacheKey, JSON.stringify({date: todayKey(), videos, categoryMap, diag}));
+  }
   return { videos, categoryMap };
 }
 
@@ -776,11 +804,29 @@ async function loadAll(forceRefresh){
       }catch(e){
         dataByRegion[r.code] = dataByRegion[r.code] || { videos: [], categoryMap: {} };
         console.error(`${r.label} 로드 실패:`, e);
-        $('statusText').textContent = `${r.label} 로드 실패: ${e.message}`;
+        $('statusText').innerHTML = `<span style="color:var(--danger);">${r.label} 로드 실패: ${escapeHtml(e.message)}</span>`;
+        render();
+        return; // keep the error on screen instead of overwriting it below
       }
       render();
     }
-    $('statusText').innerHTML = `업데이트 완료 · <b>${new Date().toLocaleTimeString('ko-KR')}</b> · 한국 실제 60초 이하 숏츠, 조회수 순`;
+
+    const found = allActiveVideos().length;
+    const time = new Date().toLocaleTimeString('ko-KR');
+    if(found){
+      $('statusText').innerHTML = `업데이트 완료 · <b>${time}</b> · 숏츠 <b>${found}</b>개 (3분 이하, 조회수 순)`;
+    } else {
+      // Empty is a real outcome worth explaining, not a blank screen.
+      const d = lastLoadDiag;
+      let why = '';
+      if(d){
+        why = ` (인기 급상승 ${d.trendingTotal}개 중 숏츠 ${d.trendingShorts}개`;
+        if(d.searchError) why += `, 숏츠 검색 실패: ${d.searchError}`;
+        else if(d.searchUsed) why += `, 검색 후보 ${d.searchCandidates}개`;
+        why += ')';
+      }
+      $('statusText').innerHTML = `<span style="color:var(--danger);">숏츠를 찾지 못했습니다 · <b>${time}</b>${escapeHtml(why)}</span>`;
+    }
   }finally{
     if(refreshBtn) refreshBtn.disabled = false;
   }
