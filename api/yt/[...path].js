@@ -2,7 +2,7 @@ const crypto = require('crypto');
 
 // Only these YouTube Data API v3 endpoints can be reached through this proxy —
 // keeps this from becoming an open relay for arbitrary googleapis.com paths.
-const ALLOWED_ENDPOINTS = new Set(['videos', 'videoCategories', 'channels', 'search']);
+const ALLOWED_ENDPOINTS = new Set(['videos', 'videoCategories', 'channels']);
 
 function parseCookies(header) {
   const out = {};
