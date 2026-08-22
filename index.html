@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>한국 숏츠 대시보드</title>
+<title>인기영상 대시보드</title>
 <style>
   :root{
     --bg: #0e0f13;
@@ -284,9 +284,9 @@
 <body>
 
 <header class="topbar">
-  <div class="brand"><div class="brand-badge">🔥</div>🇰🇷 한국 숏츠 대시보드</div>
+  <div class="brand"><div class="brand-badge">🔥</div>인기영상 대시보드</div>
   <nav class="tab-nav">
-    <button class="tab-btn active" id="tabBtnVideos" data-tab="videos">실시간 인기 숏츠</button>
+    <button class="tab-btn active" id="tabBtnVideos" data-tab="videos">실시간 인기영상</button>
     <button class="tab-btn" id="tabBtnChannels" data-tab="channels">채널 파인더</button>
   </nav>
   <button class="gear-btn" id="logoutBtn">🚪 로그아웃</button>
@@ -295,36 +295,39 @@
 <section id="tabVideos">
 
 <section class="hero">
-  <h1>지금 뜨는 <span class="accent">한국 유튜브 숏츠</span></h1>
-  <p>한국 유튜브에서 지금 인기 있는 숏츠(60초 이내 · 9:16 세로)만 조회수 순으로 확인하세요.</p>
+  <h1>지금 뜨는 <span class="accent">유튜브 인기 영상</span></h1>
+  <p>YouTube Data API로 국가별 · 카테고리별 실시간 인기 영상을 한눈에 확인하세요.</p>
 </section>
 
 <div class="container">
 
   <div class="filter-bar">
-    <div class="chip active">🇰🇷 한국 · ⚡ 숏폼</div>
-    <button class="icon-btn" id="forceRefreshBtn" title="오늘 캐시를 무시하고 다시 수집">🔄 다시 불러오기</button>
+    <div class="chip active" data-region="ALL">전체</div>
+    <div class="chip" data-region="KR">🇰🇷 한국</div>
+    <div class="chip" data-region="US">🇺🇸 미국</div>
+    <div class="chip" data-region="JP">🇯🇵 일본</div>
+    <div class="chip" data-region="IN">🇮🇳 인도</div>
     <div class="spacer"></div>
     <div class="status-text" id="statusText">데이터를 불러오는 중입니다...</div>
   </div>
 
   <div class="stats-row">
-    <div class="stat-card"><div class="label">전체 숏츠</div><div class="value" id="statTotal">-</div></div>
+    <div class="stat-card"><div class="label">전체 영상</div><div class="value" id="statTotal">-</div></div>
+    <div class="stat-card"><div class="label">숏폼(≤60초)</div><div class="value pink" id="statShorts">-</div></div>
+    <div class="stat-card"><div class="label">롱폼</div><div class="value teal" id="statLong">-</div></div>
     <div class="stat-card"><div class="label">최고 조회수</div><div class="value purple" id="statMaxView">-</div></div>
-    <div class="stat-card"><div class="label">평균 조회수</div><div class="value teal" id="statAvgView">-</div></div>
-    <div class="stat-card"><div class="label">채널 수</div><div class="value pink" id="statChannels">-</div></div>
   </div>
 
   <div class="grid-2">
     <div class="panel">
-      <h2>🇰🇷 한국 숏폼 랭킹</h2>
-      <div class="sub">조회수 순 · 60초 이내 세로 숏츠만.</div>
+      <h2>국가별 실시간 랭킹</h2>
+      <div class="sub">국가별로 지금 뜨는 영상을 바로 확인하세요.</div>
       <div id="regionRankings"><div class="loading">불러오는 중...</div></div>
     </div>
 
     <div class="panel">
       <h2>카테고리별 TOP</h2>
-      <div class="sub">지금 목록에서 영상이 가장 많이 몰린 카테고리입니다.</div>
+      <div class="sub">현재 필터 기준 영상이 가장 많이 몰린 카테고리입니다.</div>
       <div id="categoryTop"><div class="loading">불러오는 중...</div></div>
     </div>
   </div>
@@ -499,10 +502,13 @@
 </div>
 
 <script>
-// Scoped down to Korea + Shorts only, per request — no other countries, no long-form.
 const REGIONS = [
   {code:'KR', label:'한국', flag:'🇰🇷'},
+  {code:'US', label:'미국', flag:'🇺🇸'},
+  {code:'JP', label:'일본', flag:'🇯🇵'},
+  {code:'IN', label:'인도', flag:'🇮🇳'},
 ];
+const VIDEOS_PER_REGION = 200; // YouTube API caps a single request at 50, so this paginates
 const CAT_COLORS = ['#7c5cff','#2dd4bf','#ff5470','#f5a524','#3b82f6','#ec4899','#22c55e'];
 
 // localStorage can throw (privacy settings, browser policy, etc).
@@ -514,7 +520,7 @@ function safeSet(key, val){
   try{ localStorage.setItem(key, val); return true; }catch(e){ console.warn('localStorage 저장 불가:', e); return false; }
 }
 
-let currentRegionFilter = 'ALL'; // REGIONS only has Korea now, so this always resolves to ['KR']
+let currentRegionFilter = 'ALL';
 let dataByRegion = {}; // { KR: { videos:[...], categoryMap:{} } }
 
 const $ = (id) => document.getElementById(id);
@@ -546,21 +552,7 @@ function formatDuration(sec){
 async function ytFetch(path, params){
   const url = new URL(`/api/yt/${path}`, location.origin);
   Object.entries(params).forEach(([k,v]) => url.searchParams.set(k,v));
-
-  // Never let a single request hang forever — surface a clear timeout error
-  // instead of the UI silently looking "stuck".
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
-  let res;
-  try{
-    res = await fetch(url, { signal: controller.signal });
-  }catch(e){
-    if(e.name === 'AbortError') throw new Error(`요청 시간 초과 (15초): ${path}`);
-    throw e;
-  }finally{
-    clearTimeout(timeoutId);
-  }
-
+  const res = await fetch(url);
   if(res.status === 401){
     location.href = '/login.html';
     throw new Error('로그인이 필요합니다.');
@@ -621,53 +613,15 @@ async function loadCategoryMap(regionCode){
   return map;
 }
 
-// The Data API has no "isShort" flag, but player.embedHtml carries the real
-// player proportions (we ask for maxHeight so they aren't a fixed default).
-// A 9:16 Short comes back portrait (height > width); normal 16:9 video comes
-// back landscape. Returns null when it can't be determined.
-function parseAspectRatio(embedHtml){
-  if(!embedHtml) return null;
-  const w = Number((embedHtml.match(/width="(\d+)"/) || [])[1]);
-  const h = Number((embedHtml.match(/height="(\d+)"/) || [])[1]);
-  if(!w || !h) return null;
-  return w / h;
-}
-
-// Shared mapper from a raw videos.list item to our internal video shape.
-function mapRawVideo(v, regionCode, categoryMap){
-  const aspect = parseAspectRatio(v.player?.embedHtml);
-  const text = `${v.snippet.title || ''} ${v.snippet.description || ''} ${(v.snippet.tags||[]).join(' ')}`;
-  return {
-    id: v.id,
-    title: v.snippet.title,
-    channel: v.snippet.channelTitle,
-    channelId: v.snippet.channelId,
-    thumb: v.snippet.thumbnails?.medium?.url || v.snippet.thumbnails?.default?.url,
-    views: Number(v.statistics?.viewCount||0),
-    likes: Number(v.statistics?.likeCount||0),
-    comments: Number(v.statistics?.commentCount||0),
-    categoryId: v.snippet.categoryId,
-    categoryName: (categoryMap && categoryMap[v.snippet.categoryId]) || '기타',
-    topicCategories: (v.topicDetails?.topicCategories || []).map(parseTopicUrl),
-    durationSec: parseISODuration(v.contentDetails.duration),
-    aspect,                                   // <1 means portrait (9:16-ish)
-    hasShortsTag: /#shorts?\b/i.test(text),   // creators tag Shorts this way
-    seenInRegion: regionCode,
-  };
-}
-
-function todayKey(){ return new Date().toISOString().slice(0,10); }
-
-// Source 1: YouTube's own curated "실시간 인기 급상승(mostPopular)" chart —
-// real trending data, 1 unit/call. Very accurate when it has Shorts in it,
-// but some days it's almost entirely long-form, so it can come back near-empty.
 async function fetchMostPopular(regionCode, target){
+  // YouTube caps a single request at 50 items, so page through until we
+  // hit the target count or run out of results (mostPopular charts top out
+  // around 200 per region anyway).
   let items = [];
   let pageToken = '';
   while(items.length < target){
     const params = {
-      part: 'snippet,statistics,contentDetails,topicDetails,player',
-      maxHeight: 720, // makes player.embedHtml report real proportions, so we can detect 9:16
+      part: 'snippet,statistics,contentDetails,topicDetails',
       chart: 'mostPopular',
       regionCode,
       maxResults: Math.min(50, target - items.length),
@@ -681,189 +635,42 @@ async function fetchMostPopular(regionCode, target){
   return items;
 }
 
-// Source 2: search.list filtered to short videos, published in the last 30
-// days (wide enough that a genuinely viral Short has had time to rack up
-// real views) so this actually finds Shorts instead of coming back empty.
-// search.list's own "order=viewCount" is known to be unreliable, so we don't
-// trust it for ranking — we only use it to gather candidates, then fetch each
-// candidate's real statistics via videos.list and sort by that. That combo
-// fixes both problems: mostPopular's "often has zero Shorts" and search's
-// "sorted by views" not actually being sorted by views.
-// search.list's separate daily quota (as low as ~100 calls/day) is much more
-// precious than the general unit budget, so keep this small — it's only
-// spent when the trending chart didn't have enough real Shorts anyway.
-const SEARCH_CANDIDATE_PAGES = 3; // 3 search.list calls per fallback trigger
-async function fetchShortCandidateIds(regionCode){
-  const publishedAfter = new Date(Date.now() - 30*24*60*60*1000).toISOString();
-  let ids = [];
-  let pageToken = '';
-  for(let p = 0; p < SEARCH_CANDIDATE_PAGES; p++){
-    const params = {
-      part: 'snippet', type: 'video', order: 'viewCount',
-      videoDuration: 'short', regionCode, publishedAfter, maxResults: 50,
-    };
-    if(pageToken) params.pageToken = pageToken;
-    const data = await ytFetch('search', params);
-    ids = ids.concat((data.items || []).map(it => it.id?.videoId).filter(Boolean));
-    if(!data.nextPageToken) break;
-    pageToken = data.nextPageToken;
-  }
-  return ids;
-}
-
-async function fetchVideosByIds(ids){
-  const out = [];
-  for(let i = 0; i < ids.length; i += 50){
-    const chunk = ids.slice(i, i+50);
-    if(!chunk.length) continue;
-    const data = await ytFetch('videos', {
-      part: 'snippet,statistics,contentDetails,topicDetails,player',
-      maxHeight: 720, // makes player.embedHtml report real proportions, so we can detect 9:16
-      id: chunk.join(','),
-    });
-    out.push(...(data.items || []));
-  }
-  return out;
-}
-
-// A Short here means: 60초 이내 + 9:16 세로 영상.
-// (YouTube itself now permits Shorts up to 3 minutes, but that pulls in a lot
-// of clips that aren't what we're analysing, so we hold the 60s line.)
-// Aspect ratio is the vertical test; when the API doesn't give us usable
-// player dimensions we fall back to duration + the creator's #Shorts tag
-// rather than dropping the video outright.
-const SHORTS_MAX_SEC = 60;
-const PORTRAIT_MAX_ASPECT = 0.9; // width/height below this is clearly vertical
-
-function isShort(v){
-  if(!(v.durationSec > 0 && v.durationSec <= SHORTS_MAX_SEC)) return false;
-  if(v.aspect != null) return v.aspect < PORTRAIT_MAX_ASPECT;
-  return true; // unknown orientation — keep it, duration already qualifies
-}
-
-// Diagnostics from the last load, surfaced in the UI so an empty result is
-// explainable instead of just being a blank page.
-let lastLoadDiag = null;
-
-async function loadRegion(regionCode, onProgress, forceRefresh){
-  const cacheKey = `yt_kr_shorts_v4_${regionCode}`;
-  if(!forceRefresh){
-    try{
-      const cached = JSON.parse(safeGet(cacheKey) || 'null');
-      // Only reuse a cache entry that actually has results. Caching an empty
-      // list used to pin the page to "no results" for the rest of the day,
-      // even after a fix shipped.
-      if(cached && cached.date === todayKey() && Array.isArray(cached.videos) && cached.videos.length){
-        if(onProgress) onProgress('cache');
-        lastLoadDiag = cached.diag || null;
-        return { videos: cached.videos, categoryMap: cached.categoryMap || {} };
-      }
-    }catch(e){ /* corrupt cache entry — fall through and refetch */ }
-  }
-
-  const diag = { trendingTotal: 0, trendingShorts: 0, searchUsed: false, searchCandidates: 0, searchError: null };
-
-  const categoryMap = await loadCategoryMap(regionCode);
-  if(onProgress) onProgress('mostpopular');
-  const mostPopularRaw = await fetchMostPopular(regionCode, 200);
-  diag.trendingTotal = mostPopularRaw.length;
-  diag.trendingShorts = mostPopularRaw
-    .map(v => mapRawVideo(v, regionCode, categoryMap)).filter(isShort).length;
-
-  // search.list has its own separate, much stricter daily quota (as low as
-  // ~100 calls/day, independent of the general 10,000-unit budget) — so only
-  // spend it when the trending chart genuinely didn't have enough Shorts.
-  // A failure here (e.g. that quota running out) must not wipe out the
-  // trending results we already have.
-  const MIN_BEFORE_SEARCH_FALLBACK = 10;
-  let combinedRaw = mostPopularRaw;
-  if(diag.trendingShorts < MIN_BEFORE_SEARCH_FALLBACK){
-    if(onProgress) onProgress('search');
-    diag.searchUsed = true;
-    try{
-      const candidateIds = await fetchShortCandidateIds(regionCode);
-      diag.searchCandidates = candidateIds.length;
-      const searchRaw = await fetchVideosByIds(candidateIds);
-      combinedRaw = [...mostPopularRaw, ...searchRaw];
-    }catch(e){
-      diag.searchError = e.message;
-      console.error('숏츠 검색 실패(인기 급상승 결과만 사용):', e);
-    }
-  }
-
-  // Dedupe by video id, keep only real Shorts, and always sort by the *actual*
-  // view count from videos.list — never by search.list's own ordering.
-  const byId = new Map();
-  combinedRaw.forEach(v => byId.set(v.id, v));
-  const mapped = Array.from(byId.values()).map(v => mapRawVideo(v, regionCode, categoryMap));
-
-  const under60 = mapped.filter(v => v.durationSec > 0 && v.durationSec <= SHORTS_MAX_SEC);
-  diag.pooled = mapped.length;
-  diag.under60 = under60.length;
-  diag.droppedLandscape = under60.filter(v => v.aspect != null && v.aspect >= PORTRAIT_MAX_ASPECT).length;
-
-  const videos = under60
-    .filter(isShort)
-    .sort((a,b) => b.views - a.views)
-    .slice(0, 60); // cap the display list to a manageable size
-
-  lastLoadDiag = diag;
-  // Never persist an empty result — otherwise the next load short-circuits on
-  // the cache and can never recover until the date rolls over.
-  if(videos.length){
-    safeSet(cacheKey, JSON.stringify({date: todayKey(), videos, categoryMap, diag}));
-  }
+async function loadRegion(regionCode){
+  const [rawVideos, categoryMap] = await Promise.all([
+    fetchMostPopular(regionCode, VIDEOS_PER_REGION),
+    loadCategoryMap(regionCode)
+  ]);
+  const videos = rawVideos.map(v => ({
+    id: v.id,
+    title: v.snippet.title,
+    channel: v.snippet.channelTitle,
+    channelId: v.snippet.channelId,
+    thumb: v.snippet.thumbnails?.medium?.url || v.snippet.thumbnails?.default?.url,
+    views: Number(v.statistics.viewCount||0),
+    likes: Number(v.statistics.likeCount||0),
+    comments: Number(v.statistics.commentCount||0),
+    categoryId: v.snippet.categoryId,
+    categoryName: categoryMap[v.snippet.categoryId] || '기타',
+    topicCategories: (v.topicDetails?.topicCategories || []).map(parseTopicUrl),
+    durationSec: parseISODuration(v.contentDetails.duration),
+    seenInRegion: regionCode,
+  }));
   return { videos, categoryMap };
 }
 
-async function loadAll(forceRefresh){
-  const refreshBtn = $('forceRefreshBtn');
-  if(refreshBtn) refreshBtn.disabled = true;
+async function loadAll(){
+  $('statusText').textContent = '불러오는 중...';
   $('regionRankings').innerHTML = '<div class="loading">불러오는 중...</div>';
   $('categoryTop').innerHTML = '<div class="loading">불러오는 중...</div>';
-
   try{
-    for(const r of REGIONS){
-      $('statusText').textContent = `불러오는 중... (${r.label})`;
-      try{
-        const result = await loadRegion(r.code, (stage) => {
-          if(stage === 'cache'){
-            $('statusText').textContent = `${r.label} · 오늘 이미 수집된 데이터 재사용`;
-          } else if(stage === 'mostpopular'){
-            $('statusText').textContent = `${r.label} · 인기 급상승 차트 확인 중...`;
-          } else if(stage === 'search'){
-            $('statusText').textContent = `${r.label} · 추가로 숏츠 검색 중... (몇 초 더 걸려요)`;
-          }
-        }, forceRefresh);
-        dataByRegion[r.code] = result;
-      }catch(e){
-        dataByRegion[r.code] = dataByRegion[r.code] || { videos: [], categoryMap: {} };
-        console.error(`${r.label} 로드 실패:`, e);
-        $('statusText').innerHTML = `<span style="color:var(--danger);">${r.label} 로드 실패: ${escapeHtml(e.message)}</span>`;
-        render();
-        return; // keep the error on screen instead of overwriting it below
-      }
-      render();
-    }
-
-    const found = allActiveVideos().length;
-    const time = new Date().toLocaleTimeString('ko-KR');
-    if(found){
-      $('statusText').innerHTML = `업데이트 완료 · <b>${time}</b> · 숏츠 <b>${found}</b>개 (60초 이내 세로, 조회수 순)`;
-    } else {
-      // Empty is a real outcome worth explaining, not a blank screen.
-      const d = lastLoadDiag;
-      let why = '';
-      if(d){
-        why = ` (후보 ${d.pooled ?? 0}개 · 60초 이내 ${d.under60 ?? 0}개 · 가로영상 제외 ${d.droppedLandscape ?? 0}개`;
-        if(d.searchError) why += ` · 숏츠 검색 실패: ${d.searchError}`;
-        else if(d.searchUsed) why += ` · 검색 후보 ${d.searchCandidates}개`;
-        why += ')';
-      }
-      $('statusText').innerHTML = `<span style="color:var(--danger);">숏츠를 찾지 못했습니다 · <b>${time}</b>${escapeHtml(why)}</span>`;
-    }
-  }finally{
-    if(refreshBtn) refreshBtn.disabled = false;
+    const results = await Promise.all(REGIONS.map(r => loadRegion(r.code)));
+    REGIONS.forEach((r, i) => dataByRegion[r.code] = results[i]);
+    $('statusText').innerHTML = `업데이트 완료 · <b>${new Date().toLocaleTimeString('ko-KR')}</b>`;
+    render();
+  }catch(e){
+    $('statusText').textContent = '오류: ' + e.message;
+    $('regionRankings').innerHTML = `<div class="empty">데이터를 불러오지 못했습니다.<br>${e.message}</div>`;
+    $('categoryTop').innerHTML = '';
   }
 }
 
@@ -877,13 +684,13 @@ function allActiveVideos(){
 
 function renderStats(){
   const vids = allActiveVideos();
+  const shorts = vids.filter(v => v.durationSec <= 60).length;
+  const long = vids.length - shorts;
   const maxView = vids.reduce((m,v) => Math.max(m, v.views), 0);
-  const avgView = vids.length ? Math.round(vids.reduce((s,v) => s+v.views, 0) / vids.length) : 0;
-  const channelCount = new Set(vids.map(v => v.channelId)).size;
   $('statTotal').textContent = vids.length ? vids.length + '개' : '-';
+  $('statShorts').textContent = vids.length ? shorts + '개' : '-';
+  $('statLong').textContent = vids.length ? long + '개' : '-';
   $('statMaxView').textContent = vids.length ? formatNum(maxView) : '-';
-  $('statAvgView').textContent = vids.length ? formatNum(avgView) : '-';
-  $('statChannels').textContent = vids.length ? channelCount + '개' : '-';
 }
 
 // Character-count truncation (not just CSS ellipsis) so titles read as a
@@ -1424,9 +1231,13 @@ function openChannelDetail(channelId){
 }
 
 // --- UI events ---
-$('forceRefreshBtn').addEventListener('click', () => {
-  channelPoolLoaded = false; // let the channel finder tab pick up fresh data too if reopened
-  loadAll(true); // bypass today's cache and re-spend quota on demand
+document.querySelectorAll('.chip[data-region]').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.chip[data-region]').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    currentRegionFilter = chip.dataset.region;
+    if(Object.keys(dataByRegion).length) render();
+  });
 });
 
 $('logoutBtn').addEventListener('click', async () => {
@@ -1558,18 +1369,6 @@ $('catDetailOverlay').addEventListener('click', (e) => { if(e.target.id === 'cat
 window.addEventListener('error', (e) => {
   const el = document.getElementById('statusText');
   if(el) el.textContent = '오류 발생: ' + e.message;
-});
-
-// Async functions that throw before/outside their own try/catch reject
-// silently into the console by default — surface those too, so a broken
-// button never just looks like "nothing happened".
-window.addEventListener('unhandledrejection', (e) => {
-  const msg = '처리되지 않은 오류: ' + (e.reason?.message || e.reason);
-  console.error(msg, e.reason);
-  const status = document.getElementById('statusText');
-  if(status) status.textContent = msg;
-  const refreshBtn = document.getElementById('forceRefreshBtn');
-  if(refreshBtn) refreshBtn.disabled = false;
 });
 
 // init
