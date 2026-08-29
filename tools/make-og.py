@@ -1,104 +1,157 @@
-# Generates og-image.png — the link preview card shown by KakaoTalk,
-# Slack, Facebook, X, etc. Re-run this if the site's branding changes:
-#   python tools/make-og.py
+# Generates og-image.png (link preview card) and favicon.png.
+# Re-run after branding changes:  python tools/make-og.py
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 W, H = 1200, 630
-BG        = (14, 15, 19)
-PANEL     = (28, 31, 40)
-BORDER    = (42, 45, 56)
-TEXT      = (242, 243, 245)
-TEXT_DIM  = (146, 152, 168)
-ACCENT    = (124, 92, 255)   # purple
-ACCENT2   = (45, 212, 191)   # teal
-DANGER    = (255, 84, 112)
+BG       = (14, 15, 19)
+PANEL    = (22, 24, 31)
+PANEL2   = (28, 31, 40)
+BORDER   = (42, 45, 56)
+TEXT     = (242, 243, 245)
+DIM      = (146, 152, 168)
+ACCENT   = (124, 92, 255)
+ACCENT2  = (45, 212, 191)
+DANGER   = (255, 84, 112)
 
 F = "C:/Windows/Fonts/"
-def font(name, size):
-    return ImageFont.truetype(F + name, size)
-
 bold, reg = "malgunbd.ttf", "malgun.ttf"
+def font(n, s): return ImageFont.truetype(F + n, s)
 
 img = Image.new("RGB", (W, H), BG)
 
-# Soft purple glow behind the headline, mirroring the site's hero gradient.
-gw, gh = 1500, 1100
+# Hero glow, mirroring the site's radial gradient.
+gw, gh = 1600, 1150
 glow = ImageOps.invert(Image.radial_gradient("L")).resize((gw, gh))
 tint = Image.new("RGB", (gw, gh), ACCENT)
 layer = Image.new("RGB", (W, H), BG)
-layer.paste(tint, ((W - gw) // 2, -gh // 2 - 40))
+pos = ((W - gw) // 2, -gh // 2 - 30)
+layer.paste(tint, pos)
 mask = Image.new("L", (W, H), 0)
-mask.paste(glow, ((W - gw) // 2, -gh // 2 - 40))
-img = Image.composite(layer, img, mask.point(lambda v: int(v * 0.30)))
+mask.paste(glow, pos)
+img = Image.composite(layer, img, mask.point(lambda v: int(v * 0.26)))
 
 d = ImageDraw.Draw(img)
 
-def text_run(x, y, parts, f):
-    """Draw differently-coloured segments on one baseline; returns total width."""
-    for s, c in parts:
-        d.text((x, y), s, font=f, fill=c)
-        x += d.textlength(s, font=f)
-    return x
+def fit(text, name, size, max_w):
+    """Shrink the font until the text fits max_w."""
+    f = font(name, size)
+    while d.textlength(text, font=f) > max_w and size > 10:
+        size -= 2
+        f = font(name, size)
+    return f
 
-def run_width(parts, f):
-    return sum(d.textlength(s, font=f) for s, _ in parts)
+def grad_rect(box, c1, c2, radius=10, vertical=False):
+    """Rounded rect filled with a linear gradient."""
+    x0, y0, x1, y1 = [int(v) for v in box]
+    w, h = x1 - x0, y1 - y0
+    if w <= 0 or h <= 0: return
+    g = Image.new("RGB", (w, h))
+    gd = ImageDraw.Draw(g)
+    n = h if vertical else w
+    for i in range(n):
+        t = i / max(n - 1, 1)
+        c = tuple(round(c1[k] + (c2[k] - c1[k]) * t) for k in range(3))
+        if vertical: gd.line([(0, i), (w, i)], fill=c)
+        else:        gd.line([(i, 0), (i, h)], fill=c)
+    m = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(m).rounded_rectangle([0, 0, w - 1, h - 1], radius=radius, fill=255)
+    img.paste(g, (x0, y0), m)
 
-# Brand row
-f_brand = font(bold, 30)
-bx = 90
-d.rounded_rectangle([bx, 74, bx + 46, 120], radius=13, fill=ACCENT)
-d.text((bx + 12, 82), "▶", font=font(bold, 24), fill=(255, 255, 255))
-d.text((bx + 62, 80), "인기영상 대시보드", font=f_brand, fill=TEXT)
+# ---------------- left column: brand + headline ----------------
+LX, LW = 78, 430
 
-# Headline
-f_h1 = font(bold, 78)
-line = [("지금 뜨는 ", TEXT), ("유튜브 인기 영상", ACCENT2)]
-text_run((W - run_width(line, f_h1)) / 2, 196, line, f_h1)
+d.rounded_rectangle([LX, 84, LX + 44, 128], radius=13, fill=ACCENT)
+d.polygon([(LX + 17, 96), (LX + 17, 116), (LX + 33, 106)], fill=(255, 255, 255))
+d.text((LX + 58, 92), "인기영상 대시보드", font=font(bold, 27), fill=TEXT)
 
-# Subhead
-f_sub = font(reg, 30)
-sub = "국가별 · 카테고리별 실시간 인기 영상을 한눈에"
-d.text(((W - d.textlength(sub, font=f_sub)) / 2, 306), sub, font=f_sub, fill=TEXT_DIM)
+f_h1 = fit("유튜브 인기 영상", bold, 62, LW)
+d.text((LX, 196), "지금 뜨는", font=f_h1, fill=TEXT)
+d.text((LX, 196 + f_h1.size + 16), "유튜브 인기 영상", font=f_h1, fill=ACCENT2)
 
-# Country pills
-f_pill_c = font(bold, 22)
-f_pill_l = font(reg, 24)
-pills = [("KR", "한국"), ("US", "미국"), ("JP", "일본"), ("IN", "인도")]
-pad_x, gap, ph = 26, 18, 60
-widths = [pad_x * 2 + d.textlength(c, font=f_pill_c) + 10 + d.textlength(l, font=f_pill_l)
-          for c, l in pills]
-x = (W - (sum(widths) + gap * (len(pills) - 1))) / 2
-y = 392
-for (code, label), w in zip(pills, widths):
-    d.rounded_rectangle([x, y, x + w, y + ph], radius=30, fill=PANEL, outline=BORDER, width=2)
-    cx = x + pad_x
-    d.text((cx, y + 19), code, font=f_pill_c, fill=ACCENT2)
-    cx += d.textlength(code, font=f_pill_c) + 10
-    d.text((cx, y + 16), label, font=f_pill_l, fill=TEXT)
-    x += w + gap
+f_sub = font(reg, 23)
+d.text((LX, 366), "국가별 실시간 랭킹 · 채널 파인더", font=f_sub, fill=DIM)
 
-# Bottom accent bar, purple -> teal
-bar_y, bar_h, bar_w = 520, 8, 420
-bar_x = (W - bar_w) / 2
-for i in range(bar_w):
-    t = i / (bar_w - 1)
-    col = tuple(round(ACCENT[k] + (ACCENT2[k] - ACCENT[k]) * t) for k in range(3))
-    d.rectangle([bar_x + i, bar_y, bar_x + i + 1, bar_y + bar_h], fill=col)
+# country pills
+f_pc, f_pl = font(bold, 17), font(reg, 18)
+x, y, ph = LX, 420, 44
+for code, label in [("KR", "한국"), ("US", "미국"), ("JP", "일본"), ("IN", "인도")]:
+    w = 20 + d.textlength(code, font=f_pc) + 8 + d.textlength(label, font=f_pl) + 20
+    d.rounded_rectangle([x, y, x + w, y + ph], radius=22, fill=PANEL2, outline=BORDER, width=2)
+    cx = x + 20
+    d.text((cx, y + 14), code, font=f_pc, fill=ACCENT2)
+    cx += d.textlength(code, font=f_pc) + 8
+    d.text((cx, y + 11), label, font=f_pl, fill=TEXT)
+    x += w + 10
 
-# Footer note
-f_foot = font(reg, 23)
-foot = "실시간 인기영상 · 채널 파인더"
-d.text(((W - d.textlength(foot, font=f_foot)) / 2, 556), foot, font=f_foot, fill=TEXT_DIM)
+# accent underline
+grad_rect([LX, 512, LX + 300, 519], ACCENT, ACCENT2, radius=4)
+
+# ---------------- right column: dashboard mockup ----------------
+PX0, PY0, PX1, PY1 = 556, 80, 1124, 550
+d.rounded_rectangle([PX0, PY0, PX1, PY1], radius=20, fill=PANEL, outline=BORDER, width=2)
+
+IX0, IX1 = PX0 + 24, PX1 - 24
+INNER_W = IX1 - IX0
+
+# stat tiles
+stats = [("전체 영상", "488개", TEXT), ("숏폼", "272개", DANGER), ("최고 조회수", "936만", ACCENT)]
+tw = (INNER_W - 2 * 14) / 3
+for i, (label, value, col) in enumerate(stats):
+    tx = IX0 + i * (tw + 14)
+    d.rounded_rectangle([tx, PY0 + 24, tx + tw, PY0 + 24 + 82], radius=13,
+                        fill=PANEL2, outline=BORDER, width=2)
+    d.text((tx + 16, PY0 + 37), label, font=font(reg, 16), fill=DIM)
+    d.text((tx + 16, PY0 + 60), value, font=font(bold, 30), fill=col)
+
+# section label
+d.text((IX0, PY0 + 124), "국가별 실시간 랭킹", font=font(bold, 19), fill=TEXT)
+d.rounded_rectangle([IX0 + 168, PY0 + 126, IX0 + 168 + 54, PY0 + 126 + 24],
+                    radius=8, fill=PANEL2, outline=BORDER, width=2)
+d.text((IX0 + 179, PY0 + 129), "488개", font=font(reg, 14), fill=ACCENT2)
+
+# video card grid — synthetic duotone "thumbnails"
+duos = [((124, 92, 255), (45, 212, 191)), ((255, 84, 112), (245, 165, 36)),
+        ((59, 130, 246), (124, 92, 255)), ((34, 197, 94), (45, 212, 191)),
+        ((236, 72, 153), (124, 92, 255)), ((245, 165, 36), (255, 84, 112))]
+cols, rows, gap = 3, 2, 14
+cw = (INNER_W - gap * (cols - 1)) / cols
+th = cw * 9 / 16
+ch = th + 40
+gy0 = PY0 + 156
+
+for i in range(cols * rows):
+    r, c = divmod(i, cols)
+    cx = IX0 + c * (cw + gap)
+    cy = gy0 + r * (ch + gap)
+    d.rounded_rectangle([cx, cy, cx + cw, cy + ch], radius=11, fill=PANEL2,
+                        outline=BORDER, width=1)
+    grad_rect([cx + 1, cy + 1, cx + cw - 1, cy + th], *duos[i], radius=10)
+
+    # play glyph on the thumbnail
+    px, py, s = cx + cw / 2, cy + th / 2, 11
+    d.polygon([(px - s * .6, py - s), (px - s * .6, py + s), (px + s, py)],
+              fill=(255, 255, 255, 230))
+    # rank badge
+    d.rounded_rectangle([cx + 7, cy + 7, cx + 29, cy + 27], radius=6, fill=(0, 0, 0))
+    d.text((cx + 14, cy + 9), str(i + 1), font=font(bold, 14), fill=(255, 255, 255))
+    # duration badge
+    dur = "0:45" if i % 2 else "8:02"
+    dw = d.textlength(dur, font=font(reg, 13)) + 12
+    d.rounded_rectangle([cx + cw - 9 - dw, cy + th - 26, cx + cw - 9, cy + th - 8],
+                        radius=5, fill=(0, 0, 0))
+    d.text((cx + cw - 3 - dw, cy + th - 25), dur, font=font(reg, 13), fill=(255, 255, 255))
+    # title / meta placeholder bars
+    d.rounded_rectangle([cx + 10, cy + th + 11, cx + cw - 22, cy + th + 20], radius=4, fill=(58, 62, 76))
+    d.rounded_rectangle([cx + 10, cy + th + 26, cx + cw - 58, cy + th + 33], radius=3, fill=(43, 46, 58))
 
 img.save("og-image.png", "PNG", optimize=True)
 print("wrote og-image.png", img.size)
 
-# --- favicon: small square mark reusing the same purple play badge ---
+# ---------------- favicon ----------------
 S = 128
 fav = Image.new("RGB", (S, S), BG)
 fd = ImageDraw.Draw(fav)
 fd.rounded_rectangle([8, 8, S - 8, S - 8], radius=28, fill=ACCENT)
-tri = [(48, 36), (48, 92), (94, 64)]
-fd.polygon(tri, fill=(255, 255, 255))
+fd.polygon([(48, 36), (48, 92), (94, 64)], fill=(255, 255, 255))
 fav.save("favicon.png", "PNG", optimize=True)
 print("wrote favicon.png", fav.size)
