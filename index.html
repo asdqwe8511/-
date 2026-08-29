@@ -267,6 +267,19 @@
 
   #catFilterChips.chip-row{max-height:280px; overflow-y:auto;}
 
+
+  /* 쿠팡파트너스 다이나믹 배너 */
+  .cp-banner{
+    background:var(--panel); border-bottom:1px solid var(--border);
+    padding:14px 16px 10px; text-align:center;
+  }
+  .cp-banner-inner{
+    display:flex; justify-content:center;
+    max-width:100%; overflow-x:auto;   /* fixed-width Coupang iframe must not widen the page */
+  }
+  .cp-banner-inner iframe{border:0; display:block;}
+  .cp-disclosure{margin-top:8px; font-size:11px; color:var(--text-dim); line-height:1.4;}
+
   /* ---------- Mobile ---------- */
   @media(max-width:640px){
     header.topbar{
@@ -295,6 +308,8 @@
     .vcard-title{font-size:12px; padding:7px 7px 2px;}
     .vcard-meta{font-size:10.5px; padding:0 7px 8px;}
 
+    .cp-banner{padding:10px 10px 8px;}
+    .cp-disclosure{font-size:10px;}
     .panel{padding:16px;}
     .search-input{min-width:0; flex:1 1 100%;}
 
@@ -313,6 +328,44 @@
   </nav>
   <button class="gear-btn" id="logoutBtn">🚪 로그아웃</button>
 </header>
+
+<!-- ===== 쿠팡파트너스 다이나믹 배너 =====
+     쿠팡파트너스 > 배너 만들기 > 다이나믹 배너 에서 발급받은 값을 아래 CP 객체에 넣으세요.
+     id 와 trackingCode 가 채워지기 전까지는 이 영역이 통째로 숨겨집니다. -->
+<div class="cp-banner" id="cpBanner">
+  <div class="cp-banner-inner">
+    <script>
+    (function(){
+      var CP = {
+        id: 0,                 // 예: 912345          (숫자, 따옴표 없이)
+        trackingCode: '',      // 예: 'AF1234567'
+        template: 'carousel',
+        width: '680',
+        height: '140'
+      };
+      var box = document.getElementById('cpBanner');
+      if(!CP.id || !CP.trackingCode){ box.style.display = 'none'; return; }
+
+      var s = document.createElement('script');
+      s.src = 'https://ads-partners.coupang.com/g.js';
+      s.onload = function(){
+        try{
+          new PartnersCoupang.G(CP);
+        }catch(e){
+          console.error('쿠팡 배너 초기화 실패:', e);
+          box.style.display = 'none';
+        }
+      };
+      s.onerror = function(){
+        console.warn('쿠팡 배너 스크립트를 불러오지 못했습니다 (광고 차단기일 수 있음).');
+        box.style.display = 'none';
+      };
+      document.currentScript.parentNode.appendChild(s);
+    })();
+    </script>
+  </div>
+  <p class="cp-disclosure">이 사이트는 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p>
+</div>
 
 <section id="tabVideos">
 
