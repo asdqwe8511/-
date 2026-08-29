@@ -326,7 +326,6 @@
     <button class="tab-btn active" id="tabBtnVideos" data-tab="videos">실시간 인기영상</button>
     <button class="tab-btn" id="tabBtnChannels" data-tab="channels">채널 파인더</button>
   </nav>
-  <button class="gear-btn" id="logoutBtn">🚪 로그아웃</button>
 </header>
 
 <!-- ===== 쿠팡파트너스 다이나믹 배너 =====
@@ -614,16 +613,12 @@ function formatDuration(sec){
 
 // All real YouTube calls go through our own /api/yt/* proxy — the actual
 // Google API key lives only on the server (Vercel env var), never here.
-// If our session cookie is missing/expired, the proxy replies 401 and we
-// bounce to the login page.
+// The site is public, so the proxy needs no session; it allow-lists a few
+// read endpoints and caches responses at the edge to protect the quota.
 async function ytFetch(path, params){
   const url = new URL(`/api/yt/${path}`, location.origin);
   Object.entries(params).forEach(([k,v]) => url.searchParams.set(k,v));
   const res = await fetch(url);
-  if(res.status === 401){
-    location.href = '/login.html';
-    throw new Error('로그인이 필요합니다.');
-  }
   if(!res.ok){
     const err = await res.json().catch(()=>({}));
     throw new Error(err?.error?.message || `API 요청 실패 (${res.status})`);
@@ -1305,11 +1300,6 @@ document.querySelectorAll('.chip[data-region]').forEach(chip => {
     currentRegionFilter = chip.dataset.region;
     if(Object.keys(dataByRegion).length) render();
   });
-});
-
-$('logoutBtn').addEventListener('click', async () => {
-  try{ await fetch('/api/logout', {method:'POST'}); }catch(e){}
-  location.href = '/login.html';
 });
 
 // --- tab switching ---

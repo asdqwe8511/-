@@ -1,50 +1,19 @@
-const crypto = require('crypto');
-
-// Only these YouTube Data API v3 endpoints can be reached through this proxy —
-// keeps this from becoming an open relay for arbitrary googleapis.com paths.
+// Public read-only proxy for the YouTube Data API.
+//
+// The site has no login, so this endpoint is reachable by anyone. Two things
+// keep that from burning the project's daily quota:
+//   1. Only a fixed allow-list of read endpoints is forwarded — this can't be
+//      used as a general relay to googleapis.com.
+//   2. Successful responses are cached at Vercel's edge, so repeat traffic is
+//      served from the CDN instead of hitting YouTube again. Quota use is
+//      therefore roughly constant no matter how many visitors there are.
+// The API key itself stays server-side and is never exposed to the browser.
 const ALLOWED_ENDPOINTS = new Set(['videos', 'videoCategories', 'channels']);
 
-function parseCookies(header) {
-  const out = {};
-  (header || '').split(';').forEach((part) => {
-    const idx = part.indexOf('=');
-    if (idx === -1) return;
-    const key = part.slice(0, idx).trim();
-    const val = part.slice(idx + 1).trim();
-    if (key) out[key] = decodeURIComponent(val);
-  });
-  return out;
-}
-
-function isValidSession(req) {
-  const secret = process.env.SESSION_SECRET;
-  if (!secret) return false;
-
-  const cookies = parseCookies(req.headers.cookie);
-  const token = cookies.session;
-  if (!token) return false;
-
-  const [payloadB64, sig] = token.split('.');
-  if (!payloadB64 || !sig) return false;
-
-  const expected = crypto.createHmac('sha256', secret).update(payloadB64).digest('base64url');
-  if (sig.length !== expected.length) return false;
-  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return false;
-
-  try {
-    const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
-    return typeof payload.exp === 'number' && Date.now() < payload.exp;
-  } catch (e) {
-    return false;
-  }
-}
+const CACHE_SECONDS = 1800;        // serve from edge for 30 min
+const STALE_SECONDS = 3600;        // then serve stale up to 1h while refreshing
 
 module.exports = async (req, res) => {
-  if (!isValidSession(req)) {
-    res.status(401).json({ error: { message: '로그인이 필요합니다.' } });
-    return;
-  }
-
   // Derive the target endpoint straight from the request path instead of the
   // dynamic route's query param — on this platform Vercel has been observed
   // to expose the catch-all value under a literal "...path" key rather than
@@ -73,8 +42,21 @@ module.exports = async (req, res) => {
   try {
     const ytRes = await fetch(url);
     const data = await ytRes.json();
+
+    // Only cache good responses — caching an error (e.g. a transient quota
+    // failure) would pin the site to that error for the whole window.
+    if (ytRes.ok) {
+      res.setHeader(
+        'Cache-Control',
+        `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`
+      );
+    } else {
+      res.setHeader('Cache-Control', 'no-store');
+    }
+
     res.status(ytRes.status).json(data);
   } catch (e) {
+    res.setHeader('Cache-Control', 'no-store');
     res.status(500).json({ error: { message: e.message } });
   }
 };
