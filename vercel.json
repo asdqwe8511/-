@@ -1,0 +1,6 @@
+{
+  "cleanUrls": true,
+  "functions": {
+    "api/saju.js": { "maxDuration": 60 }
+  }
+}

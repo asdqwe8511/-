@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>사주·이름 풀이</title>
+<meta name="description" content="생년월일시로 사주팔자를 뽑고, 이름의 발음오행과 획수까지 함께 읽어 주는 풀이. 만세력은 천문 계산으로 직접 구합니다.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="사주·이름 풀이">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:title" content="사주·이름 풀이">
+<meta property="og:description" content="사주팔자와 이름을 한자리에서. 절기·진태양시까지 반영한 만세력 계산 + 해석.">
+<link rel="icon" type="image/png" href="/favicon.png">
+
+<style>
+  :root{
+    --bg:#0e0f13; --panel:#16181f; --panel-2:#1c1f28; --panel-3:#232733;
+    --border:#2a2d38; --text:#f2f3f5; --text-dim:#9298a8; --text-mute:#6b7180;
+    --accent:#7c5cff; --accent-2:#2dd4bf; --danger:#ff5470; --warn:#f0b429;
+    /* 차트: 오행을 색으로 구분하지 않는다. 청↔적, 적↔황은 색각 이상에서
+       구별이 안 되는 조합이라, 오행 이름은 글자로 적고 막대는 한 가지 색조로
+       크기만 비교하게 한다. 용신만 다른 색 + '용신' 라벨로 표시한다. */
+    --bar:#7c5cff; --bar-strong:#2dd4bf;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+    line-height:1.55; overflow-x:hidden;
+  }
+  a{color:inherit; text-decoration:none;}
+  button{font-family:inherit;}
+
+  header.topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 28px; border-bottom:1px solid var(--border);
+    background:var(--panel); position:sticky; top:0; z-index:20;
+  }
+  .brand{display:flex; align-items:center; gap:10px; font-weight:700; font-size:18px;}
+  .brand-badge{
+    width:32px; height:32px; border-radius:9px;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));
+    display:flex; align-items:center; justify-content:center; font-size:16px;
+  }
+  .top-link{
+    background:var(--panel-2); border:1px solid var(--border); color:var(--text-dim);
+    padding:8px 14px; border-radius:8px; font-size:13px;
+  }
+  .top-link:hover{border-color:var(--accent); color:var(--text);}
+
+  .hero{
+    text-align:center; padding:52px 20px 28px;
+    background:radial-gradient(circle at 50% 0%, rgba(124,92,255,.16), transparent 60%);
+  }
+  .hero h1{font-size:34px; font-weight:800; margin-bottom:10px;}
+  .hero p{color:var(--text-dim); font-size:14.5px;}
+  .hero .accent{color:var(--accent-2);}
+
+  .container{max-width:1080px; margin:0 auto; padding:0 20px 80px;}
+  .panel{background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:22px;}
+  .panel + .panel{margin-top:18px;}
+  .panel h2{font-size:17px; margin-bottom:4px;}
+  .panel .sub{font-size:13px; color:var(--text-dim); margin-bottom:16px;}
+
+  /* ── 입력 폼 ── */
+  .form-grid{display:grid; grid-template-columns:repeat(12,1fr); gap:14px;}
+  .field{display:flex; flex-direction:column; gap:6px;}
+  .field[hidden]{display:none;}   /* display:flex 가 [hidden] 을 덮어쓰지 않도록 */
+  .field label{font-size:12.5px; color:var(--text-dim);}
+  .field .hint{font-size:11.5px; color:var(--text-mute);}
+  input[type=text], input[type=number], select{
+    background:var(--panel-2); border:1px solid var(--border); color:var(--text);
+    border-radius:9px; padding:10px 12px; font-size:14px; width:100%;
+    font-family:inherit;
+  }
+  input:focus, select:focus{outline:none; border-color:var(--accent);}
+  input::placeholder{color:var(--text-mute);}
+  .chips{display:flex; gap:8px; flex-wrap:wrap;}
+  .chip{
+    padding:9px 15px; border-radius:20px; border:1px solid var(--border);
+    background:var(--panel-2); color:var(--text-dim); font-size:13px; cursor:pointer;
+    transition:.15s;
+  }
+  .chip:hover{border-color:var(--accent);}
+  .chip[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:#fff;}
+  .check{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-dim); cursor:pointer;}
+  .check input{width:16px; height:16px; accent-color:var(--accent);}
+  .submit{
+    background:linear-gradient(135deg,var(--accent),#5b3fd6); border:none; color:#fff;
+    padding:14px 26px; border-radius:11px; font-size:15px; font-weight:700; cursor:pointer;
+    width:100%;
+  }
+  .submit:hover{filter:brightness(1.08);}
+  .submit:disabled{opacity:.55; cursor:not-allowed;}
+  .adv-toggle{
+    background:none; border:none; color:var(--text-dim); font-size:12.5px;
+    cursor:pointer; padding:0; text-decoration:underline dotted;
+  }
+  .adv{display:none; margin-top:14px; padding-top:14px; border-top:1px dashed var(--border);}
+  .adv.open{display:block;}
+  .form-error{
+    display:none; margin-top:12px; padding:11px 14px; border-radius:9px;
+    background:rgba(255,84,112,.12); border:1px solid rgba(255,84,112,.4);
+    color:#ffb3c1; font-size:13px;
+  }
+  .form-error.show{display:block;}
+
+  /* ── 결과 ── */
+  #result{display:none; margin-top:22px;}
+  #result.show{display:block;}
+  .summary-row{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px;}
+  .stat{background:var(--panel); border:1px solid var(--border); border-radius:13px; padding:15px 17px;}
+  .stat .label{font-size:12px; color:var(--text-dim); margin-bottom:5px;}
+  .stat .value{font-size:20px; font-weight:800;}
+  .stat .value small{font-size:12.5px; font-weight:600; color:var(--text-dim);}
+
+  .notice{
+    display:flex; gap:10px; padding:12px 15px; border-radius:11px; font-size:13px;
+    background:rgba(240,180,41,.1); border:1px solid rgba(240,180,41,.35); color:#f5cd70;
+    margin-bottom:16px;
+  }
+
+  /* 팔자표 */
+  .pillars{display:grid; grid-template-columns:repeat(4,1fr); gap:10px;}
+  .pillar{
+    background:var(--panel-2); border:1px solid var(--border); border-radius:13px;
+    padding:14px 10px; text-align:center;
+  }
+  .pillar.day{border-color:var(--accent); background:linear-gradient(180deg,rgba(124,92,255,.12),var(--panel-2));}
+  .pillar .pos{font-size:12px; color:var(--text-dim); margin-bottom:9px;}
+  .pillar .god{font-size:11.5px; color:var(--accent-2); min-height:17px;}
+  .pillar .glyph{
+    font-size:38px; font-weight:800; line-height:1.15;
+    font-family:"Apple SD Gothic Neo","Malgun Gothic",serif;
+  }
+  .pillar .kor{font-size:12px; color:var(--text-dim);}
+  .pillar .elem{font-size:11.5px; color:var(--text-mute); margin-top:2px;}
+  .pillar .divider{height:1px; background:var(--border); margin:9px 4px;}
+  .pillar .hidden-stems{font-size:11px; color:var(--text-mute); margin-top:8px;}
+  .pillar.empty .glyph{color:var(--text-mute); font-size:26px;}
+
+  /* 오행 막대 */
+  .bars{margin-top:6px;}
+  .bar-row{display:grid; grid-template-columns:56px 1fr 62px; align-items:center; gap:10px; padding:5px 0;}
+  .bar-name{font-size:13px; color:var(--text-dim);}
+  .bar-name b{color:var(--text); font-weight:700;}
+  .bar-track{position:relative; height:14px; background:var(--panel-2); border-radius:7px;}
+  .bar-fill{
+    height:14px; border-radius:4px; background:var(--bar);
+    min-width:3px; transition:width .5s ease;
+  }
+  .bar-fill.need{background:var(--bar-strong);}
+  .bar-val{font-size:12.5px; color:var(--text-dim); text-align:right;}
+  .bar-val b{color:var(--text);}
+  .bar-tag{
+    font-size:10.5px; color:#0e0f13; background:var(--bar-strong);
+    border-radius:5px; padding:1px 5px; margin-left:6px; font-weight:700;
+  }
+  .bar-legend{font-size:12px; color:var(--text-mute); margin-top:10px;}
+
+  .kv{display:flex; flex-wrap:wrap; gap:8px; margin-top:14px;}
+  .tag{
+    background:var(--panel-2); border:1px solid var(--border); border-radius:8px;
+    padding:6px 11px; font-size:12.5px; color:var(--text-dim);
+  }
+  .tag b{color:var(--text);}
+
+  /* 대운 */
+  .luck-scroll{overflow-x:auto; padding-bottom:6px;}
+  .luck-row{display:flex; gap:8px; min-width:min-content;}
+  .luck-cell{
+    min-width:78px; background:var(--panel-2); border:1px solid var(--border);
+    border-radius:11px; padding:11px 8px; text-align:center; flex:0 0 auto;
+  }
+  .luck-cell.now{border-color:var(--accent-2); background:rgba(45,212,191,.1);}
+  .luck-cell .age{font-size:11.5px; color:var(--text-dim);}
+  .luck-cell .gz{font-size:21px; font-weight:800; margin:4px 0 2px;}
+  .luck-cell .tg{font-size:10.5px; color:var(--text-mute); line-height:1.3;}
+  .luck-cell.now .age{color:var(--accent-2);}
+
+  /* 이름 */
+  .name-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
+  .syls{display:flex; gap:10px; flex-wrap:wrap;}
+  .syl{
+    background:var(--panel-2); border:1px solid var(--border); border-radius:12px;
+    padding:12px 16px; text-align:center; min-width:74px;
+  }
+  .syl .ch{font-size:26px; font-weight:800;}
+  .syl .meta{font-size:11.5px; color:var(--text-dim); margin-top:3px;}
+  .flow{font-size:13px; color:var(--text-dim); margin-top:12px; line-height:1.9;}
+  .flow .rel{font-size:11.5px; padding:2px 7px; border-radius:6px; border:1px solid var(--border); margin:0 4px;}
+  .flow .rel.good{color:var(--accent-2); border-color:rgba(45,212,191,.4);}
+  .flow .rel.mid{color:#f5cd70; border-color:rgba(240,180,41,.35);}
+  .flow .rel.bad{color:#ffb3c1; border-color:rgba(255,84,112,.4);}
+  table.frames{width:100%; border-collapse:collapse; font-size:13px; margin-top:6px;}
+  table.frames th, table.frames td{
+    text-align:left; padding:9px 8px; border-bottom:1px solid var(--border);
+  }
+  table.frames th{color:var(--text-dim); font-weight:600; font-size:12px;}
+  .grade{font-size:11.5px; padding:2px 8px; border-radius:6px; border:1px solid var(--border);}
+  .grade.대길{color:var(--accent-2); border-color:rgba(45,212,191,.45);}
+  .grade.길{color:#9fe8c9; border-color:rgba(159,232,201,.35);}
+  .grade.중길{color:#f5cd70; border-color:rgba(240,180,41,.35);}
+  .grade.흉{color:#ffb3c1; border-color:rgba(255,84,112,.4);}
+
+  /* 해석 */
+  #reading{font-size:14.5px; line-height:1.95; color:#e6e8ec;}
+  #reading h3{
+    font-size:15.5px; color:var(--accent-2); margin:22px 0 8px;
+    padding-left:11px; border-left:3px solid var(--accent);
+  }
+  #reading h3:first-child{margin-top:0;}
+  #reading p{margin-bottom:12px;}
+  #reading strong{color:#fff;}
+  .typing::after{
+    content:'▌'; color:var(--accent); animation:blink 1s steps(2) infinite; margin-left:2px;
+  }
+  @keyframes blink{50%{opacity:0;}}
+  .reading-status{font-size:13px; color:var(--text-dim); display:flex; align-items:center; gap:9px;}
+  .spinner{
+    width:14px; height:14px; border:2px solid var(--border); border-top-color:var(--accent);
+    border-radius:50%; animation:spin .8s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .retry-btn{
+    background:var(--panel-2); border:1px solid var(--border); color:var(--text);
+    padding:9px 16px; border-radius:9px; font-size:13px; cursor:pointer; margin-top:12px;
+  }
+  .retry-btn:hover{border-color:var(--accent);}
+
+  .disclaimer{
+    margin-top:26px; padding:16px 18px; border-radius:12px;
+    background:var(--panel); border:1px solid var(--border);
+    font-size:12.5px; color:var(--text-mute); line-height:1.8;
+  }
+
+  .f-name{grid-column:span 3;} .f-wide{grid-column:span 3;} .f-num{grid-column:span 2;}
+  .f-leap{grid-column:span 2;} .f-city{grid-column:span 5;} .f-full{grid-column:span 12;}
+  .f-adv{grid-column:span 6;}
+
+  @media(max-width:820px){
+    .form-grid{grid-template-columns:repeat(6,1fr);}
+    .f-name,.f-wide{grid-column:span 3;} .f-num,.f-leap{grid-column:span 2;}
+    .f-city,.f-full,.f-adv{grid-column:span 6;}
+    .summary-row{grid-template-columns:repeat(2,1fr);}
+    .name-grid{grid-template-columns:1fr;}
+    .hero h1{font-size:27px;}
+    .hero{padding:36px 16px 20px;}
+    .pillar .glyph{font-size:30px;}
+    header.topbar{padding:12px 16px;}
+  }
+  @media(max-width:520px){
+    .form-grid{grid-template-columns:repeat(2,1fr); gap:12px;}
+    .f-name,.f-num{grid-column:span 1;}
+    .f-wide,.f-leap,.f-city,.f-full,.f-adv{grid-column:span 2;}
+    .chips{gap:6px;} .chip{padding:8px 12px; font-size:12.5px;}
+    .pillars{gap:6px;}
+    .pillar{padding:11px 5px;}
+    .pillar .glyph{font-size:25px;}
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><div class="brand-badge">命</div> 사주·이름 풀이</div>
+  <a class="top-link" href="/">인기영상 대시보드 →</a>
+</header>
+
+<div class="hero">
+  <h1>사주와 <span class="accent">이름</span>을 함께 읽습니다</h1>
+  <p>절기·진태양시까지 반영해 만세력을 직접 계산하고, 이름의 발음오행과 획수를 사주에 겹쳐 봅니다.</p>
+</div>
+
+<div class="container">
+
+  <!-- ── 입력 ── -->
+  <section class="panel">
+    <h2>어떤 사주를 볼까요</h2>
+    <p class="sub">이름은 비워도 사주만 볼 수 있습니다. 입력한 정보는 저장되지 않습니다.</p>
+
+    <form id="form" autocomplete="off">
+      <div class="form-grid">
+        <div class="field f-name">
+          <label for="surname">성</label>
+          <input type="text" id="surname" placeholder="김" maxlength="5">
+        </div>
+        <div class="field f-name">
+          <label for="given">이름</label>
+          <input type="text" id="given" placeholder="서연" maxlength="5">
+        </div>
+        <div class="field f-wide">
+          <label for="hanja">한자 표기 <span class="hint">(선택)</span></label>
+          <input type="text" id="hanja" placeholder="金瑞衍" maxlength="5">
+        </div>
+        <div class="field f-wide">
+          <label>성별 <span class="hint">— 대운 방향이 달라집니다</span></label>
+          <div class="chips" id="gender">
+            <button type="button" class="chip" data-v="남" aria-pressed="true">남</button>
+            <button type="button" class="chip" data-v="여" aria-pressed="false">여</button>
+          </div>
+        </div>
+
+        <div class="field f-wide">
+          <label>양력 / 음력</label>
+          <div class="chips" id="calendar">
+            <button type="button" class="chip" data-v="양력" aria-pressed="true">양력</button>
+            <button type="button" class="chip" data-v="음력" aria-pressed="false">음력</button>
+          </div>
+        </div>
+        <div class="field f-wide">
+          <label for="year">태어난 해</label>
+          <input type="number" id="year" min="1900" max="2100" placeholder="1990">
+        </div>
+        <div class="field f-num">
+          <label for="month">월</label>
+          <select id="month"></select>
+        </div>
+        <div class="field f-num">
+          <label for="day">일</label>
+          <select id="day"></select>
+        </div>
+        <div class="field f-leap" id="leapWrap" hidden>
+          <label>윤달</label>
+          <label class="check"><input type="checkbox" id="leapMonth"> 윤달입니다</label>
+        </div>
+
+        <div class="field f-num">
+          <label for="hour">태어난 시</label>
+          <select id="hour"></select>
+        </div>
+        <div class="field f-num">
+          <label for="minute">분</label>
+          <input type="number" id="minute" min="0" max="59" value="0">
+        </div>
+        <div class="field f-wide">
+          <label>시간을 모른다면</label>
+          <label class="check"><input type="checkbox" id="noHour"> 태어난 시각 모름</label>
+        </div>
+        <div class="field f-city">
+          <label for="city">태어난 곳 <span class="hint">— 진태양시 보정에 씁니다</span></label>
+          <select id="city"></select>
+        </div>
+
+        <div class="field f-full">
+          <label>특히 궁금한 것</label>
+          <div class="chips" id="focus">
+            <button type="button" class="chip" data-v="총운" aria-pressed="true">총운</button>
+            <button type="button" class="chip" data-v="성격" aria-pressed="false">성격</button>
+            <button type="button" class="chip" data-v="직업·적성" aria-pressed="false">직업·적성</button>
+            <button type="button" class="chip" data-v="재물" aria-pressed="false">재물</button>
+            <button type="button" class="chip" data-v="건강" aria-pressed="false">건강</button>
+            <button type="button" class="chip" data-v="인간관계" aria-pressed="false">인간관계</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:14px">
+        <button type="button" class="adv-toggle" id="advToggle">계산 방식 자세히 설정</button>
+        <div class="adv" id="adv">
+          <div class="form-grid">
+            <div class="field f-adv">
+              <label class="check">
+                <input type="checkbox" id="useSolarTime" checked>
+                진태양시로 보정 <span class="hint">(경도차 + 균시차)</span>
+              </label>
+              <span class="hint">한국 표준시는 동경 135° 기준이라, 서울은 실제 태양시보다 약 32분 빠릅니다. 끄면 시계 시각을 그대로 씁니다.</span>
+            </div>
+            <div class="field f-adv">
+              <label for="lateNight">밤 11시 이후 일주 기준</label>
+              <select id="lateNight">
+                <option value="야자시">야자시 — 23시부터 다음 날 일주 (기본)</option>
+                <option value="자정">자정 — 00시부터 다음 날 일주</option>
+              </select>
+              <span class="hint">유파에 따라 다릅니다. 밤 11시~자정 사이 출생만 결과가 달라집니다.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-error" id="formError"></div>
+      <div style="margin-top:18px"><button type="submit" class="submit" id="submitBtn">사주 뽑고 풀이 받기</button></div>
+    </form>
+  </section>
+
+  <!-- ── 결과 ── -->
+  <div id="result">
+    <div id="boundaryNotice"></div>
+
+    <div class="summary-row" id="summary"></div>
+
+    <section class="panel">
+      <h2>사주팔자</h2>
+      <p class="sub" id="chartSub"></p>
+      <div class="pillars" id="pillars"></div>
+      <div class="kv" id="chartTags"></div>
+    </section>
+
+    <section class="panel">
+      <h2>오행의 균형</h2>
+      <p class="sub">천간·지지 여덟 글자를 오행으로 세고, 지지 속 지장간까지 배당 일수만큼 나눠 담은 값입니다.</p>
+      <div class="bars" id="bars"></div>
+      <p class="bar-legend">막대 길이는 그 기운의 양입니다. 청록색 막대는 지금 사주에 필요하다고 본 기운(용신)입니다.</p>
+    </section>
+
+    <section class="panel">
+      <h2>대운 — 10년 단위의 흐름</h2>
+      <p class="sub" id="luckSub"></p>
+      <div class="luck-scroll"><div class="luck-row" id="luckRow"></div></div>
+    </section>
+
+    <section class="panel" id="namePanel">
+      <h2>이름 풀이</h2>
+      <p class="sub" id="nameSub"></p>
+      <div class="name-grid">
+        <div>
+          <div class="syls" id="syls"></div>
+          <div class="flow" id="flow"></div>
+        </div>
+        <div>
+          <p class="hint" id="suriNote" style="margin-bottom:8px; color:var(--text-mute); font-size:11.5px; line-height:1.6"></p>
+          <table class="frames">
+            <thead><tr><th>격</th><th>획수</th><th>시기</th><th>수리</th></tr></thead>
+            <tbody id="frames"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="kv" id="nameTags"></div>
+    </section>
+
+    <section class="panel">
+      <h2>풀이</h2>
+      <p class="sub">위 계산 결과를 바탕으로 Claude 가 사주와 이름을 이어서 읽습니다.</p>
+      <div id="reading"></div>
+      <div class="reading-status" id="readingStatus"></div>
+    </section>
+
+    <div class="disclaimer">
+      만세력(간지·절기·음력)은 천문 계산으로 구한 값이라 재현 가능합니다. 반면 신강·신약 판정, 용신 선택,
+      성명학의 수리 길흉은 유파마다 기준이 다른 <b>해석의 영역</b>이며, 이 페이지는 그중 널리 쓰이는 한 가지 방식을 따릅니다.
+      풀이는 재미와 자기 이해를 위한 참고 자료로 봐 주세요. 의료·법률·투자 판단의 근거로 쓰지 마시고,
+      건강이 걱정된다면 의료기관을 찾아 주세요.
+    </div>
+  </div>
+</div>
+
+<script src="/saju-engine.js"></script>
+<script>
+(function () {
+  'use strict';
+  var E = window.SajuEngine;
+
+  var CITIES = [
+    ['서울', 126.98], ['인천', 126.71], ['수원', 127.01], ['춘천', 127.73], ['강릉', 128.90],
+    ['대전', 127.38], ['청주', 127.49], ['천안', 127.15], ['전주', 127.15], ['광주', 126.85],
+    ['목포', 126.39], ['여수', 127.66], ['대구', 128.60], ['안동', 128.73], ['포항', 129.36],
+    ['부산', 129.04], ['울산', 129.31], ['창원', 128.68], ['제주', 126.53]
+  ];
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  // ── 폼 초기화 ────────────────────────────────────────────────────────
+  function fillSelect(el, items, selected) {
+    el.innerHTML = items.map(function (it) {
+      var v = it[0], label = it[1];
+      return '<option value="' + v + '"' + (v === selected ? ' selected' : '') + '>' + label + '</option>';
+    }).join('');
+  }
+  var months = []; for (var m = 1; m <= 12; m++) months.push([m, m + '월']);
+  var days = [];   for (var d = 1; d <= 31; d++) days.push([d, d + '일']);
+  var hours = [];  for (var h = 0; h < 24; h++) hours.push([h, String(h).padStart(2, '0') + '시']);
+  fillSelect($('month'), months, 1);
+  fillSelect($('day'), days, 1);
+  fillSelect($('hour'), hours, 12);
+  fillSelect($('city'), CITIES.map(function (c) { return [c[1], c[0]]; }), 126.98);
+
+  function chipGroup(id) {
+    var root = $(id);
+    root.addEventListener('click', function (e) {
+      var btn = e.target.closest('.chip');
+      if (!btn) return;
+      Array.prototype.forEach.call(root.querySelectorAll('.chip'), function (c) {
+        c.setAttribute('aria-pressed', String(c === btn));
+      });
+      if (id === 'calendar') $('leapWrap').hidden = (btn.dataset.v !== '음력');
+    });
+    return function () {
+      var on = root.querySelector('.chip[aria-pressed="true"]');
+      return on ? on.dataset.v : null;
+    };
+  }
+  var getGender = chipGroup('gender'), getCalendar = chipGroup('calendar'), getFocus = chipGroup('focus');
+
+  $('advToggle').addEventListener('click', function () { $('adv').classList.toggle('open'); });
+  $('noHour').addEventListener('change', function () {
+    var off = this.checked;
+    $('hour').disabled = off; $('minute').disabled = off;
+    $('hour').style.opacity = $('minute').style.opacity = off ? .45 : 1;
+  });
+
+  // ── 렌더링 ───────────────────────────────────────────────────────────
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+
+  function renderSummary(r) {
+    var a = r.analysis, p = r.pillars;
+    var lunar = r.lunar ? r.lunar.year + '.' + (r.lunar.leap ? '윤' : '') + r.lunar.month + '.' + r.lunar.day : '-';
+    $('summary').innerHTML = [
+      ['생년월일', r.solar.year + '.' + r.solar.month + '.' + r.solar.day,
+       '음력 ' + lunar],
+      ['일간 — 나를 뜻하는 글자', p.day.stem + '(' + p.day.hanja.charAt(0) + ')',
+       a.dayMaster.elem + ' · ' + (a.dayMaster.yang ? '양' : '음')],
+      ['기운의 세기', a.strength.replace(/\(.*\)/, ''),
+       '일간을 돕는 힘 ' + Math.round(a.strengthRatio * 100) + '%'],
+      ['필요한 기운(용신)', a.primaryYongsin + '(' + E.ELEM_H[a.primaryYongsin] + ')',
+       a.yongsin.join(' → ')]
+    ].map(function (s) {
+      return '<div class="stat"><div class="label">' + esc(s[0]) + '</div>' +
+             '<div class="value">' + esc(s[1]) + ' <small>' + esc(s[2]) + '</small></div></div>';
+    }).join('');
+  }
+
+  function renderPillars(r) {
+    var order = [['시', 'hour'], ['일', 'day'], ['월', 'month'], ['년', 'year']];
+    var gods = {};
+    r.analysis.tenGods.stems.forEach(function (g) { gods['s' + g.pos] = g.god; });
+    r.analysis.tenGods.branches.forEach(function (g) { gods['b' + g.pos] = g.god; });
+
+    $('pillars').innerHTML = order.map(function (o) {
+      var key = o[1], p = r.pillars[key], pos = o[0];
+      if (!p) {
+        return '<div class="pillar empty"><div class="pos">' + pos + '주</div>' +
+               '<div class="god">&nbsp;</div><div class="glyph">?</div>' +
+               '<div class="kor">시간 미상</div><div class="divider"></div>' +
+               '<div class="glyph">?</div><div class="kor">&nbsp;</div>' +
+               '<div class="hidden-stems">&nbsp;</div></div>';
+      }
+      var g1 = gods['s' + pos] || '', g2 = gods['b' + pos] || '';
+      return '<div class="pillar' + (key === 'day' ? ' day' : '') + '">' +
+        '<div class="pos">' + pos + '주</div>' +
+        '<div class="god">' + esc(key === 'day' ? '일간(나)' : g1) + '</div>' +
+        '<div class="glyph">' + esc(p.hanja.charAt(0)) + '</div>' +
+        '<div class="kor">' + esc(p.stem) + '</div>' +
+        '<div class="elem">' + esc(p.stemElem + ' · ' + p.stemYinYang) + '</div>' +
+        '<div class="divider"></div>' +
+        '<div class="glyph">' + esc(p.hanja.charAt(1)) + '</div>' +
+        '<div class="kor">' + esc(p.branch) + ' <span style="color:var(--text-mute)">' + esc(p.animal) + '</span></div>' +
+        '<div class="elem">' + esc(p.branchElem) + '</div>' +
+        '<div class="god" style="margin-top:6px">' + esc(g2) + '</div>' +
+        '<div class="hidden-stems">지장간 ' + esc(p.hidden.join('·')) + '</div>' +
+      '</div>';
+    }).join('');
+
+    var t = r.chart.time;
+    $('chartSub').textContent =
+      '절기로는 ' + r.chart.termName + ' 중입니다. ' +
+      (t.usedSolarTime
+        ? '진태양시 보정 ' + (t.longitudeCorrection >= 0 ? '+' : '') + t.longitudeCorrection + '분(경도) '
+          + (t.equationOfTime >= 0 ? '+' : '') + t.equationOfTime + '분(균시차)을 적용했습니다.'
+        : '시계 시각을 그대로 썼습니다.') +
+      (t.dst ? ' 이 날은 서머타임 기간이라 1시간을 되돌렸습니다.' : '') +
+      (t.standardOffset !== 9 ? ' 당시 한국 표준시는 UTC+' + t.standardOffset + '였습니다.' : '');
+
+    var a = r.analysis;
+    var tags = [
+      ['공망', a.gongmang.join('·')],
+      ['태어난 계절', a.season],
+      ['없는 오행', a.missing.length ? a.missing.join('·') : '없음']
+    ];
+    a.shinsal.forEach(function (s) { tags.push([s.name, s.at + ' ' + s.branch]); });
+    $('chartTags').innerHTML = tags.map(function (t2) {
+      return '<span class="tag">' + esc(t2[0]) + ' <b>' + esc(t2[1]) + '</b></span>';
+    }).join('');
+  }
+
+  function renderBars(r) {
+    var a = r.analysis;
+    var max = Math.max.apply(null, E.ELEMS.map(function (e) { return a.weighted[e]; }));
+    $('bars').innerHTML = E.ELEMS.map(function (e) {
+      var v = a.weighted[e], pct = max > 0 ? Math.max(2, v / max * 100) : 2;
+      var need = a.yongsin.indexOf(e) === 0;
+      return '<div class="bar-row" title="' + esc(e + '(' + E.ELEM_H[e] + ') — 글자 수 ' + a.count[e] + '개, 지장간 포함 ' + v) + '">' +
+        '<div class="bar-name"><b>' + esc(e) + '</b> ' + esc(E.ELEM_H[e]) + '</div>' +
+        '<div class="bar-track"><div class="bar-fill' + (need ? ' need' : '') + '" style="width:' + pct.toFixed(1) + '%"></div></div>' +
+        '<div class="bar-val"><b>' + v.toFixed(1) + '</b>' + (need ? '<span class="bar-tag">용신</span>' : '') + '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  function renderLuck(r) {
+    var L = r.luck;
+    $('luckSub').textContent =
+      L.direction + '으로 흐르고, 대운은 만 ' + L.startAge + '세부터 바뀝니다(대운수 ' + L.luckNumber + '). ' +
+      (r.currentLuck ? '지금은 ' + r.currentLuck.hanja + ' 대운입니다.' : '');
+    $('luckRow').innerHTML = L.list.map(function (l) {
+      var now = r.currentLuck && r.currentLuck.order === l.order;
+      return '<div class="luck-cell' + (now ? ' now' : '') + '">' +
+        '<div class="age">' + Math.floor(l.ageFrom) + '~' + Math.floor(l.ageTo) + '세</div>' +
+        '<div class="gz">' + esc(l.hanja) + '</div>' +
+        '<div class="tg">' + esc(l.tenGod.replace('/', ' · ')) + '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  function renderName(r) {
+    var n = r.name;
+    if (!n) {
+      $('namePanel').style.display = 'none';
+      return;
+    }
+    $('namePanel').style.display = '';
+    $('nameSub').textContent =
+      '한글 획수와 초성의 발음오행으로 봅니다. 한자 획수법과는 기준이 다릅니다. 종합 ' + n.totalScore + '점.';
+    $('suriNote').textContent =
+      '한글 획수는 한자 획수보다 작아서 사격이 한 자릿수에 몰리기 쉽습니다. 81수리 등급은 참고로만 보고, ' +
+      '발음오행의 흐름과 사주 용신을 채워 주는지를 더 무겁게 보세요.';
+
+    $('syls').innerHTML = n.syllables.map(function (s) {
+      return '<div class="syl"><div class="ch">' + esc(s.ch) + '</div>' +
+             '<div class="meta">' + esc(s.cho) + ' · ' + esc(s.elem + '(' + s.elemHanja + ')') + '</div>' +
+             '<div class="meta">' + s.strokes + '획</div></div>';
+    }).join('');
+
+    var flowHtml = n.soundFlow.map(function (f) {
+      var cls = f.good ? 'good' : (f.relation === '역생' ? 'mid' : 'bad');
+      return esc(f.from) + '<span class="rel ' + cls + '">' + esc(f.fromElem + '→' + f.toElem + ' ' + f.relation) + '</span>' + esc(f.to);
+    }).join('　');
+    $('flow').innerHTML = '<b>발음오행 흐름</b> (상생도 ' + n.flowScore + '점)<br>' + flowHtml;
+
+    $('frames').innerHTML = n.frames.map(function (f) {
+      return '<tr><td><b>' + esc(f.key) + '</b></td><td>' + f.num + '획</td>' +
+             '<td style="color:var(--text-dim)">' + esc(f.period) + '</td>' +
+             '<td><span class="grade ' + esc(f.suri.grade) + '">' + esc(f.suri.grade) + '</span> ' +
+             '<span style="color:var(--text-dim);font-size:12px">' + esc(f.suri.label) + '</span></td></tr>';
+    }).join('');
+
+    var tags = [];
+    if (n.sajuMatch) {
+      var m = n.sajuMatch;
+      tags.push(['용신 보완', m.hasPrimary ? '1순위 용신 ' + m.primary + ' 있음'
+                                          : m.hasAny ? '보조 용신만 있음' : '용신 오행 없음']);
+      if (m.fillsMissing.length) tags.push(['비어 있던 오행을 채움', m.fillsMissing.join('·')]);
+      if (m.addsExcess.length) tags.push(['이미 많은 기운을 더함', m.addsExcess.join('·')]);
+    }
+    tags.push(['총획', n.strokes.total + '획']);
+    if (n.strokes.virtualNumberUsed) tags.push(['외자 이름', '가상수 1 적용']);
+    $('nameTags').innerHTML = tags.map(function (t) {
+      return '<span class="tag">' + esc(t[0]) + ' <b>' + esc(t[1]) + '</b></span>';
+    }).join('');
+  }
+
+  function renderBoundary(r) {
+    var w = r.chart.boundaryWarning;
+    $('boundaryNotice').innerHTML = w
+      ? '<div class="notice"><span>⚠</span><span>' + esc(w) +
+        ' 입니다. 출생 시각이 몇 분만 달라도 월주(또는 연주)가 통째로 바뀌는 구간이니, ' +
+        '기록된 시각이 정확한지 확인해 주세요.</span></div>'
+      : '';
+  }
+
+  // ── 해석 스트리밍 ─────────────────────────────────────────────────────
+  var lastPayload = null;
+
+  function markdownToHtml(md) {
+    return md.split(/\n{2,}/).map(function (block) {
+      var b = block.trim();
+      if (!b) return '';
+      if (/^##\s+/.test(b)) return '<h3>' + esc(b.replace(/^##\s+/, '')) + '</h3>';
+      var html = esc(b).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+      return '<p>' + html + '</p>';
+    }).join('');
+  }
+
+  function streamReading(payload) {
+    var box = $('reading'), status = $('readingStatus');
+    box.innerHTML = ''; box.classList.add('typing');
+    status.innerHTML = '<div class="spinner"></div><span>사주와 이름을 읽는 중입니다… 30초쯤 걸립니다.</span>';
+
+    fetch('/api/saju', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function (res) {
+      if (!res.ok) {
+        return res.json().then(function (j) {
+          throw new Error((j.error && j.error.message) || ('요청이 실패했습니다 (' + res.status + ')'));
+        }, function () { throw new Error('요청이 실패했습니다 (' + res.status + ')'); });
+      }
+      var reader = res.body.getReader(), decoder = new TextDecoder(), acc = '';
+      function pump() {
+        return reader.read().then(function (chunk) {
+          if (chunk.done) {
+            box.classList.remove('typing');
+            status.innerHTML = '';
+            return;
+          }
+          acc += decoder.decode(chunk.value, { stream: true });
+          box.innerHTML = markdownToHtml(acc);
+          status.innerHTML = '<div class="spinner"></div><span>이어서 쓰는 중…</span>';
+          return pump();
+        });
+      }
+      return pump();
+    }).catch(function (err) {
+      box.classList.remove('typing');
+      status.innerHTML = '<span style="color:#ffb3c1">' + esc(err.message) + '</span>';
+      var btn = document.createElement('button');
+      btn.className = 'retry-btn'; btn.textContent = '다시 시도';
+      btn.onclick = function () { streamReading(lastPayload); };
+      status.appendChild(document.createElement('br'));
+      status.appendChild(btn);
+    });
+  }
+
+  // ── 제출 ─────────────────────────────────────────────────────────────
+  function showError(msg) {
+    var box = $('formError');
+    if (!msg) { box.classList.remove('show'); return; }
+    box.textContent = msg; box.classList.add('show');
+  }
+
+  $('form').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    showError('');
+
+    var noHour = $('noHour').checked;
+    var payload = {
+      calendar: getCalendar(),
+      year: parseInt($('year').value, 10),
+      month: parseInt($('month').value, 10),
+      day: parseInt($('day').value, 10),
+      leapMonth: $('leapMonth').checked && getCalendar() === '음력',
+      hour: noHour ? null : parseInt($('hour').value, 10),
+      minute: noHour ? null : (parseInt($('minute').value, 10) || 0),
+      gender: getGender(),
+      surname: $('surname').value.trim(),
+      given: $('given').value.trim(),
+      hanja: $('hanja').value.trim(),
+      longitude: parseFloat($('city').value),
+      useSolarTime: $('useSolarTime').checked,
+      lateNightRule: $('lateNight').value,
+      focus: getFocus()
+    };
+
+    if (!payload.year || payload.year < 1900 || payload.year > 2100) {
+      return showError('태어난 해를 1900~2100 사이로 입력해 주세요.');
+    }
+    if ((payload.surname && !payload.given) || (!payload.surname && payload.given)) {
+      return showError('성과 이름을 함께 입력하거나, 둘 다 비워 주세요.');
+    }
+    if (payload.surname && !/^[가-힣]{1,5}$/.test(payload.surname + payload.given)) {
+      return showError('이름은 한글로만 입력해 주세요.');
+    }
+    if (payload.hanja && !/^[㐀-䶿一-鿿]{1,5}$/.test(payload.hanja)) {
+      return showError('한자 표기에는 한자만 입력해 주세요.');
+    }
+
+    var reading;
+    try {
+      reading = E.fullReading(payload);
+    } catch (err) {
+      return showError('계산 중 오류가 났습니다: ' + err.message);
+    }
+    if (reading.error) return showError(reading.error);
+
+    renderBoundary(reading);
+    renderSummary(reading);
+    renderPillars(reading);
+    renderBars(reading);
+    renderLuck(reading);
+    renderName(reading);
+
+    $('result').classList.add('show');
+    $('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    lastPayload = payload;
+    streamReading(payload);
+  });
+
+  // 기본값
+  $('year').value = 1990;
+})();
+</script>
+</body>
+</html>

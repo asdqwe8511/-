@@ -2,5 +2,8 @@
   "name": "channel-finder-web",
   "version": "1.0.0",
   "private": true,
-  "description": "Password-gated personal YouTube trending/channel dashboard, deployed on Vercel."
+  "description": "YouTube 인기영상 대시보드 + 사주·성명 풀이. Vercel 배포.",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.123.0"
+  }
 }
