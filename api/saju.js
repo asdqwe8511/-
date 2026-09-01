@@ -116,6 +116,25 @@ function describe(r, input) {
   }
   out.push(`[올해] ${r.currentYear.year}년 ${r.currentYear.pillar.hanja} / 만 ${r.currentYear.age}세(세는나이 ${r.currentYear.koreanAge}세)`);
 
+  // 좋은 시기·조심할 시기. 화면과 같은 계산을 그대로 넘긴다.
+  const age0 = Math.max(0, r.currentYear.age);
+  const near = SajuEngine.fortuneTimeline(r, { fromAge: age0, toAge: age0 + 30 });
+  const life = r.fortune; // 만 18~90세
+  const period = (p) => `${p.fromYear}${p.toYear !== p.fromYear ? '~' + p.toYear : ''}년(만 ${p.fromAge}~${p.toAge}세, 정점 ${p.peakYear} ${p.peakSeun}, ${p.score}점: ${p.reasons.join(' · ')})`;
+  out.push('[영역별 시기 — 앞으로 30년]');
+  ['money', 'health', 'relation'].forEach((k) => {
+    const d = near.domains[k];
+    out.push(`  ${d.label} 좋은 시기: ${d.best.map(period).join(' / ')}`);
+    out.push(`  ${d.label} 조심할 시기: ${d.worst.map(period).join(' / ')}`);
+  });
+  out.push('[영역별 시기 — 일생 전체에서 가장 두드러진 한 곳씩]');
+  ['money', 'health', 'relation'].forEach((k) => {
+    const d = life.domains[k];
+    out.push(`  ${d.label}: 최고 ${d.best[0] ? period(d.best[0]) : '-'} / 최저 ${d.worst[0] ? period(d.worst[0]) : '-'}`);
+  });
+  out.push('  ※ 점수는 이 사람의 일생 안에서의 상대값이다(0~100). 남과 비교하는 값이 아니며,' +
+    ' 억부·조후 관점을 수치로 옮긴 해석이지 계산된 사실이 아니다.');
+
   if (r.name) {
     const n = r.name;
     out.push('[이름]');
@@ -155,14 +174,22 @@ const SYSTEM = `당신은 한국 명리학(사주)과 성명학을 함께 보는
   같이 제시합니다.
 - 존중하는 상담 어조의 한국어. 과장된 점술 상투어("천하의 귀격", "만인이 우러러")는 쓰지 않습니다.
 
+- 시기를 말할 때는 주어진 계산 결과에 있는 연도만 씁니다. 없는 해를 지어내지 마세요.
+  왜 그 시기인지(어떤 십신이 들어오는지, 용신이 오는지, 어떤 충·합이 걸리는지)를
+  한 번은 짚어 주고, 그 시기에 무엇을 하면 좋은지·미루면 좋은지로 이어 주세요.
+- '조심할 시기'는 나쁜 일이 정해져 있다는 뜻이 아니라 무리한 확장·과로·성급한 결정을
+  피하라는 뜻으로 씁니다. 특히 건강은 진단이 아니라 생활 관리의 관점으로만 다룹니다.
+
 형식(마크다운):
 ## 한 줄로 요약하면
 ## 타고난 기질 — 일간과 월지
 ## 오행의 균형과 지금 필요한 기운
 ## 이름이 사주에 하는 일
 ## 대운의 흐름과 지금 자리
+## 돈·건강·관계, 언제가 좋고 언제를 조심할까
 ## 지금 해볼 만한 것
-각 절은 3~6문장. 전체 1200~1800자. 목록보다 문장으로 씁니다.`;
+각 절은 3~6문장. '언제가 좋고' 절은 세 영역을 각각 짚어야 하므로 6~9문장까지 씁니다.
+전체 1600~2400자. 목록보다 문장으로 씁니다.`;
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return fail(res, 405, 'POST 로 요청해 주세요.');
@@ -206,7 +233,7 @@ ${describe(reading, input)}
   try {
     const stream = client.messages.stream({
       model: MODEL,
-      max_tokens: 8000,
+      max_tokens: 12000,
       system: SYSTEM,
       thinking: { type: 'adaptive' },
       output_config: { effort: 'medium' },

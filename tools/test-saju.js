@@ -102,5 +102,38 @@ ok('정격 = 전체 획수', nm.frames[3].num, nm.strokes.total);
 const solo = E.analyzeName('강', '민', {});
 ok('외자 이름 가상수', solo.strokes.virtualNumberUsed, true);
 
+section('운세 시기 — 점수와 구간');
+const fr = E.fullReading({ calendar: '양력', year: 1990, month: 5, day: 15, hour: 14, minute: 30, gender: '남' });
+const F = E.fortuneTimeline(fr, { fromAge: 30, toAge: 60 });
+ok('연도 91개(만 0~90세)', F.years.length, 91);
+ok('점수는 0~100', F.years.every((y) => ['money','health','relation'].every((k) => y[k] >= 0 && y[k] <= 100)), true);
+['money', 'health', 'relation'].forEach((k) => {
+  const d = F.domains[k];
+  ok(d.label + ' 좋은 시기 3개', d.best.length, 3);
+  ok(d.label + ' 조심할 시기 3개', d.worst.length, 3);
+  ok(d.label + ' 좋은 시기가 조심할 시기보다 높은 점수',
+     Math.min.apply(null, d.best.map((p) => p.score)) > Math.max.apply(null, d.worst.map((p) => p.score)), true);
+  // 구간이 서로 겹치면 같은 해를 두 번 세는 것이다
+  const spans = d.best.concat(d.worst);
+  let overlap = false;
+  for (let i = 0; i < spans.length; i++) {
+    for (let j = i + 1; j < spans.length; j++) {
+      if (spans[i].fromYear <= spans[j].toYear && spans[j].fromYear <= spans[i].toYear) overlap = true;
+    }
+  }
+  ok(d.label + ' 구간끼리 겹치지 않음', overlap, false);
+  ok(d.label + ' 구간이 지정한 창 안에 있음',
+     spans.every((p) => p.fromAge >= 30 && p.toAge <= 60), true);
+});
+
+section('지지 관계');
+ok('자오 충', E.branchRelations(0, 6).some((r) => r.name === '충'), true);
+ok('인해 육합', E.branchRelations(2, 11).some((r) => r.name === '육합'), true);
+ok('인오술 삼합', E.branchRelations(2, 6).some((r) => r.name === '삼합'), true);
+ok('인사신 삼형', E.branchRelations(2, 5).some((r) => r.name === '형'), true);
+ok('진진 자형', E.branchRelations(4, 4).some((r) => r.name === '자형'), true);
+ok('갑기 천간합', E.stemRelation(0, 5).name, '천간합');
+ok('갑경 천간충', E.stemRelation(0, 6).name, '천간충');
+
 console.log(`\n${pass} 통과, ${fail} 실패`);
 process.exit(fail ? 1 : 0);
