@@ -130,11 +130,28 @@ function serveStatic(req, res, parsed) {
   });
 }
 
-http.createServer((req, res) => {
+const server = http.createServer((req, res) => {
   const parsed = url.parse(req.url, true);
   if (parsed.pathname.startsWith('/api/')) return serveApi(req, res, parsed);
   serveStatic(req, res, parsed);
-}).listen(PORT, () => {
+});
+
+// 포트가 이미 쓰이고 있는 건 흔한 일이다. 스택 트레이스를 던지는 대신
+// 무엇을 하면 되는지 알려 준다.
+server.on('error', (e) => {
+  if (e.code === 'EADDRINUSE') {
+    console.error('\n  ' + PORT + '번 포트를 이미 다른 프로그램이 쓰고 있습니다.');
+    console.error('  다른 포트로 띄우세요:  PORT=' + (Number(PORT) + 1) + ' node tools/dev-server.js');
+    console.error('  (윈도우 명령 프롬프트라면)  set PORT=' + (Number(PORT) + 1) + ' && node tools/dev-server.js\n');
+  } else if (e.code === 'EACCES') {
+    console.error('\n  ' + PORT + '번 포트를 열 권한이 없습니다. 1024보다 큰 포트를 써 주세요.\n');
+  } else {
+    console.error('\n  서버를 시작하지 못했습니다: ' + e.message + '\n');
+  }
+  process.exit(1);
+});
+
+server.listen(PORT, () => {
   console.log('\n  사주·이름 풀이   http://localhost:' + PORT + '/saju');
   console.log('  인기영상 대시보드 http://localhost:' + PORT + '/\n');
   const missing = [];
