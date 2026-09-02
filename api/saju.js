@@ -704,13 +704,13 @@ const SYSTEM = `당신은 한국 명리학(사주)과 성명학을 함께 보는
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return fail(res, 405, 'POST 로 요청해 주세요.');
   // 키가 없다는 말만 하면 무엇을 해야 하는지 알 수 없다. 할 일을 그대로 적는다.
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!String(process.env.ANTHROPIC_API_KEY || '').trim()) {
     return fail(res, 503,
       '아직 풀이 기능이 켜지지 않았습니다. ' +
-      '사이트 주인이 Vercel → Settings → Environment Variables 에 ' +
-      'ANTHROPIC_API_KEY 를 넣고 다시 배포하면 켜집니다. ' +
-      '(console.anthropic.com 에서 발급합니다) ' +
-      '사주표·오행·대운·시기·이름·궁합 계산은 지금도 그대로 보실 수 있습니다.');
+      '사이트 주인이 Vercel 환경변수에 ANTHROPIC_API_KEY 를 넣고 ' +
+      '다시 배포(Redeploy)하면 켜집니다 — 넣기만 하고 다시 배포하지 않으면 적용되지 않습니다. ' +
+      '무엇이 걸렸는지는 /api/health 를 열면 짚어 줍니다. ' +
+      '사주표·오행·대운·시기·이름·궁합·택일 계산은 지금도 그대로 보실 수 있습니다.');
   }
 
   let body = req.body;
@@ -772,7 +772,11 @@ ${describe(reading, input)}
   const BUDGET_MS = (Number(process.env.SAJU_MAX_SECONDS) || 60) * 1000 - 4000;
   const startedAt = Date.now();
 
-  const client = new Anthropic();
+  // 붙여넣다 보면 값 앞뒤에 공백이나 따옴표가 딸려 온다. 그대로 두면 인증이
+  // 실패하는데 원인이 보이지 않으므로, 여기서 다듬어 쓴다.
+  const client = new Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY.trim().replace(/^["']|["']$/g, '')
+  });
   try {
     const stream = client.messages.stream({
       model: MODEL,

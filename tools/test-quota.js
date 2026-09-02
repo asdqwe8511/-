@@ -90,10 +90,36 @@ const ok=(l,c,x)=>{ c?pass++:fail++; console.log((c?'  ✓ ':'  ✗ ')+l+(c?'':'
   const noKeyRes = mkRes();
   await noKeyH({ method:'POST', headers:{'x-forwarded-for':'10.10.10.10'}, body: me }, noKeyRes);
   ok('503 으로 답한다(고장 아님)', noKeyRes.status_ === 503, noKeyRes.status_);
-  ok('어디에 넣는지 알려 준다', /Environment Variables/.test(noKeyRes.body), noKeyRes.body.slice(0, 80));
-  ok('어디서 발급하는지 알려 준다', /console\.anthropic\.com/.test(noKeyRes.body), true);
+  ok('다시 배포해야 한다고 알려 준다', /Redeploy|다시 배포/.test(noKeyRes.body), noKeyRes.body.slice(0, 80));
+  ok('어디를 보면 되는지 알려 준다', /\/api\/health/.test(noKeyRes.body), true);
   ok('계산은 그대로 된다고 알려 준다', /계산은 지금도 그대로/.test(noKeyRes.body), true);
   process.env.ANTHROPIC_API_KEY = savedKey;
+
+  console.log('\n공백이 딸려 온 키도 통하는가');
+  // 붙여넣다 보면 값 앞뒤에 공백이나 따옴표가 딸려 온다. 그대로 두면 인증이
+  // 실패하는데 원인이 보이지 않으므로 다듬어 쓴다.
+  let sawKey = null;
+  class Peek { constructor(o){ sawKey = o && o.apiKey; this.messages = { stream: () => ({
+    abort(){},
+    async *[Symbol.asyncIterator](){ yield {type:'content_block_delta',delta:{type:'text_delta',text:'ok'}}; },
+    finalMessage: async () => ({ stop_reason:'end_turn' }) }) }; } }
+  require.cache[sdkPath].exports = { default: Peek };
+  process.env.ANTHROPIC_API_KEY = '  "sk-ant-test-0123456789"  ';
+  delete require.cache[require.resolve(HANDLER)];
+  const trimH = require(HANDLER);
+  const trimRes = mkRes();
+  await trimH({ method:'POST', headers:{'x-forwarded-for':'11.11.11.11'}, body: me }, trimRes);
+  ok('200 으로 나감', trimRes.status_ === 200, trimRes.status_);
+  ok('공백과 따옴표를 떼고 넘김', sawKey === 'sk-ant-test-0123456789', JSON.stringify(sawKey));
+
+  console.log('\n공백만 든 키는 없는 것으로 본다');
+  process.env.ANTHROPIC_API_KEY = '   ';
+  delete require.cache[require.resolve(HANDLER)];
+  const blankH = require(HANDLER);
+  const blankRes = mkRes();
+  await blankH({ method:'POST', headers:{'x-forwarded-for':'12.12.12.12'}, body: me }, blankRes);
+  ok('503 으로 안내', blankRes.status_ === 503, blankRes.status_);
+  process.env.ANTHROPIC_API_KEY = 'sk-ant-fake';
 
   console.log('\n오래 걸리는 풀이는 스스로 멈추는가');
   // 플랫폼이 끊기 전에 우리가 먼저 멈춰야 한다. 그냥 두면 문장 한가운데서

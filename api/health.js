@@ -20,9 +20,14 @@ function withTimeout(promise, ms, label) {
 }
 
 async function pingAnthropic() {
-  if (!process.env.ANTHROPIC_API_KEY) return { configured: false };
+  if (!String(process.env.ANTHROPIC_API_KEY || '').trim()) return { configured: false };
   try {
-    const client = new Anthropic({ timeout: TIMEOUT_MS });
+    // saju.js 와 같은 방식으로 다듬어 쓴다. 여기서만 통하고 저기서는 안 통하면
+    // 진단이 거짓말을 하게 된다.
+    const client = new Anthropic({
+      timeout: TIMEOUT_MS,
+      apiKey: process.env.ANTHROPIC_API_KEY.trim().replace(/^["']|["']$/g, '')
+    });
     // 모델 목록 조회는 요금이 붙지 않는다. 키가 살아 있는지만 본다.
     const list = await withTimeout(client.models.list({ limit: 1 }), TIMEOUT_MS, 'Anthropic');
     return { configured: true, working: true, sampleModel: list.data && list.data[0] && list.data[0].id };
@@ -45,6 +50,58 @@ async function pingRedis() {
   } catch (e) {
     return { configured: true, working: false, error: e.message };
   }
+}
+
+// 이 앱이 쓰는 환경변수. 이 목록에 없는 이름은 넣어도 아무 일도 일어나지 않는다.
+const WANTED = [
+  'ANTHROPIC_API_KEY', 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN',
+  'YOUTUBE_API_KEY', 'SAJU_DAILY_LIMIT', 'SAJU_IP_HOURLY_LIMIT',
+  'SAJU_IP_SALT', 'SAJU_MAX_SECONDS'
+];
+
+// 키가 안 보일 때 원인은 몇 가지뿐이다. 어느 것인지 짚어 주지 않으면 쓰는 사람은
+// 같은 화면을 몇 번씩 다시 볼 수밖에 없다. 값은 절대 내보내지 않고, 이름과 모양만 본다.
+function diagnose() {
+  const raw = process.env.ANTHROPIC_API_KEY;
+  const notes = [];
+
+  const present = WANTED.filter((k) => process.env[k]);
+
+  // 이름을 잘못 적은 경우를 잡는다. 이름만 보이고 값은 보이지 않는다.
+  // 개발 도구가 심어 두는 변수(CLAUDE_CODE_*)까지 세면 목록이 쓸모없어지므로 뺀다.
+  const nearMiss = Object.keys(process.env).filter((k) =>
+    WANTED.indexOf(k) < 0 &&
+    !/^CLAUDE_?CODE|^CLAUDE_(PID|EFFORT|SESSION|ENABLE|ADDITIONAL|AFTER|AUTO)/i.test(k) &&
+    (/ANTHROPIC|ANTROPIC|ANTHROPHIC/i.test(k) || /API_?KEY$/i.test(k))
+  ).sort().slice(0, 10);
+
+  if (!raw) {
+    if (nearMiss.length) {
+      notes.push('ANTHROPIC_API_KEY 는 안 보이는데 비슷한 이름이 들어와 있습니다: ' +
+        nearMiss.join(', ') + '. 이름은 정확히 ANTHROPIC_API_KEY 여야 합니다(대문자, 밑줄).');
+    }
+    notes.push('이 함수에 ANTHROPIC_API_KEY 가 닿지 않았습니다. 셋 중 하나입니다 — ' +
+      '(1) 넣은 뒤 Redeploy 를 안 했다(환경변수는 이미 떠 있는 배포에 적용되지 않습니다), ' +
+      '(2) 팀 공용 환경변수로 넣고 이 프로젝트에 연결하지 않았다("Link to Projects" 에서 프로젝트를 고르세요), ' +
+      '(3) Environments 에서 이 함수가 도는 환경(아래 "이_함수가_도는_곳")을 체크하지 않았다.');
+  } else {
+    // 붙여넣다 따옴표나 공백이 딸려 오는 일이 잦다.
+    const key = raw.trim();
+    if (raw !== key) notes.push('값 앞이나 뒤에 공백이 붙어 있습니다. 다시 넣어 주세요.');
+    if (/^["']|["']$/.test(raw)) notes.push('값이 따옴표로 감싸여 있습니다. 따옴표 없이 넣어 주세요.');
+    if (!/^sk-ant-/.test(key)) notes.push('값이 sk-ant- 로 시작하지 않습니다. Anthropic 키가 아닐 수 있습니다.');
+    if (key.length < 40) notes.push('값이 너무 짧습니다(' + key.length + '자). 잘려서 들어갔을 수 있습니다.');
+  }
+
+  return {
+    // 값이 들어는 있는데 모양이 틀린 경우. 부르는 쪽에서 이것만 보고도 진단을 띄운다.
+    모양이상: Boolean(raw) && notes.length > 0,
+    이_함수가_도는_곳: process.env.VERCEL_ENV || '(Vercel 아님 — 로컬)',
+    배포된_커밋: (process.env.VERCEL_GIT_COMMIT_SHA || '').slice(0, 7) || '(모름)',
+    이_앱이_찾는_이름_중_들어온_것: present.length ? present : ['(하나도 없음)'],
+    비슷한_이름: nearMiss.length ? nearMiss : ['(없음)'],
+    짚이는_것: notes.length ? notes : ['환경변수 쪽에 이상은 없어 보입니다.']
+  };
 }
 
 module.exports = async (req, res) => {
@@ -88,6 +145,14 @@ module.exports = async (req, res) => {
       ? '실제 연결까지 확인했습니다. 이 응답에 키 값은 들어 있지 않습니다.'
       : '키가 실제로 통하는지까지 보려면 /api/health?deep=1 을 열어 보세요.'
   };
+
+  // 키가 없을 때, 연결이 안 될 때, 그리고 값 모양이 이상할 때 진단을 붙인다.
+  // 공백·따옴표·잘림은 외부 호출 없이도 잡히므로 ?deep=1 을 기다릴 이유가 없다.
+  const info = diagnose();
+  if (!anthropic.configured || anthropic.working === false || info.모양이상) {
+    delete info.모양이상;
+    out.진단 = info;
+  }
   if (deep && anthropic.sampleModel) out.안내 += ' (Anthropic 응답 확인: ' + anthropic.sampleModel + ')';
 
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
