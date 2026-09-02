@@ -752,6 +752,23 @@
   .cal-pick .cp-row b{font-weight:600; color:var(--text-dim);}
   @media (max-width:400px){ .cal-pick .cp-rows{grid-template-columns:1fr;} }
 
+  /* 길흉일 — 무슨 일에 어느 날이 맞는가 */
+  .act-box{margin-top:12px; background:var(--bg); border-radius:14px; padding:13px 14px;}
+  .act-why{font-size:12px; color:var(--text-mute); line-height:1.65; margin-bottom:11px;}
+  .act-list{display:grid; gap:7px;}
+  .act-day{
+    display:grid; grid-template-columns:auto 1fr; gap:10px; align-items:start;
+    background:var(--panel); border-radius:11px; padding:10px 12px;
+    border-left:3px solid var(--border);
+  }
+  .act-day.good{border-left-color:#1c6fb5;}
+  .act-day.bad{border-left-color:#9b2412;}
+  .act-day .ad-date{font-size:13.5px; font-weight:800; white-space:nowrap;}
+  .act-day .ad-body{font-size:12px; line-height:1.6; color:var(--text-dim);}
+  .act-day .ad-body b{color:var(--text); font-weight:600;}
+  .act-head{font-size:12px; font-weight:700; color:var(--text-dim); margin:11px 0 6px;}
+  .act-head:first-of-type{margin-top:0;}
+
   /* 12운성 — 대운마다 기운이 얼마나 차 있는지 */
   .stage-wrap{margin-top:18px;}
   .stage-head{font-size:13px; font-weight:700; margin-bottom:4px;}
@@ -1035,6 +1052,11 @@
         <div class="ym-head">달을 눌러 날짜별로 보기</div>
         <div class="chips ym-chips" id="monthChips"></div>
       </div>
+      <div style="margin-top:14px">
+        <div class="ym-head">무슨 일에 좋은 날인가요</div>
+        <div class="chips ym-chips" id="actChips"></div>
+      </div>
+      <div id="actView"></div>
       <div id="monthView"></div>
     </section>
 <section class="panel" id="fortunePanel">
@@ -2823,7 +2845,7 @@
   }
 
   // ── 올해 달력 — 아홉 영역의 좋은 달·조심할 달, 그리고 날짜별 ─────────────
-  var yearState = { months: null, days: null, month: null, pickedDay: null };
+  var yearState = { months: null, days: null, month: null, pickedDay: null, act: null };
 
   function renderYear() {
     if (!myReading) return;
@@ -2854,6 +2876,18 @@
         '<span class="yd-cell"><b>가장 조심할 달</b>' + esc(monthName(d.worst)) + '</span>' +
         '</div>';
     }).join('');
+
+    $('actChips').innerHTML = Object.keys(E.ACTIVITIES).map(function (k) {
+      return '<button type="button" class="chip" data-act="' + esc(k) + '" aria-pressed="' +
+        (yearState.act === k) + '">' + esc(k) + '</button>';
+    }).join('');
+    Array.prototype.forEach.call($('actChips').children, function (b) {
+      b.onclick = function () {
+        // 같은 것을 다시 누르면 접는다. 늘 하나가 켜져 있을 이유는 없다.
+        yearState.act = (yearState.act === this.dataset.act) ? null : this.dataset.act;
+        drawActivity();
+      };
+    });
 
     $('monthChips').innerHTML = ym.months.map(function (m, i) {
       return '<button type="button" class="chip" data-m="' + i + '" aria-pressed="false">' +
@@ -2893,6 +2927,7 @@
     if (!ym || !ym.months[i]) return;
     yearState.month = i;
     yearState.pickedDay = null;
+    drawActivity();
     Array.prototype.forEach.call($('monthChips').children, function (b) {
       b.setAttribute('aria-pressed', String(parseInt(b.dataset.m, 10) === i));
     });
@@ -2961,6 +2996,51 @@
         renderMonthView();
       };
     });
+  }
+
+  // ── 길흉일 — 무슨 일에 어느 날이 맞는가 ─────────────────────────────────
+  // 그날 자체의 길흉이 아니라, 이 사람의 사주에 견준 값이다. 같은 날도 사람마다
+  // 다르게 걸리므로 남에게 그대로 옮길 수 없다.
+  function drawActivity() {
+    var box = $('actView');
+    Array.prototype.forEach.call($('actChips').children, function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.act === yearState.act));
+    });
+    if (!yearState.act || !myReading || yearState.months === null || yearState.month === null) {
+      box.innerHTML = ''; return;
+    }
+    var m = yearState.months.months[yearState.month];
+    var picked;
+    try {
+      // 위 달력과 같은 구간(절기로 나눈 달)을 본다.
+      picked = E.pickDays(myReading, m.fromDate.y, m.fromDate.m, yearState.act, 3,
+        { range: { from: m.fromDate, to: m.toDate } });
+    } catch (err) { box.innerHTML = ''; return; }
+    if (!picked) { box.innerHTML = ''; return; }
+
+    var row = function (d, cls) {
+      var reason = cls === 'good'
+        ? (d.why.length ? d.why.join(', ') : '무난한 날')
+        : (d.warn.length ? d.warn.join(', ') : '특별히 받쳐 주는 것이 없는 날');
+      var hours = cls === 'good' && d.hours.length
+        ? '<br>좋은 시간 <b>' + d.hours.map(function (h) { return esc(h.label); }).join('</b> 또는 <b>') + '</b>'
+        : '';
+      return '<div class="act-day ' + cls + '">' +
+        '<span class="ad-date">' + d.month + '/' + d.day + '</span>' +
+        '<span class="ad-body"><b>' + esc(d.ganji.hanja) + '</b> ' + esc(d.ganji.kor) + '날 — ' +
+          esc(reason) + hours + '</span></div>';
+    };
+
+    box.innerHTML =
+      '<div class="act-box">' +
+        '<div class="act-why">' + esc(picked.why) + '. ' +
+          '<b>그날 자체가 좋은 날이라는 뜻이 아니라</b>, 내 사주에 견주어 본 것입니다 — ' +
+          '다른 사람에게는 다른 날이 나옵니다.</div>' +
+        '<div class="act-head">이 달에 좋은 날</div>' +
+        '<div class="act-list">' + picked.good.map(function (d) { return row(d, 'good'); }).join('') + '</div>' +
+        '<div class="act-head">피하면 좋은 날</div>' +
+        '<div class="act-list">' + picked.bad.map(function (d) { return row(d, 'bad'); }).join('') + '</div>' +
+      '</div>';
   }
 
   // 달력 칸은 좁다. 네 글자를 다 넣으면 줄이 깨진다.

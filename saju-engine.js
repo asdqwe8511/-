@@ -623,9 +623,194 @@
       godCount: godCount, godExcess: godExcess, godMissing: godMissing, godList: GODS10,
       twelveStages: twelveStagesOf(chart),
       natalRelations: natalRelations(chart),
+      pattern: findPattern(chart),
       gongmang: gongmang(sixtyIndex(p.day.stem, p.day.branch)),
       shinsal: findShinsal(chart)
     };
+  }
+
+  // ── 격국(格局)과 드문 구조 ───────────────────────────────────────────────
+  //
+  // 격국은 "이 사주가 무엇을 중심으로 도는가"를 한마디로 잡는 것이다. 월지가
+  // 사주의 뿌리라, 월지 지장간 가운데 천간에 드러난 것을 먼저 보고 없으면
+  // 정기(본기)로 잡는다.
+  var PATTERN_PLAIN = {
+    정관격: '규칙과 자리를 지키며 인정받는 결. 조직·공직·자격이 어울린다',
+    편관격: '밀어붙이고 감당하는 결. 위기와 책임이 큰 자리에서 빛난다',
+    정인격: '배우고 받아 안는 결. 가르치고 연구하고 돌보는 쪽',
+    편인격: '남과 다르게 파고드는 결. 전문·기술·비주류 학문 쪽',
+    식신격: '꾸준히 만들어 내는 결. 먹이고 기르고 짓는 일',
+    상관격: '말과 재주로 뚫는 결. 표현·기획·영업·예술 쪽',
+    정재격: '차곡차곡 쌓는 결. 관리·회계·실무에 강하다',
+    편재격: '크게 벌리고 굴리는 결. 사업·유통·투자 쪽',
+    건록격: '제 힘으로 서는 결. 남 밑보다 제 몫을 맡을 때 낫다',
+    양인격: '힘이 넘치는 결. 칼 같은 일(의료·군경·기술)에서 제자리를 찾는다'
+  };
+  var GOD_TO_PATTERN = {
+    정관: '정관격', 편관: '편관격', 정인: '정인격', 편인: '편인격',
+    식신: '식신격', 상관: '상관격', 정재: '정재격', 편재: '편재격',
+    비견: '건록격', 겁재: '양인격'
+  };
+
+  function findPattern(chart) {
+    var p = chart.pillars, ds = p.day.stem;
+    var mb = p.month.branch;
+    var stems = [p.year.stem, p.month.stem];
+    if (p.hour) stems.push(p.hour.stem);
+
+    // 월지 지장간 중 천간에 드러난 것을 먼저 잡는다(투간). 없으면 정기.
+    var hid = HIDDEN[mb];
+    var chosen = null, via = '정기';
+    for (var i = hid.length - 1; i >= 0; i--) {
+      if (stems.indexOf(hid[i][0]) >= 0) { chosen = hid[i][0]; via = '투간'; break; }
+    }
+    if (chosen === null) chosen = hid[hid.length - 1][0];
+
+    var god = tenGodOfStem(ds, chosen);
+    return {
+      name: GOD_TO_PATTERN[god], god: god, via: via,
+      stem: STEM[chosen], stemHanja: STEM_H[chosen],
+      monthBranch: BRANCH[mb],
+      plain: PATTERN_PLAIN[GOD_TO_PATTERN[god]]
+    };
+  }
+
+  // 드문 구조. 눈에 띄는 배치만 잡는다. 얼마나 드문지는 tools/calibrate-pattern.js
+  // 로 무작위 사주 20,000개를 세어 구한 값이고, RARITY 에 백분율로 박아 둔다.
+  // "희귀하다"는 말을 근거 없이 하지 않으려고 세어 둔 것이다.
+// 20000개 표본, 씨앗 20260902 (tools/calibrate-pattern.js)
+  var RARITY = {
+    '천간이 모두 같은 오행': 0.8,
+    '지지가 모두 같은 오행': 1.6,
+    '일간이 셋 이상 겹침': 2.7,
+    '일간이 아주 강함': 3.0,
+    '지지에 방합이 갖춰짐': 4.8,
+    '지지에 삼합이 갖춰짐': 4.8,
+    '한 오행이 절반 넘게 차지함': 8.0,
+    '지지 충이 둘 이상': 9.3,
+    '지지가 모두 다른 계절': 9.8,
+    '천간에 합이 둘 이상': 13.4,
+    '오행 두 가지가 없음': 17.1,
+    '일간이 아주 약함(종격을 볼 만큼)': 18.6,
+    '간여지동(일간과 일지가 같은 오행)': 19.1,
+    '오행 하나가 아예 없음': 52.2
+  };
+
+
+  function findRareShapes(chart, analysis) {
+    var p = chart.pillars;
+    var slots = [p.year, p.month, p.day];
+    if (p.hour) slots.push(p.hour);
+    var stemElems = slots.map(function (s) { return STEM_ELEM[s.stem]; });
+    var branchElems = slots.map(function (s) { return BRANCH_ELEM[s.branch]; });
+    var branches = slots.map(function (s) { return s.branch; });
+    var out = [];
+    function add(name, why) {
+      out.push({ name: name, why: why, rarityPercent: RARITY[name] === undefined ? null : RARITY[name] });
+    }
+
+    if (analysis.missing.length === 1) add('오행 하나가 아예 없음', analysis.missing[0] + '이(가) 한 글자도 없다');
+    if (analysis.missing.length >= 2) add('오행 두 가지가 없음', analysis.missing.join('·') + '이(가) 없다');
+
+    var total = ELEMS.reduce(function (t, e) { return t + analysis.weighted[e]; }, 0);
+    ELEMS.forEach(function (e) {
+      if (total > 0 && analysis.weighted[e] / total > 0.5) {
+        add('한 오행이 절반 넘게 차지함', e + '이(가) 전체의 ' + Math.round(analysis.weighted[e] / total * 100) + '%');
+      }
+    });
+    if (new Set(stemElems).size === 1) add('천간이 모두 같은 오행', '천간이 전부 ' + stemElems[0]);
+    if (new Set(branchElems).size === 1) add('지지가 모두 같은 오행', '지지가 전부 ' + branchElems[0]);
+
+    SAMHAP.forEach(function (t) {
+      if (t.every(function (b) { return branches.indexOf(b) >= 0; })) {
+        add('지지에 삼합이 갖춰짐', t.map(function (b) { return BRANCH[b]; }).join('') + ' 삼합');
+      }
+    });
+    BANGHAP.forEach(function (t) {
+      if (t.every(function (b) { return branches.indexOf(b) >= 0; })) {
+        add('지지에 방합이 갖춰짐', t.map(function (b) { return BRANCH[b]; }).join('') + ' 방합');
+      }
+    });
+    if (STEM_ELEM[p.day.stem] === BRANCH_ELEM[p.day.branch]) {
+      add('간여지동(일간과 일지가 같은 오행)', STEM[p.day.stem] + BRANCH[p.day.branch] + ' 둘 다 ' + STEM_ELEM[p.day.stem]);
+    }
+    var same = slots.filter(function (s) { return s.stem === p.day.stem; }).length;
+    if (same >= 3) add('일간이 셋 이상 겹침', STEM[p.day.stem] + '이(가) ' + same + '개');
+
+    var seasons = new Set(branches.map(function (b) { return SEASON_OF_BRANCH[b]; }));
+    if (seasons.size === slots.length && slots.length === 4) add('지지가 모두 다른 계절', '네 지지가 네 계절에 하나씩');
+
+    var nr = analysis.natalRelations;
+    var stemHap = nr.stems.filter(function (r) { return r.name === '천간합'; }).length;
+    if (stemHap >= 2) add('천간에 합이 둘 이상', stemHap + '군데');
+    var chung = nr.branches.filter(function (r) { return r.name === '충'; }).length;
+    if (chung >= 2) add('지지 충이 둘 이상', chung + '군데');
+
+    if (analysis.strengthRatio <= 0.2) add('일간이 아주 약함(종격을 볼 만큼)', '돕는 비율 ' + analysis.strengthRatio);
+    if (analysis.strengthRatio >= 0.8) add('일간이 아주 강함', '돕는 비율 ' + analysis.strengthRatio);
+
+    return out;
+  }
+
+  // ── 십신 그룹의 상태 ────────────────────────────────────────────────────
+  //
+  // 재성·관성·식상·인성·비겁이 각각 어떤 상태인가. 개수만으로는 모자라다.
+  // 천간에 드러났는지(투간), 지지에 뿌리가 있는지(통근), 충·합으로 깨졌는지가
+  // 함께 있어야 "재성이 있긴 한데 못 쓴다" 같은 판단이 선다.
+  var GOD_GROUPS = {
+    비겁: { gods: ['비견', '겁재'], means: '나 자신, 형제·친구·동업자, 경쟁' },
+    식상: { gods: ['식신', '상관'], means: '내가 내놓는 것 — 말·재주·표현·자식(여자)' },
+    재성: { gods: ['정재', '편재'], means: '돈과 재물, 아내(남자), 내가 다루는 것' },
+    관성: { gods: ['정관', '편관'], means: '나를 누르는 것 — 직장·규칙·명예, 남편(여자), 자식(남자)' },
+    인성: { gods: ['정인', '편인'], means: '나를 받쳐 주는 것 — 배움·어머니·자격·문서' }
+  };
+
+  function godGroupStatus(chart, analysis) {
+    var p = chart.pillars, ds = p.day.stem;
+    var slots = [p.year, p.month, p.day];
+    if (p.hour) slots.push(p.hour);
+    var damagedPos = {};
+    analysis.natalRelations.branches.forEach(function (r) {
+      if (r.delta < 0) r.pair.split('-').forEach(function (x) { damagedPos[x] = (damagedPos[x] || 0) + 1; });
+    });
+    var posName = ['연', '월', '일', '시'];
+
+    var out = {};
+    Object.keys(GOD_GROUPS).forEach(function (k) {
+      var G = GOD_GROUPS[k];
+      var amount = G.gods.reduce(function (t, g) { return t + analysis.godCount[g]; }, 0);
+      amount = Math.round(amount * 100) / 100;
+
+      var revealed = [], rooted = [], hurt = 0;
+      slots.forEach(function (s, i) {
+        if (i !== 2 && G.gods.indexOf(tenGodOfStem(ds, s.stem)) >= 0) revealed.push(posName[i] + '간');
+        // 통근 — 지지 지장간 안에 그 십신이 들어 있는가
+        var has = HIDDEN[s.branch].some(function (h) { return G.gods.indexOf(tenGodOfStem(ds, h[0])) >= 0; });
+        if (has) {
+          rooted.push(posName[i] + '지');
+          if (damagedPos[posName[i]]) hurt++;
+        }
+      });
+
+      var state;
+      if (amount < 0.15) state = '없음';
+      else if (amount < 0.7) state = '아주 얇음';
+      else if (amount < 1.6) state = '적당';
+      else if (amount < 2.6) state = '넉넉함';
+      else state = '넘침';
+
+      out[k] = {
+        label: k, means: G.means, gods: G.gods, amount: amount, state: state,
+        revealed: revealed, rooted: rooted, damagedRoots: hurt,
+        // 드러났는데 뿌리가 없으면 겉만 있고 힘이 없다. 뿌리는 있는데 안
+        // 드러나면 있어도 밖으로 꺼내 쓰기 어렵다.
+        usable: revealed.length > 0 && rooted.length > 0 ? '드러났고 뿌리도 있어 쓸 수 있다'
+              : revealed.length > 0 ? '천간에 드러났으나 뿌리가 없어 힘이 약하다'
+              : rooted.length > 0 ? '뿌리는 있으나 드러나지 않아 꺼내 쓰기 어렵다'
+              : amount < 0.15 ? '아예 없다' : '지장간에만 희미하게 있다'
+      };
+    });
+    return out;
   }
 
   // ── 12운성 ─────────────────────────────────────────────────────────────
@@ -1424,6 +1609,265 @@
       worstLuck: luck.slice().sort(function (x, y) { return y.drains - x.drains || x.ageFrom - y.ageFrom; })[0],
       seun: seun
     };
+  }
+
+  // ── 건강 — 오행과 몸 ────────────────────────────────────────────────────
+  //
+  // 오행마다 맡은 장부가 있다는 것이 한의학·명리의 오래된 배속이다. 여기서는
+  // 진단이 아니라 "어느 쪽이 먼저 지치는가"를 보는 데만 쓴다. 넘쳐도 모자라도
+  // 탈이 나는데, 넘칠 때와 모자랄 때 나타나는 모습이 다르다.
+  var ELEM_BODY = {
+    목: { organs: '간·쓸개', parts: '눈, 근육과 힘줄, 신경',
+          tooMuch: '화를 참다 뭉치고, 눈이 피로하고, 목·어깨가 자주 뻣뻣해진다',
+          tooLittle: '쉽게 지치고 결단이 안 서며, 근육에 힘이 잘 안 붙는다',
+          food: '푸른 잎채소, 신맛 나는 것(매실·레몬), 부추',
+          move: '아침 스트레칭, 걷기, 등산처럼 뻗어 나가는 움직임' },
+    화: { organs: '심장·소장', parts: '혈액순환, 혀, 얼굴빛',
+          tooMuch: '들뜨고 잠이 얕아지며, 가슴이 두근거리고 열이 위로 몰린다',
+          tooLittle: '기운이 안 오르고 손발이 차며, 의욕이 잘 안 생긴다',
+          food: '쓴맛 나는 것(더덕·씀바귀), 붉은 채소, 따뜻한 국물',
+          move: '가볍게 땀 내는 유산소, 사람들과 함께하는 운동' },
+    토: { organs: '비장·위', parts: '소화, 입과 입술, 살',
+          tooMuch: '더부룩하고 몸이 무거우며, 생각이 한자리를 맴돈다',
+          tooLittle: '입맛이 없고 소화가 더디며, 쉽게 마르거나 기운이 처진다',
+          food: '단맛 나는 곡물(찹쌀·기장), 노란 채소(호박·고구마), 따뜻한 죽',
+          move: '식후 산책, 배를 따뜻하게 하는 가벼운 움직임' },
+    금: { organs: '폐·대장', parts: '피부, 코와 기관지, 뼈대',
+          tooMuch: '건조하고 예민해지며, 목·코가 자주 마르고 결벽이 심해진다',
+          tooLittle: '숨이 짧고 감기에 잘 걸리며, 피부가 잘 트고 장이 예민하다',
+          food: '매운맛을 조금(무·양파·생강), 흰 음식(배·도라지), 물',
+          move: '깊은 호흡, 유산소, 맑은 공기에서 걷기' },
+    수: { organs: '신장·방광', parts: '뼈와 관절, 귀, 호르몬',
+          tooMuch: '몸이 붓고 차가워지며, 겁이 많아지고 밤에 자주 깬다',
+          tooLittle: '허리·무릎이 시큰하고, 쉽게 지치며, 귀가 먹먹하거나 이명이 온다',
+          food: '짠맛을 조금(김·미역), 검은 음식(검은콩·흑임자), 뜨거운 물',
+          move: '무리하지 않는 근력운동, 하체 단련, 반신욕' }
+  };
+  var SEASON_WATCH = {
+    봄: '목이 왕성해지는 철. 간·눈·근육에 부담이 몰린다',
+    여름: '화가 왕성해지는 철. 심장·수면·열에 부담이 몰린다',
+    가을: '금이 왕성해지는 철. 폐·피부·건조에 부담이 몰린다',
+    겨울: '수가 왕성해지는 철. 신장·허리·냉증에 부담이 몰린다'
+  };
+
+  function healthProfile(reading) {
+    var a = reading.analysis;
+    var total = ELEMS.reduce(function (t, e) { return t + a.weighted[e]; }, 0) || 1;
+    var risks = [];
+    ELEMS.forEach(function (e) {
+      var share = a.weighted[e] / total;
+      var body = ELEM_BODY[e];
+      if (share >= 0.35) {
+        risks.push({ elem: e, side: '넘침', share: Math.round(share * 100),
+                     organs: body.organs, parts: body.parts, sign: body.tooMuch });
+      } else if (share <= 0.08) {
+        risks.push({ elem: e, side: '모자람', share: Math.round(share * 100),
+                     organs: body.organs, parts: body.parts, sign: body.tooLittle });
+      }
+    });
+    // 기신이 드는 해·달은 몸이 먼저 반응한다.
+    var care = ELEM_BODY[a.gisin];
+    // 용신 오행의 음식·운동이 몸에도 맞는다.
+    var help = ELEM_BODY[a.yongsin[0]];
+    return {
+      risks: risks,
+      bornSeason: a.season,
+      seasonWatch: SEASON_WATCH,
+      weakestSeason: SEASON_WATCH[{ 목: '봄', 화: '여름', 금: '가을', 수: '겨울', 토: '봄' }[a.gisin]] || null,
+      gisinBody: { elem: a.gisin, organs: care.organs, sign: care.tooMuch },
+      yongsinCare: { elem: a.yongsin[0], food: help.food, move: help.move, organs: help.organs }
+    };
+  }
+
+  // ── 배우자 자리와 인연 ──────────────────────────────────────────────────
+  //
+  // 일지는 배우자의 자리다. 그 자리가 나에게 어떤 십신인지, 충·합으로
+  // 흔들리는지, 공망인지가 배우자운의 뼈대다.
+  function spouseProfile(reading, years) {
+    var p = reading.chart.pillars, ds = p.day.stem;
+    var a = reading.analysis;
+    var seatGod = tenGodOfBranch(ds, p.day.branch);
+    var rel6 = sixRelGods(reading.chart.input.gender);
+    var mateGod = rel6.mate[0];
+
+    // 일지가 다른 자리와 맺는 관계
+    var seatRels = a.natalRelations.branches.filter(function (r) {
+      return r.pair.indexOf('일') >= 0;
+    });
+    var seatGongmang = a.gongmang.indexOf(BRANCH[p.day.branch]) >= 0;
+
+    // 배우자 십신(재성/관성)이 원국에 얼마나 있는가
+    var groups = godGroupStatus(reading.chart, a);
+    var mateGroup = groups[mateGod === '정재' ? '재성' : '관성'];
+
+    // 인연이 드는 해 — 일지와 합하거나, 배우자 십신이 세운으로 드는 해
+    var out = [];
+    var n = years || 12;
+    for (var i = 0; i < n; i++) {
+      var Y = reading.currentYear.year + i;
+      var yp = yearPillarOf(Y);
+      var why = [];
+      branchRelations(yp.branchIdx, p.day.branch).forEach(function (r) {
+        if (r.delta > 0) why.push('일지와 ' + r.name);
+      });
+      var g = tenGodOfStem(ds, yp.stemIdx);
+      if (rel6.mate.indexOf(g) >= 0) why.push('세운 천간이 ' + g);
+      var gb = tenGodOfBranch(ds, yp.branchIdx);
+      if (rel6.mate.indexOf(gb) >= 0) why.push('세운 지지가 ' + gb);
+      var dohwa = [DOHWA[triadKey(p.year.branch)], DOHWA[triadKey(p.day.branch)]];
+      if (dohwa.indexOf(yp.branchIdx) >= 0) why.push('도화가 듦');
+      if (why.length) out.push({ year: Y, hanja: yp.hanja, why: why });
+    }
+
+    return {
+      seat: { branch: BRANCH[p.day.branch], hanja: BRANCH_H[p.day.branch],
+              god: seatGod, elem: BRANCH_ELEM[p.day.branch], gongmang: seatGongmang },
+      seatRelations: seatRels,
+      mateGod: mateGod, mateGroup: mateGroup,
+      // 나에게 모자란 기운을 가진 사람이 편하다. 궁합에서 안정 축이 보는 것과 같다.
+      idealElem: a.yongsin[0],
+      avoidElem: a.gisin,
+      years: out
+    };
+  }
+
+  // ── 택일 — 무슨 일에 어느 날이 맞는가 ───────────────────────────────────
+  //
+  // 정통 택일학(황도길일·건제12신)은 그날 자체의 길흉을 따지지만, 여기서는
+  // 그러지 않는다. 같은 날도 사람마다 다르게 걸리기 때문이다. 그 대신 이미
+  // 있는 아홉 영역 채점을 그대로 쓰고, 일이 어느 영역에 기대는지로 잇는다.
+  // 여기에 "일간을 충하는 날은 무슨 일이든 피한다" 같은 규칙만 얹는다.
+  var ACTIVITIES = {
+    계약:   { domains: ['money', 'business'], gods: ['정관', '정재'],
+              why: '약속을 글로 묶는 일이라 정관·정재가 드는 날이 맞다' },
+    이사:   { domains: ['health', 'people'], gods: ['편재', '식신'],
+              why: '자리를 옮기는 일이라 역마가 들고 몸이 편한 날이 맞다', wantYeokma: true },
+    시험:   { domains: ['talent', 'helper'], gods: ['정인', '편인'],
+              why: '배운 것을 꺼내는 일이라 인성이 드는 날이 맞다' },
+    수술:   { domains: ['health'], gods: ['정인', '비견'],
+              why: '몸을 여는 일이라 건강운이 받쳐 주고 일지가 흔들리지 않는 날이 맞다',
+              avoidDayClash: true },
+    개업:   { domains: ['business', 'money'], gods: ['편재', '식신'],
+              why: '벌이기 시작하는 일이라 재성·식상이 드는 날이 맞다' },
+    만남:   { domains: ['love', 'people'], gods: ['정재', '정관', '식신'],
+              why: '사람을 만나는 일이라 도화·정재·정관이 드는 날이 맞다', wantDohwa: true },
+    이직:   { domains: ['business', 'helper'], gods: ['정관', '정인'],
+              why: '자리를 바꾸는 일이라 관성과 인성이 함께 드는 날이 맞다' }
+  };
+
+  /**
+   * 그 달의 활동별 좋은 날·피할 날.
+   * @param {object} reading  fullReading() 결과
+   * @param {string} activity ACTIVITIES 의 키
+   */
+  function pickDays(reading, year, month, activity, count, opts) {
+    var act = ACTIVITIES[activity];
+    if (!act) return null;
+    opts = opts || {};
+    var ds = reading.chart.pillars.day.stem;
+    var db = reading.chart.pillars.day.branch;
+    var dohwa = [DOHWA[triadKey(reading.chart.pillars.year.branch)], DOHWA[triadKey(db)]];
+    var yeokma = [YEOKMA[triadKey(reading.chart.pillars.year.branch)], YEOKMA[triadKey(db)]];
+
+    // 달력은 절기로 나눈 달을 보여 준다(예: 8월 7일 ~ 9월 7일). 여기서도 같은
+    // 구간을 봐야 화면과 어긋나지 않으므로, 구간을 받으면 그쪽을 쓴다.
+    var days;
+    if (opts.range) {
+      var R = opts.range;
+      var lo = R.from.y * 10000 + R.from.m * 100 + R.from.d;
+      var hi = R.to.y * 10000 + R.to.m * 100 + R.to.d;
+      var years = R.from.y === R.to.y ? [R.from.y] : [R.from.y, R.to.y];
+      days = [];
+      years.forEach(function (yy) {
+        yearDays(reading, yy).forEach(function (d) {
+          var k = d.year * 10000 + d.month * 100 + d.day;
+          if (k >= lo && k < hi) days.push(d);
+        });
+      });
+    } else {
+      days = yearDays(reading, year).filter(function (d) { return d.month === month; });
+    }
+    // 지나간 날을 "좋은 날"이라고 내밀면 아무 쓸모가 없다. 이번 달이면 오늘부터 센다.
+    var skipped = 0;
+    if (opts.fromToday !== false) {
+      var now = new Date(Date.now() + 9 * 3600 * 1000);
+      var todayNum = now.getUTCFullYear() * 10000 + (now.getUTCMonth() + 1) * 100 + now.getUTCDate();
+      var before = days.length;
+      var kept = days.filter(function (d) {
+        return d.year * 10000 + d.month * 100 + d.day >= todayNum;
+      });
+      // 통째로 지나간 달이면 거르지 않는다 — 지난 달을 되짚어 볼 수도 있다.
+      if (kept.length) { skipped = before - kept.length; days = kept; }
+    }
+    var scored = days.map(function (d) {
+      var sc = 0, why = [], warn = [];
+      act.domains.forEach(function (k) { sc += d.score[k]; });
+      sc = sc / act.domains.length;
+
+      var sg = tenGodOfStem(ds, d.pillars.day.stem);
+      var bg = tenGodOfBranch(ds, d.pillars.day.branch);
+      if (act.gods.indexOf(sg) >= 0) { sc += 12; why.push('일진 천간이 ' + sg); }
+      if (act.gods.indexOf(bg) >= 0) { sc += 12; why.push('일진 지지가 ' + bg); }
+      if (act.wantDohwa && dohwa.indexOf(d.pillars.day.branch) >= 0) { sc += 10; why.push('도화가 드는 날'); }
+      if (act.wantYeokma && yeokma.indexOf(d.pillars.day.branch) >= 0) { sc += 12; why.push('역마가 드는 날'); }
+
+      // 무슨 일이든 피하는 날 — 일간을 충하거나, 일지를 충하거나, 공망
+      var sr = stemRelation(d.pillars.day.stem, ds);
+      if (sr && sr.name === '천간충') { sc -= 25; warn.push('일간을 충하는 날'); }
+      branchRelations(d.pillars.day.branch, db).forEach(function (r) {
+        if (r.name === '충') { sc -= 30; warn.push('일지(내 자리)를 충하는 날'); }
+        else if (r.name === '형' || r.name === '원진') { sc -= 12; warn.push('일지와 ' + r.name); }
+        else if (r.name === '육합' || r.name === '삼합') { sc += 8; why.push('일지와 ' + r.name); }
+      });
+      if (d.gongmang) { sc -= 15; warn.push('공망일'); }
+      if (act.avoidDayClash && warn.length) sc -= 15;
+
+      return { year: d.year, month: d.month, day: d.day, ganji: d.ganji,
+               score: Math.round(sc), why: why, warn: warn,
+               hours: goodHours(reading, d.pillars.day.stem, act) };
+    });
+
+    var byScore = scored.slice().sort(function (a2, b2) { return b2.score - a2.score; });
+    // 남은 날이 적으면 위아래 목록이 겹친다. 같은 날이 "좋은 날"이자 "피할 날"로
+    // 나오면 아무 말도 안 한 것과 같으므로, 겹치지 않을 만큼만 뽑는다.
+    var n = Math.max(1, Math.min(count || 3, Math.floor(byScore.length / 2)));
+    return {
+      activity: activity, why: act.why,
+      skippedPastDays: skipped,
+      daysLeft: byScore.length,
+      good: byScore.slice(0, n),
+      bad: byScore.slice(-n).reverse(),
+      all: scored
+    };
+  }
+
+  // 그날 안에서 어느 시간이 맞는가. 시주 천간은 일간에서 오호둔으로 나온다.
+  var HOUR_LABEL = ['자시(23:30~01:30)', '축시(01:30~03:30)', '인시(03:30~05:30)',
+                    '묘시(05:30~07:30)', '진시(07:30~09:30)', '사시(09:30~11:30)',
+                    '오시(11:30~13:30)', '미시(13:30~15:30)', '신시(15:30~17:30)',
+                    '유시(17:30~19:30)', '술시(19:30~21:30)', '해시(21:30~23:30)'];
+
+  function goodHours(reading, dayStemOfThatDay, act) {
+    var me = reading.chart.pillars.day.stem;
+    var out = [];
+    for (var hb = 0; hb < 12; hb++) {
+      var hs = ((dayStemOfThatDay % 5) * 2 + hb) % 10;
+      var sg = tenGodOfStem(me, hs), bg = tenGodOfBranch(me, hb);
+      var sc = 0;
+      if (act.gods.indexOf(sg) >= 0) sc += 2;
+      if (act.gods.indexOf(bg) >= 0) sc += 2;
+      var eb = BRANCH_ELEM[hb];
+      if (eb === reading.analysis.yongsin[0]) sc += 2;
+      else if (eb === reading.analysis.husin) sc += 1;
+      else if (eb === reading.analysis.gisin) sc -= 2;
+      branchRelations(hb, reading.chart.pillars.day.branch).forEach(function (r) {
+        if (r.name === '충') sc -= 3;
+        else if (r.delta > 0) sc += 1;
+      });
+      out.push({ branch: BRANCH[hb], label: HOUR_LABEL[hb], score: sc });
+    }
+    out.sort(function (a2, b2) { return b2.score - a2.score; });
+    return out.slice(0, 2);
   }
 
   // ── 별자리 ─────────────────────────────────────────────────────────────
@@ -2659,6 +3103,9 @@
     twelveStage: twelveStage, twelveStagesOf: twelveStagesOf,
     STAGE12: STAGE12, STAGE_POWER: STAGE_POWER, STAGE_PLAIN: STAGE_PLAIN,
     natalRelations: natalRelations, luckStages: luckStages, yongsinSupply: yongsinSupply,
+    findPattern: findPattern, findRareShapes: findRareShapes, godGroupStatus: godGroupStatus,
+    GOD_GROUPS: GOD_GROUPS, ELEM_BODY: ELEM_BODY, healthProfile: healthProfile,
+    spouseProfile: spouseProfile, pickDays: pickDays, ACTIVITIES: ACTIVITIES,
     yearPillarOf: yearPillarOf, tenGodOfStem: tenGodOfStem, tenGodOfBranch: tenGodOfBranch,
     solarToLunar: solarToLunar, lunarToSolar: lunarToSolar, leapMonthsOf: leapMonthsOf,
     syllableInfo: syllableInfo, suriOf: suriOf, analyzeName: analyzeName,

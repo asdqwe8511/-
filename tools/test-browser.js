@@ -156,6 +156,26 @@ async function run() {
   const stg = await p.textContent('.stage-bars');
   ok('단계 이름이 적힘', /장생|목욕|관대|건록|제왕|쇠|병|사|묘|절|태|양/.test(stg));
 
+  section('길흉일 — 무슨 일에 어느 날');
+  ok('활동 칩 7개', (await p.$$('#actChips .chip')).length === 7, (await p.$$('#actChips .chip')).length);
+  const acts = await p.$$eval('#actChips .chip', (els) => els.map((e) => e.textContent.trim()));
+  ok('계약·이사·시험·수술 있음', ['계약','이사','시험','수술'].every((x) => acts.includes(x)), acts.join(','));
+  ok('처음엔 접혀 있음', !(await p.isVisible('.act-box')));
+  await p.click('#actChips .chip[data-act="계약"]'); await p.waitForTimeout(400);
+  ok('누르면 열림', await p.isVisible('.act-box'));
+  ok('좋은 날 3개', (await p.$$('.act-day.good')).length === 3, (await p.$$('.act-day.good')).length);
+  ok('피할 날 3개', (await p.$$('.act-day.bad')).length === 3);
+  const abox = await p.textContent('.act-box');
+  ok('시간대까지 알려줌', /시\(\d\d:\d\d~\d\d:\d\d\)/.test(abox), abox.slice(0, 80));
+  ok('그날 자체가 아니라고 밝힘', /그날 자체가 좋은 날이라는 뜻이 아니라/.test(abox));
+  ok('숫자 점수 없음', !/\d+점/.test(abox));
+  const contract = await p.textContent('.act-day.good');
+  await p.click('#actChips .chip[data-act="이사"]'); await p.waitForTimeout(400);
+  ok('활동을 바꾸면 날짜도 바뀐다', (await p.textContent('.act-box')).includes('역마') ||
+     (await p.textContent('.act-day.good')) !== contract);
+  await p.click('#actChips .chip[data-act="이사"]'); await p.waitForTimeout(300);
+  ok('다시 누르면 접힘', !(await p.isVisible('.act-box')));
+
   section('저장 — 새로고침해도 남는가');
   await p.reload({ waitUntil: 'networkidle' });
   ok('저장 카드', await p.isVisible('.saved-card'));
