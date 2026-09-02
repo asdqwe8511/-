@@ -146,6 +146,24 @@ ok('강점은 전부 +', cc.strengths.every((s) => s.delta > 0), true);
 ok('마찰은 전부 -', cc.frictions.every((s) => s.delta < 0), true);
 
 // 환산 점수는 원점수에 대해 단조 증가해야 한다 — 아니면 순위가 뒤집힌다
+// 궁합은 짝의 성질이지 묻는 사람의 성질이 아니다. 링크를 누가 열든 같은 점수여야 한다.
+section('궁합 — 방향을 바꿔도 같은 점수인가');
+const names = [['김', '민준'], ['이', '서연'], ['박', '지우'], ['최', '민준'], ['정', '하윤']];
+let asym = 0, checked = 0;
+for (let i = 0; i < 40; i++) {
+  const mk = (k) => E.fullReading({
+    calendar: '양력', year: 1960 + ((i * 7 + k * 13) % 45),
+    month: 1 + ((i * 5 + k * 3) % 12), day: 1 + ((i * 11 + k * 17) % 28),
+    hour: (i * 3 + k * 5) % 24, minute: 0, gender: k % 2 ? '여' : '남',
+    surname: names[(i + k) % 5][0], given: names[(i + k) % 5][1],
+    skipLunar: true, skipFortune: true
+  });
+  const a = mk(0), b = mk(1);
+  checked++;
+  if (E.compatibility(a, b).total !== E.compatibility(b, a).total) asym++;
+}
+ok(`${checked}쌍 전부 방향 무관`, asym, 0);
+
 section('궁합 — 환산 점수 단조성');
 let mono = true, prev = -1;
 const pool = [];

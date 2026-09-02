@@ -1304,14 +1304,22 @@
     // ── 이름 ──
     var nameNote = null;
     if (A.name && B.name) {
-      var la = A.name.syllables[A.name.syllables.length - 1].elem;
-      var fb = B.name.syllables[0].elem;
-      var rel2;
-      if (la === fb) rel2 = '비화';
-      else if (generates(la, fb) || generates(fb, la)) rel2 = '상생';
-      else rel2 = '상극';
-      var d = { 상생: 7, 비화: 4, 상극: -6 }[rel2];
-      add('communication', d, '두 이름의 소리가 ' + la + '·' + fb + ' ' + rel2);
+      // 이름을 이어 부르는 소리는 양쪽 순서를 다 본다. 한쪽 순서만 보면 같은 두
+      // 사람인데도 누가 먼저 여느냐에 따라 점수가 달라진다(궁합은 짝의 성질이지
+      // 묻는 사람의 성질이 아니다).
+      var soundPair = function (x, y) {
+        if (x === y) return { rel: '비화', d: 4 };
+        if (generates(x, y)) return { rel: '상생', d: 7 };
+        if (generates(y, x)) return { rel: '역생', d: 3 };
+        return { rel: '상극', d: -6 };
+      };
+      var aTail = A.name.syllables[A.name.syllables.length - 1].elem;
+      var bTail = B.name.syllables[B.name.syllables.length - 1].elem;
+      var aHead = A.name.syllables[0].elem;
+      var bHead = B.name.syllables[0].elem;
+      var ab = soundPair(aTail, bHead), ba = soundPair(bTail, aHead);
+      var rel2 = ab.rel === ba.rel ? ab.rel : ab.rel + '·' + ba.rel;
+      add('communication', (ab.d + ba.d) / 2, '두 이름을 이어 부르면 ' + rel2);
       // 상대 이름이 내 용신을 불러 주는가
       var bElems = B.name.syllables.map(function (s2) { return s2.elem; });
       if (bElems.indexOf(A.analysis.yongsin[0]) >= 0) {
@@ -1321,7 +1329,8 @@
       if (aElems.indexOf(B.analysis.yongsin[0]) >= 0) {
         add('stability', 5, '내 이름에 상대 용신 ' + josa(B.analysis.yongsin[0], '이/가') + ' 들어 있음');
       }
-      nameNote = { tailHeadRelation: rel2, aElems: aElems, bElems: bElems };
+      nameNote = { tailHeadRelation: rel2, forward: ab.rel, backward: ba.rel,
+                   aElems: aElems, bElems: bElems };
     }
 
     // ── 월지 (자라온 환경) ──

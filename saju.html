@@ -381,11 +381,13 @@
     border-radius:50%; animation:spin .8s linear infinite;
   }
   @keyframes spin{to{transform:rotate(360deg);}}
-  .retry-btn{
+  .retry-btn, .btn-sm{
     background:var(--panel-2); border:1px solid var(--border); color:var(--text);
-    padding:9px 16px; border-radius:9px; font-size:13px; cursor:pointer; margin-top:12px;
+    padding:9px 16px; border-radius:9px; font-size:13px; cursor:pointer;
   }
-  .retry-btn:hover{border-color:var(--accent);}
+  .retry-btn{margin-top:12px;}
+  .btn-sm{padding:7px 13px; font-size:12.5px;}
+  .retry-btn:hover, .btn-sm:hover{border-color:var(--accent);}
 
   .disclaimer{
     margin-top:26px; padding:16px 18px; border-radius:12px;
@@ -452,7 +454,10 @@
       <button type="button" class="chip" data-v="batch" aria-pressed="false">여러 명과 비교</button>
     </div>
 
-    <form id="form" autocomplete="off">
+    <!-- novalidate: 브라우저 기본 검사는 숨어 있는 칸(모드에 따라 접히는 상대방 폼)에서
+         "invalid form control is not focusable" 로 제출을 조용히 막아 버린다.
+         검사는 우리가 직접 하고, 안내도 한국어로 우리가 띄운다. -->
+    <form id="form" autocomplete="off" novalidate>
       <div class="form-grid">
         <div class="field f-name">
           <label for="surname">성</label>
@@ -698,8 +703,8 @@
       <div id="shareOut" hidden>
         <div class="share-row" style="margin-top:12px">
           <input type="text" id="shareUrl" readonly>
-          <button type="button" class="retry-btn" id="copyLink" style="margin:0">복사</button>
-          <button type="button" class="retry-btn" id="shareLink" style="margin:0" hidden>공유</button>
+          <button type="button" class="btn-sm" id="copyLink">복사</button>
+          <button type="button" class="btn-sm" id="shareLink" hidden>공유</button>
         </div>
         <div class="share-note">
           <b>링크의 # 뒤 내용은 서버로 전송되지 않습니다.</b> 브라우저가 프래그먼트를 서버에 보내지 않기 때문에,
@@ -1512,7 +1517,7 @@
         '<td class="num sub2">' + c.axes.communication.score + '</td>' +
         '<td class="num sub2">' + c.axes.endurance.score + '</td>' +
         '<td class="rank-why">' + esc(why) + '</td>' +
-        '<td><button type="button" class="retry-btn" style="margin:0;padding:5px 10px;font-size:11.5px" data-i="' + i + '">자세히</button></td>' +
+        '<td><button type="button" class="btn-sm" style="padding:5px 10px;font-size:11.5px" data-i="' + i + '">자세히</button></td>' +
       '</tr>';
     }).join('');
     $('rankTable').innerHTML = head + '<tbody>' + body + '</tbody>';
