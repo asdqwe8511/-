@@ -338,6 +338,90 @@ const R2 = E.fullReading({ year: 1984, month: 6, day: 20, hour: 0, minute: 30, g
 ok('관계 개수 집계', typeof R2.analysis.natalRelations.counts, 'object');
 ok('네 자리의 뜻', Object.keys(NR.positions).length, 4);
 
+section('격국과 드문 구조');
+const PR = E.fullReading({ year: 1990, month: 5, day: 15, hour: 14, minute: 30, gender: '남' });
+ok('격국 이름 — ' + PR.analysis.pattern.name, /격$/.test(PR.analysis.pattern.name), true);
+ok('무엇으로 잡았는지 — ' + PR.analysis.pattern.via, ['투간', '정기'].indexOf(PR.analysis.pattern.via) >= 0, true);
+// 격국은 월지에서 잡는다. 열 가지가 고루 나와야 한다 — 하나로 쏠리면 판정이 틀린 것이다.
+const seenPatterns = {};
+for (let i = 0; i < 300; i++) {
+  const x = E.fullReading({ year: 1950 + (i % 60), month: 1 + (i % 12), day: 1 + (i % 28),
+    hour: i % 24, minute: 0, gender: '남', skipLunar: true, skipFortune: true });
+  if (!x.error) seenPatterns[x.analysis.pattern.name] = 1;
+}
+ok('열 가지 격국이 모두 나온다', Object.keys(seenPatterns).length, 10);
+
+const shapes = E.findRareShapes(PR.chart, PR.analysis);
+ok('드문 구조마다 백분율이 붙는다',
+   shapes.every((x) => typeof x.rarityPercent === 'number'), true);
+ok('백분율은 0~100', shapes.every((x) => x.rarityPercent >= 0 && x.rarityPercent <= 100), true);
+
+section('다섯 갈래의 상태');
+const GG = E.godGroupStatus(PR.chart, PR.analysis);
+ok('다섯 갈래', Object.keys(GG).length, 5);
+ok('비겁·식상·재성·관성·인성',
+   JSON.stringify(Object.keys(GG)), JSON.stringify(['비겁', '식상', '재성', '관성', '인성']));
+ok('상태가 말로 나온다', GG.재성.state.length > 0, true);
+ok('쓸 수 있는지 판단이 붙는다', GG.재성.usable.length > 0, true);
+// 다섯 갈래의 양을 합하면 십신 전체와 같아야 한다.
+const ggSum = Object.keys(GG).reduce((a, k) => a + GG[k].amount, 0);
+const gcSum = PR.analysis.godList.reduce((a, g) => a + PR.analysis.godCount[g], 0);
+ok(`다섯 갈래 합 ${ggSum} = 십신 합 ${gcSum}`, Math.abs(ggSum - gcSum) < 0.05, true);
+
+section('건강 — 오행과 몸');
+const HP = E.healthProfile(PR);
+ok('치우친 오행마다 장부가 붙는다', HP.risks.every((x) => x.organs.length > 0), true);
+ok('넘침/모자람으로 가른다', HP.risks.every((x) => ['넘침', '모자람'].indexOf(x.side) >= 0), true);
+ok('기신이 걸리는 곳', HP.gisinBody.organs.length > 0, true);
+ok('용신에 맞는 음식·움직임', !!(HP.yongsinCare.food && HP.yongsinCare.move), true);
+ok('다섯 오행 모두 몸 배속이 있다', Object.keys(E.ELEM_BODY).length, 5);
+
+section('배우자 자리와 인연');
+const SP = E.spouseProfile(PR);
+ok('일지가 배우자 자리', SP.seat.branch, E.BRANCH[PR.chart.pillars.day.branch]);
+ok('일지의 십신', SP.seat.god.length > 0, true);
+ok('남자는 재성을 배우자로 본다', SP.mateGod, '정재');
+const SPF = E.spouseProfile(E.fullReading({ year: 1993, month: 7, day: 22, hour: 5, minute: 40, gender: '여' }));
+ok('여자는 관성을 배우자로 본다', SPF.mateGod, '정관');
+ok('인연이 드는 해에 이유가 붙는다', SP.years.every((x) => x.why.length > 0), true);
+
+section('택일 — 무슨 일에 어느 날');
+ok('일곱 가지 일', Object.keys(E.ACTIVITIES).length, 7);
+const PD = E.pickDays(PR, 2026, 10, '계약', 3, { fromToday: false });
+ok('좋은 날 3개', PD.good.length, 3);
+ok('피할 날 3개', PD.bad.length, 3);
+// 같은 날이 좋은 날이자 피할 날이면 아무 말도 안 한 것이다.
+const gdays = PD.good.map((x) => x.day), bdays = PD.bad.map((x) => x.day);
+ok('좋은 날과 피할 날이 겹치지 않는다', gdays.every((d2) => bdays.indexOf(d2) < 0), true);
+ok('좋은 날이 피할 날보다 점수가 높다', PD.good[0].score > PD.bad[0].score, true);
+ok('시간대까지 나온다', PD.good[0].hours.length, 2);
+ok('시간에 범위가 적힌다 — ' + PD.good[0].hours[0].label,
+   /\d\d:\d\d~\d\d:\d\d/.test(PD.good[0].hours[0].label), true);
+// 일지를 충하는 날은 무슨 일이든 피해야 한다.
+const clashDay = PD.all.find((x) => x.warn.some((w) => /일지\(내 자리\)를 충/.test(w)));
+if (clashDay) {
+  ok('일지 충일은 아래쪽에 놓인다',
+     PD.all.filter((x) => x.score > clashDay.score).length > PD.all.length / 2, true);
+}
+// 일마다 다른 날을 가리켜야 나눈 뜻이 있다.
+let actDiffer = 0;
+for (let i = 0; i < 30; i++) {
+  const x = E.fullReading({ year: 1955 + i, month: 1 + (i % 12), day: 1 + ((i * 9) % 28),
+    hour: (i * 7) % 24, minute: 0, gender: i % 2 ? '남' : '여', skipLunar: true });
+  if (x.error) continue;
+  const tops = {};
+  Object.keys(E.ACTIVITIES).forEach((k) => {
+    tops[E.pickDays(x, 2026, 10, k, 1, { fromToday: false }).good[0].day] = 1;
+  });
+  if (Object.keys(tops).length >= 3) actDiffer++;
+}
+ok('30명 중 ' + actDiffer + '명은 일마다 세 날 이상으로 갈린다', actDiffer >= 24, true);
+// 지나간 날은 좋은 날로 내밀지 않는다.
+const nowK = new Date(Date.now() + 9 * 3600 * 1000);
+const thisY = nowK.getUTCFullYear(), thisM = nowK.getUTCMonth() + 1, thisD = nowK.getUTCDate();
+const PDnow = E.pickDays(PR, thisY, thisM, '계약', 3);
+ok('오늘 이후만 고른다', PDnow.good.every((x) => x.day >= thisD || x.month > thisM), true);
+
 section('궁합 — 이름이 일지 관계를 덮지 않는가');
 const mk = (y, m, d, h, g, sn, gn) => E.fullReading(
   { year: y, month: m, day: d, hour: h, minute: 0, gender: g, surname: sn, given: gn, skipFortune: true });

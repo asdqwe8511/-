@@ -1,9 +1,13 @@
-# 인기영상 대시보드
+# 사주 앱 + 인기영상 대시보드
 
-YouTube의 국가별 실시간 인기영상과 채널 정보를 보여주는 공개 웹 대시보드입니다.
+생년월일시를 넣으면 사주팔자·오행·대운·시기·이름·궁합·택일을 계산해 주는 공개
+웹 앱입니다. 계산은 전부 브라우저 안에서 끝나고, 글로 풀어 읽는 부분만 서버를
+거쳐 Claude 에게 갑니다.
 
 - 로그인 없이 누구나 바로 볼 수 있습니다.
-- YouTube API 키는 서버(Vercel 환경변수)에만 있고 브라우저에는 절대 노출되지 않습니다.
+- 넣은 생년월일은 서버에 저장하지 않습니다. 휴대폰 안(localStorage)에만 남고
+  언제든 지울 수 있습니다.
+- API 키는 서버(Vercel 환경변수)에만 있고 브라우저에는 절대 노출되지 않습니다.
 
 두 개의 페이지가 한 프로젝트에 들어 있습니다.
 
@@ -19,8 +23,9 @@ YouTube의 국가별 실시간 인기영상과 채널 정보를 보여주는 공
 ```
 index.html              사주·이름 풀이 UI 전체 (사이트 메인)
 youtube.html            인기영상 대시보드 UI 전체
-saju-engine.js          만세력·오행·성명학·궁합 계산 엔진.
+saju-engine.js          만세력·오행·성명학·궁합·택일 계산 엔진.
                          브라우저와 서버가 같은 파일을 씁니다.
+hanja-data.js           한글 음 → 한자 후보표(KS X 1001). 이름 한자 고르기에 씁니다.
 api/saju.js             사주 해석 엔드포인트. 서버가 직접 계산한 뒤 그 결과만
                          Claude 에게 넘기고 응답을 스트리밍합니다. 사용량 제한도 여기서.
 api/yt/[...path].js     YouTube Data API 프록시.
@@ -34,8 +39,12 @@ robots.txt, sitemap.xml 검색 노출
 tools/make-og-saju.py   사주 미리보기 이미지 생성
 tools/make-og.py        대시보드 미리보기 이미지·파비콘 생성
 tools/dev-server.js     PC용 개발 서버
-tools/test-saju.js      만세력·궁합·연락처 계산 점검
-tools/test-quota.js     사용량 제한 점검
+tools/test-saju.js      만세력·궁합·택일·연락처 계산 점검 (218가지)
+tools/test-quota.js     사용량 제한·시간 상한·키 없을 때 안내 점검 (25가지)
+tools/test-browser.js   휴대폰 크기 브라우저에서 화면 점검 (117가지, playwright 필요)
+tools/build-hanja.js    hanja-data.js 를 다시 만드는 스크립트
+tools/calibrate-compat.js   궁합 점수를 백분위로 바꾸는 기준표를 다시 뽑음
+tools/calibrate-pattern.js  드문 사주 구조가 실제로 얼마나 드문지 세어 봄
 vercel.json             깔끔한 URL, /saju → / 리다이렉트, 함수 실행 시간 제한
 ```
 
@@ -78,8 +87,54 @@ ANTHROPIC_API_KEY=sk-ant-...
 YOUTUBE_API_KEY=...
 ```
 
-**키가 없어도 사주표·오행·대운·시기·이름·궁합·연락처 비교는 전부 동작합니다.**
-Claude 가 쓰는 해석 문장만 나오지 않고, 그 자리에 안내와 다시 시도 버튼이 뜹니다.
+**키가 없어도 사주표·오행·대운·시기·이름·궁합·택일·연락처 비교는 전부 동작합니다.**
+Claude 가 쓰는 풀이 문장만 나오지 않고, 그 자리에 무엇을 하면 되는지가 뜹니다.
+
+점검은 이렇게 돌립니다.
+
+```bash
+npm test                     # 계산 점검 (키 없이 됩니다)
+npm i -D playwright          # 화면 점검을 하려면 한 번만
+npm run test:browser         # 개발 서버를 띄워 둔 채로
+```
+
+## 배포에 키 넣기
+
+Vercel 웹 화면에서 넣는 게 가장 간단합니다.
+
+> 프로젝트 → **Settings → Environment Variables** → Add New
+> Name `ANTHROPIC_API_KEY` / Value 발급받은 키 / Production·Preview·Development 모두 체크
+> → **Deployments 에서 Redeploy** (환경변수는 다시 배포해야 적용됩니다)
+
+터미널을 쓴다면 Vercel CLI 로도 됩니다.
+
+```bash
+npm i -g vercel
+vercel login
+vercel link                              # 이 폴더를 Vercel 프로젝트에 연결
+vercel env add ANTHROPIC_API_KEY production
+vercel env add ANTHROPIC_API_KEY preview
+vercel env add ANTHROPIC_API_KEY development
+vercel --prod                            # 다시 배포
+```
+
+`vercel env add` 는 키를 물어보는 칸을 띄웁니다. 거기 붙여넣으면 화면에 찍히지
+않고 바로 Vercel 로 갑니다. **키를 명령줄 인자로 적지 마세요** — 셸 기록에 남습니다.
+
+넣은 뒤 `/api/health` 를 열어 "풀이 문장(Claude)"이 **동작**으로 바뀌었는지 확인합니다.
+`?deep=1` 을 붙이면 키가 실제로 통하는지까지 봅니다(요금이 나가지 않는 호출입니다).
+
+### 함께 넣으면 좋은 것
+
+| 이름 | 없으면 | 어디서 |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | 풀이 문장이 안 나옴 | console.anthropic.com |
+| `UPSTASH_REDIS_REST_URL`·`_TOKEN` | 하루 총량 제한이 안 걸림 | Vercel → Storage → Upstash Redis |
+| `YOUTUBE_API_KEY` | `/youtube` 가 안 됨 | Google Cloud Console |
+| `SAJU_MAX_SECONDS` | 60초로 봄 | 요금제 상한에 맞춰 (Hobby 60 / Pro 300) |
+
+**지출 한도를 먼저 거세요.** console.anthropic.com → Billing → Limits 입니다.
+코드의 사용량 제한은 그 앞단일 뿐이고, 마지막 방어선은 그쪽입니다.
 
 ## 사주·이름 풀이는 어떻게 계산하나
 
