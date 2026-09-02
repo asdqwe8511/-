@@ -167,8 +167,8 @@ server.on('error', (e) => {
 });
 
 server.listen(PORT, () => {
-  console.log('\n  사주·이름 풀이   http://localhost:' + PORT + '/saju');
-  console.log('  인기영상 대시보드 http://localhost:' + PORT + '/\n');
+  console.log('\n  사주 앱           http://localhost:' + PORT + '/');
+  console.log('  인기영상 대시보드 http://localhost:' + PORT + '/youtube\n');
   const missing = [];
   if (!process.env.ANTHROPIC_API_KEY) missing.push('ANTHROPIC_API_KEY (사주 해석 문장)');
   if (!process.env.YOUTUBE_API_KEY) missing.push('YOUTUBE_API_KEY (인기영상 대시보드)');

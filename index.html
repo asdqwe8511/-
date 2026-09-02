@@ -2,9 +2,13 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- 미니앱은 100% 모바일이다. 사용자가 확대·축소로 레이아웃을 고치게 두는 대신
+     처음부터 손가락 크기에 맞춰 놓고, viewport-fit 으로 노치 아래까지 그린다. -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f2f3f7">
+<meta name="format-detection" content="telephone=no,date=no,address=no,email=no">
 <title>사주·이름 풀이</title>
-<meta name="description" content="생년월일시로 사주팔자를 뽑고, 이름의 발음오행과 획수까지 함께 읽어 주는 풀이. 만세력은 천문 계산으로 직접 구합니다.">
+<meta name="description" content="생년월일시로 사주팔자를 뽑고, 이름·궁합·좋은 시기까지 한자리에서. 절기와 진태양시를 반영한 만세력 계산.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="사주·이름 풀이">
 <meta property="og:locale" content="ko_KR">
@@ -22,12 +26,15 @@
 <meta name="twitter:image" content="https://delta-ten-68.vercel.app/og-saju.png?v=1">
 <link rel="canonical" href="https://delta-ten-68.vercel.app/">
 <link rel="icon" type="image/png" href="/favicon.png">
-
 <style>
   :root{
-    --bg:#0e0f13; --panel:#16181f; --panel-2:#1c1f28; --panel-3:#232733;
-    --border:#2a2d38; --text:#f2f3f5; --text-dim:#9298a8; --text-mute:#6b7180;
-    --accent:#7c5cff; --accent-2:#2dd4bf; --danger:#ff5470; --warn:#f0b429;
+    /* 밝은 톤. 배경은 순백이 아니라 살짝 회색을 띤 판이고, 카드가 그 위에 흰색으로
+       뜬다 — 앱스토어가 카드를 구분하는 방식이다. */
+    --bg:#f2f3f7; --panel:#ffffff; --panel-2:#f4f6f9; --panel-3:#eaedf3;
+    --border:#e4e7ee; --text:#14161c; --text-dim:#586074; --text-mute:#8b93a3;
+    --accent:#6b4eff; --accent-2:#0d9488; --danger:#dc2f52; --warn:#b4740b;
+    --shadow-sm:0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.08);
+    --shadow-md:0 4px 12px rgba(16,24,40,.07), 0 2px 4px rgba(16,24,40,.05);
     /* 차트: 오행을 색으로 구분하지 않는다. 청↔적, 적↔황은 색각 이상에서
        구별이 안 되는 조합이라, 오행 이름은 글자로 적고 막대는 한 가지 색조로
        크기만 비교하게 한다. 용신만 다른 색 + '용신' 라벨로 표시한다. */
@@ -38,14 +45,19 @@
     background:var(--bg); color:var(--text);
     font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
     line-height:1.55; overflow-x:hidden;
+    -webkit-text-size-adjust:100%;              /* 가로로 눕혀도 글자 크기가 튀지 않게 */
+    -webkit-tap-highlight-color:rgba(107,78,255,.12);
+    overscroll-behavior-y:contain;              /* 웹뷰에서 당겨서 새로고침이 걸리지 않게 */
   }
   a{color:inherit; text-decoration:none;}
   button{font-family:inherit;}
 
   header.topbar{
     display:flex; align-items:center; justify-content:space-between;
-    padding:14px 28px; border-bottom:1px solid var(--border);
-    background:var(--panel); position:sticky; top:0; z-index:20;
+    padding:calc(12px + env(safe-area-inset-top)) 16px 12px;
+    border-bottom:1px solid var(--border);
+    background:rgba(255,255,255,.92); backdrop-filter:blur(10px);
+    position:sticky; top:0; z-index:20;
   }
   .brand{display:flex; align-items:center; gap:10px; font-weight:700; font-size:18px;}
   .brand-badge{
@@ -60,18 +72,43 @@
   .top-link:hover{border-color:var(--accent); color:var(--text);}
 
   .hero{
-    text-align:center; padding:52px 20px 28px;
-    background:radial-gradient(circle at 50% 0%, rgba(124,92,255,.16), transparent 60%);
+    text-align:center; padding:30px 20px 20px;
+    background:radial-gradient(circle at 50% 0%, rgba(107,78,255,.12), transparent 62%);
   }
-  .hero h1{font-size:34px; font-weight:800; margin-bottom:10px;}
-  .hero p{color:var(--text-dim); font-size:14.5px;}
+  .hero h1{font-size:25px; font-weight:800; margin-bottom:8px; line-height:1.35;}
+  .hero p{color:var(--text-dim); font-size:13.5px; line-height:1.7;}
   .hero .accent{color:var(--accent-2);}
 
-  .container{max-width:1080px; margin:0 auto; padding:0 20px 80px;}
-  .panel{background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:22px;}
-  .panel + .panel{margin-top:18px;}
+  /* 미니앱은 한 손에 들어오는 폭이 기준이다. 넓은 화면에서도 같은 폭을 가운데
+     두어 어디서 열든 같은 앱으로 보이게 한다. */
+  .container{
+    max-width:520px; margin:0 auto; padding:0 16px calc(96px + env(safe-area-inset-bottom));
+    /* 첫 단계는 내용이 짧다. 이만큼은 채워 둬야 하단 고정 버튼 바로 위에
+       푸터의 긴 고지문이 올라붙지 않는다. */
+    min-height:calc(100vh - 250px);
+    min-height:calc(100dvh - 250px);
+  }
+
+  /* 하단 고정 실행 버튼. 손가락이 닿는 자리에 항상 있어야 한다. */
+  .cta-bar{
+    position:fixed; left:0; right:0; bottom:0; z-index:30;
+    padding:12px 16px calc(12px + env(safe-area-inset-bottom));
+    background:linear-gradient(180deg, rgba(242,243,247,0), var(--bg) 32%);
+    pointer-events:none;
+  }
+  .cta-bar .inner{max-width:520px; margin:0 auto; pointer-events:auto;}
+  .cta-bar .submit{box-shadow:0 8px 26px rgba(16,24,40,.14);}
+  .cta-hint{
+    text-align:center; font-size:11.5px; color:var(--text-mute);
+    margin-top:7px; line-height:1.5;
+  }
+  .panel{
+    background:var(--panel); border:1px solid var(--border); border-radius:18px;
+    padding:18px 16px; box-shadow:var(--shadow-sm);
+  }
+  .panel + .panel{margin-top:14px;}
   .panel h2{font-size:17px; margin-bottom:4px;}
-  .panel .sub{font-size:13px; color:var(--text-dim); margin-bottom:16px;}
+  .panel .sub{font-size:12.5px; color:var(--text-dim); margin-bottom:14px; line-height:1.7;}
 
   /* ── 입력 폼 ── */
   .form-grid{display:grid; grid-template-columns:repeat(12,1fr); gap:14px;}
@@ -79,28 +116,37 @@
   .field[hidden]{display:none;}   /* display:flex 가 [hidden] 을 덮어쓰지 않도록 */
   .field label{font-size:12.5px; color:var(--text-dim);}
   .field .hint{font-size:11.5px; color:var(--text-mute);}
+  /* iOS 는 16px 미만 입력에 자동으로 확대를 건다. 화면이 튀지 않게 16px 로 둔다. */
   input[type=text], input[type=number], select{
     background:var(--panel-2); border:1px solid var(--border); color:var(--text);
-    border-radius:9px; padding:10px 12px; font-size:14px; width:100%;
-    font-family:inherit;
+    border-radius:11px; padding:13px 14px; font-size:16px; width:100%;
+    font-family:inherit; min-height:48px; -webkit-appearance:none; appearance:none;
+  }
+  select{
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8'><path d='M1 1l5 5 5-5' stroke='%239298a8' stroke-width='1.6' fill='none' stroke-linecap='round'/></svg>");
+    background-repeat:no-repeat; background-position:right 14px center; padding-right:34px;
   }
   input:focus, select:focus{outline:none; border-color:var(--accent);}
   input::placeholder{color:var(--text-mute);}
   .chips{display:flex; gap:8px; flex-wrap:wrap;}
   .chip{
-    padding:9px 15px; border-radius:20px; border:1px solid var(--border);
-    background:var(--panel-2); color:var(--text-dim); font-size:13px; cursor:pointer;
-    transition:.15s;
+    padding:11px 18px; border-radius:22px; border:1px solid var(--border);
+    background:var(--panel-2); color:var(--text-dim); font-size:14px; cursor:pointer;
+    transition:.15s; min-height:44px;
   }
   .chip:hover{border-color:var(--accent);}
   .chip[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:#fff;}
-  .check{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-dim); cursor:pointer;}
-  .check input{width:16px; height:16px; accent-color:var(--accent);}
-  .submit{
-    background:linear-gradient(135deg,var(--accent),#5b3fd6); border:none; color:#fff;
-    padding:14px 26px; border-radius:11px; font-size:15px; font-weight:700; cursor:pointer;
-    width:100%;
+  .check{
+    display:flex; align-items:center; gap:9px; font-size:14px; color:var(--text-dim);
+    cursor:pointer; min-height:48px; padding:0 2px;
   }
+  .check input{width:20px; height:20px; accent-color:var(--accent); flex:0 0 auto;}
+  .submit{
+    background:linear-gradient(135deg,var(--accent),#553bdb); border:none; color:#fff;
+    padding:17px 24px; border-radius:14px; font-size:16.5px; font-weight:700; cursor:pointer;
+    width:100%; min-height:56px;
+  }
+  .submit:active{transform:scale(.985);}
   .submit:hover{filter:brightness(1.08);}
   .submit:disabled{opacity:.55; cursor:not-allowed;}
   .adv-toggle{
@@ -111,15 +157,15 @@
   .adv.open{display:block;}
   .form-error{
     display:none; margin-top:12px; padding:11px 14px; border-radius:9px;
-    background:rgba(255,84,112,.12); border:1px solid rgba(255,84,112,.4);
-    color:#ffb3c1; font-size:13px;
+    background:rgba(220,47,82,.08); border:1px solid rgba(220,47,82,.35);
+    color:var(--danger); font-size:13px;
   }
   .form-error.show{display:block;}
 
   /* ── 결과 ── */
   #result{display:none; margin-top:22px;}
   #result.show{display:block;}
-  .summary-row{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px;}
+  .summary-row{display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-bottom:16px;}
   .stat{background:var(--panel); border:1px solid var(--border); border-radius:13px; padding:15px 17px;}
   .stat .label{font-size:12px; color:var(--text-dim); margin-bottom:5px;}
   .stat .value{font-size:20px; font-weight:800;}
@@ -127,7 +173,7 @@
 
   .notice{
     display:flex; gap:10px; padding:12px 15px; border-radius:11px; font-size:13px;
-    background:rgba(240,180,41,.1); border:1px solid rgba(240,180,41,.35); color:#f5cd70;
+    background:rgba(180,116,11,.08); border:1px solid rgba(180,116,11,.30); color:var(--warn);
     margin-bottom:16px;
   }
 
@@ -137,7 +183,7 @@
     background:var(--panel-2); border:1px solid var(--border); border-radius:13px;
     padding:14px 10px; text-align:center;
   }
-  .pillar.day{border-color:var(--accent); background:linear-gradient(180deg,rgba(124,92,255,.12),var(--panel-2));}
+  .pillar.day{border-color:var(--accent); background:linear-gradient(180deg,rgba(107,78,255,.09),var(--panel-2));}
   .pillar .pos{font-size:12px; color:var(--text-dim); margin-bottom:9px;}
   .pillar .god{font-size:11.5px; color:var(--accent-2); min-height:17px;}
   .pillar .glyph{
@@ -164,7 +210,7 @@
   .bar-val{font-size:12.5px; color:var(--text-dim); text-align:right;}
   .bar-val b{color:var(--text);}
   .bar-tag{
-    font-size:10.5px; color:#0e0f13; background:var(--bar-strong);
+    font-size:10.5px; color:var(--panel); background:var(--bar-strong);
     border-radius:5px; padding:1px 5px; margin-left:6px; font-weight:700;
   }
   .bar-legend{font-size:12px; color:var(--text-mute); margin-top:10px;}
@@ -183,31 +229,65 @@
     min-width:78px; background:var(--panel-2); border:1px solid var(--border);
     border-radius:11px; padding:11px 8px; text-align:center; flex:0 0 auto;
   }
-  .luck-cell.now{border-color:var(--accent-2); background:rgba(45,212,191,.1);}
+  .luck-cell.now{border-color:var(--accent-2); background:rgba(13,148,136,.08);}
   .luck-cell .age{font-size:11.5px; color:var(--text-dim);}
   .luck-cell .gz{font-size:21px; font-weight:800; margin:4px 0 2px;}
   .luck-cell .tg{font-size:10.5px; color:var(--text-mute); line-height:1.3;}
   .luck-cell.now .age{color:var(--accent-2);}
 
-  .mode-tabs{margin:14px 0 18px;}
+  .mode-tabs{margin:12px 0 16px;}
+
+  /* ── 단계 진행 ──────────────────────────────────────────────────────
+     한 화면에 한 가지만 묻는다. 모바일에서 열두 칸짜리 폼을 한 번에 보여
+     주면 어디부터 채워야 할지 알 수 없고, 키보드가 올라오면 절반이 가린다. */
+  .steps-dots{display:flex; gap:6px; margin-bottom:16px;}
+  .steps-dots i{
+    height:3px; flex:1; border-radius:2px; background:var(--border); transition:.25s;
+  }
+  .steps-dots i.done{background:var(--accent);}
+  .step{display:none;}
+  .step.on{display:block; animation:stepIn .22s ease;}
+  @keyframes stepIn{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:none;}}
+  .step-title{font-size:19px; font-weight:800; margin-bottom:6px;}
+  .step-help{font-size:12.5px; color:var(--text-mute); line-height:1.7; margin-bottom:16px;}
+  .step-nav{display:flex; gap:9px; margin-top:16px;}
+  .step-back{
+    background:var(--panel-2); border:1px solid var(--border); color:var(--text-dim);
+    border-radius:14px; padding:15px 20px; font-size:15px; cursor:pointer;
+    font-family:inherit; min-height:52px; flex:0 0 auto;
+  }
+  .step-back:hover{border-color:var(--accent);}
+  /* 생년월일은 세 칸을 한 줄에 — 스크롤 없이 한눈에 */
+  .ymd{display:grid; grid-template-columns:1.3fr 1fr 1fr; gap:8px;}
+  .hm{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .big-check{
+    display:flex; align-items:center; gap:11px; padding:15px 16px; margin-top:10px;
+    background:var(--panel-2); border:1px solid var(--border); border-radius:13px;
+    font-size:14.5px; color:var(--text-dim); cursor:pointer; min-height:56px;
+  }
+  .big-check input{width:20px; height:20px; accent-color:var(--accent); flex:0 0 auto;}
+  .big-check.on{border-color:var(--accent-2); color:var(--text);}
+  .step-skip{
+    background:none; border:none; color:var(--text-mute); font-size:13px;
+    text-decoration:underline dotted; cursor:pointer; padding:10px 0; font-family:inherit;
+  }
 
   /* 나와 상대를 나란히 둔다. 궁합을 보러 온 사람이 탭을 눌러 찾아 들어가지
      않아도 두 칸이 처음부터 보이도록. 상대는 비워 두면 그냥 내 사주만 나온다. */
-  .pair-forms{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
-  .pair-forms.single{grid-template-columns:1fr;}
+  .pair-forms{display:grid; grid-template-columns:1fr; gap:14px;}
   .person-card[hidden]{display:none;}   /* display 지정이 [hidden] 을 덮지 않도록 */
   .person-card{
     background:var(--panel-2); border:1px solid var(--border);
     border-radius:14px; padding:16px 16px 18px;
   }
   .person-card.optional{border-style:dashed;}
-  .person-card.filled{border-style:solid; border-color:rgba(45,212,191,.45);}
+  .person-card.filled{border-style:solid; border-color:rgba(13,148,136,.40);}
   .person-head{display:flex; align-items:center; gap:9px; margin-bottom:14px; flex-wrap:wrap;}
   .person-badge{
     font-size:13px; font-weight:800; padding:4px 12px; border-radius:8px;
   }
-  .person-badge.me{background:rgba(124,92,255,.18); color:#c9bcff; border:1px solid rgba(124,92,255,.45);}
-  .person-badge.them{background:rgba(45,212,191,.14); color:#8ee8d8; border:1px solid rgba(45,212,191,.4);}
+  .person-badge.me{background:rgba(107,78,255,.12); color:#4c37c4; border:1px solid rgba(107,78,255,.40);}
+  .person-badge.them{background:rgba(13,148,136,.10); color:#0f766e; border:1px solid rgba(13,148,136,.35);}
   .person-note{font-size:11.5px; color:var(--text-mute);}
   .person-foot{font-size:11.5px; color:var(--text-mute); line-height:1.75; margin-top:14px;}
   .person-foot b{color:var(--text-dim);}
@@ -221,9 +301,6 @@
   .person-card .chip{padding:7px 13px; font-size:12.5px;}
   .common-row{margin-top:16px;}
   .common-row .form-grid{grid-template-columns:repeat(12,1fr);}
-  @media(max-width:860px){
-    .pair-forms{grid-template-columns:1fr;}
-  }
   @media(max-width:520px){
     .person-card .form-grid{grid-template-columns:repeat(6,1fr); gap:10px;}
     .person-card .f-third{grid-column:span 2;}
@@ -253,20 +330,20 @@
   }
   .parse-status{font-size:12.5px; color:var(--text-dim); margin-top:10px; line-height:1.7;}
   .parse-status b{color:var(--accent-2);}
-  .parse-status .warn{color:#f5cd70;}
+  .parse-status .warn{color:var(--warn);}
 
   /* 궁합 */
   .compat-head{display:flex; align-items:center; gap:20px; flex-wrap:wrap; margin-bottom:18px;}
   .compat-score{
-    width:104px; height:104px; border-radius:50%; flex:0 0 auto;
+    width:100%; border-radius:16px; flex:0 0 auto; padding:18px 16px;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
-    background:var(--panel-2); border:2px solid var(--accent);
+    background:var(--panel-2); border:2px solid var(--accent); text-align:center;
   }
-  .compat-score .n{font-size:32px; font-weight:800; line-height:1;}
+  .compat-score .n{font-size:22px; font-weight:800; line-height:1.35;}
   .compat-score .u{font-size:11px; color:var(--text-mute); margin-top:3px;}
   .compat-head .desc{flex:1; min-width:220px; font-size:13.5px; color:var(--text-dim); line-height:1.8;}
   .compat-head .desc b{color:var(--text);}
-  .pair-row{display:grid; grid-template-columns:1fr auto 1fr; gap:12px; align-items:center; margin-bottom:18px;}
+  .pair-row{display:grid; grid-template-columns:1fr; gap:10px; align-items:center; margin-bottom:16px;}
   .pair-card{background:var(--panel-2); border:1px solid var(--border); border-radius:12px; padding:13px 15px;}
   .pair-card .who{font-size:12px; color:var(--text-mute); margin-bottom:4px;}
   .pair-card .gz{font-size:20px; font-weight:800;}
@@ -277,10 +354,10 @@
   .axis-track{height:14px; background:var(--panel-2); border-radius:7px;}
   .axis-fill{height:14px; border-radius:4px; background:var(--bar); min-width:3px; transition:width .5s ease;}
   .axis-val{font-size:12.5px; color:var(--text-dim); text-align:right;}
-  .sf-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:20px;}
+  .sf-grid{display:grid; grid-template-columns:1fr; gap:8px; margin-top:18px;}
   .sf-title{font-size:12.5px; margin-bottom:8px; display:flex; align-items:center; gap:5px;}
   .sf-title.good{color:var(--accent-2);}
-  .sf-title.bad{color:#ffb3c1;}
+  .sf-title.bad{color:var(--danger);}
   .sf-item{
     font-size:12.5px; color:var(--text-dim); padding:7px 0;
     border-top:1px solid var(--border); line-height:1.6;
@@ -298,11 +375,11 @@
   .share-note b{color:var(--text-dim);}
   .invite-banner{
     max-width:1080px; margin:0 auto 4px; padding:14px 18px; border-radius:12px;
-    background:rgba(45,212,191,.1); border:1px solid rgba(45,212,191,.35);
-    color:#9fe8c9; font-size:13.5px; line-height:1.75;
+    background:rgba(13,148,136,.08); border:1px solid rgba(13,148,136,.30);
+    color:#0f766e; font-size:13.5px; line-height:1.75;
   }
-  .invite-banner b{color:#d9fff4;}
-  .invite-banner.bad{background:rgba(255,84,112,.1); border-color:rgba(255,84,112,.35); color:#ffb3c1;}
+  .invite-banner b{color:#134e4a;}
+  .invite-banner.bad{background:rgba(220,47,82,.07); border-color:rgba(220,47,82,.30); color:var(--danger);}
 
   /* 여러 명 비교 */
   .batch-summary{font-size:13px; color:var(--text-dim); margin-bottom:14px; line-height:1.8;}
@@ -311,7 +388,7 @@
   table.rank th, table.rank td{padding:9px 10px; border-bottom:1px solid var(--border); text-align:left;}
   table.rank th{color:var(--text-dim); font-weight:600; font-size:11.5px; white-space:nowrap;}
   table.rank td.num, table.rank th.num{text-align:right;}
-  table.rank tr.top td{background:rgba(45,212,191,.07);}
+  table.rank tr.top td{background:rgba(13,148,136,.06);}
   table.rank .who{font-weight:700;}
   table.rank .sub2{font-size:11px; color:var(--text-mute);}
   .mini-bar{display:inline-block; width:52px; height:7px; border-radius:4px; background:var(--panel-2); vertical-align:middle; margin-right:7px;}
@@ -331,7 +408,7 @@
     position:absolute; pointer-events:none; opacity:0; transition:opacity .1s;
     background:var(--panel-3); border:1px solid var(--border); border-radius:9px;
     padding:9px 11px; font-size:12px; white-space:nowrap; z-index:5;
-    box-shadow:0 6px 18px rgba(0,0,0,.4);
+    box-shadow:0 6px 18px rgba(16,24,40,.12);
   }
   .chart-tip.on{opacity:1;}
   .chart-tip .tip-year{font-weight:700; margin-bottom:5px;}
@@ -351,7 +428,7 @@
   .readout .r-item{display:flex; align-items:center; gap:6px;}
   .readout .r-item b{color:var(--text);}
 
-  .domain-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:20px;}
+  .domain-grid{display:grid; grid-template-columns:1fr; gap:12px; margin-top:18px;}
   .domain-card{background:var(--panel-2); border:1px solid var(--border); border-radius:14px; padding:16px;}
   .domain-card h3{font-size:14.5px; display:flex; align-items:center; gap:7px; margin-bottom:2px;}
   .domain-card .card-sub{font-size:11.5px; color:var(--text-mute); margin-bottom:12px;}
@@ -360,7 +437,7 @@
     display:flex; align-items:center; gap:5px;
   }
   .plist-title.good{color:var(--accent-2);}
-  .plist-title.bad{color:#ffb3c1;}
+  .plist-title.bad{color:var(--danger);}
   .period{
     display:grid; grid-template-columns:18px 1fr auto; gap:8px; align-items:start;
     padding:8px 0; border-top:1px solid var(--border);
@@ -373,8 +450,8 @@
     font-size:11px; font-weight:700; padding:2px 7px; border-radius:6px;
     border:1px solid var(--border); color:var(--text-dim); white-space:nowrap;
   }
-  .period.good .pill{color:var(--accent-2); border-color:rgba(45,212,191,.4);}
-  .period.bad .pill{color:#ffb3c1; border-color:rgba(255,84,112,.4);}
+  .period.good .pill{color:var(--accent-2); border-color:rgba(13,148,136,.35);}
+  .period.bad .pill{color:var(--danger); border-color:rgba(220,47,82,.35);}
   .table-wrap{max-height:340px; overflow:auto; margin-top:12px; border:1px solid var(--border); border-radius:10px;}
   table.scores{width:100%; border-collapse:collapse; font-size:12.5px;}
   table.scores th, table.scores td{padding:7px 10px; text-align:right; border-bottom:1px solid var(--border);}
@@ -384,10 +461,10 @@
   }
   table.scores td:first-child, table.scores th:first-child,
   table.scores td:nth-child(3), table.scores th:nth-child(3){text-align:left;}
-  table.scores tr.now td{background:rgba(124,92,255,.12);}
+  table.scores tr.now td{background:rgba(107,78,255,.09);}
 
   /* 이름 */
-  .name-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
+  .name-grid{display:grid; grid-template-columns:1fr; gap:16px;}
   .syls{display:flex; gap:10px; flex-wrap:wrap;}
   .syl{
     background:var(--panel-2); border:1px solid var(--border); border-radius:12px;
@@ -397,29 +474,50 @@
   .syl .meta{font-size:11.5px; color:var(--text-dim); margin-top:3px;}
   .flow{font-size:13px; color:var(--text-dim); margin-top:12px; line-height:1.9;}
   .flow .rel{font-size:11.5px; padding:2px 7px; border-radius:6px; border:1px solid var(--border); margin:0 4px;}
-  .flow .rel.good{color:var(--accent-2); border-color:rgba(45,212,191,.4);}
-  .flow .rel.mid{color:#f5cd70; border-color:rgba(240,180,41,.35);}
-  .flow .rel.bad{color:#ffb3c1; border-color:rgba(255,84,112,.4);}
+  .flow .rel.good{color:var(--accent-2); border-color:rgba(13,148,136,.35);}
+  .flow .rel.mid{color:var(--warn); border-color:rgba(180,116,11,.30);}
+  .flow .rel.bad{color:var(--danger); border-color:rgba(220,47,82,.35);}
   table.frames{width:100%; border-collapse:collapse; font-size:13px; margin-top:6px;}
   table.frames th, table.frames td{
     text-align:left; padding:9px 8px; border-bottom:1px solid var(--border);
   }
   table.frames th{color:var(--text-dim); font-weight:600; font-size:12px;}
   .grade{font-size:11.5px; padding:2px 8px; border-radius:6px; border:1px solid var(--border);}
-  .grade.대길{color:var(--accent-2); border-color:rgba(45,212,191,.45);}
-  .grade.길{color:#9fe8c9; border-color:rgba(159,232,201,.35);}
-  .grade.중길{color:#f5cd70; border-color:rgba(240,180,41,.35);}
-  .grade.흉{color:#ffb3c1; border-color:rgba(255,84,112,.4);}
+  .grade.대길{color:var(--accent-2); border-color:rgba(13,148,136,.40);}
+  .grade.길{color:#0f766e; border-color:rgba(13,148,136,.28);}
+  .grade.중길{color:var(--warn); border-color:rgba(180,116,11,.30);}
+  .grade.흉{color:var(--danger); border-color:rgba(220,47,82,.35);}
+
+  /* 풀이 잠금 카드 — 무료 계산과 유료 풀이의 경계를 눈으로 보이게 */
+  .gate-card{
+    position:relative; border:1px solid var(--border); border-radius:14px;
+    background:var(--panel-2); overflow:hidden;
+  }
+  .gate-lines{padding:18px 18px 0; opacity:.28;}
+  .gate-lines i{
+    display:block; height:9px; border-radius:5px; background:var(--border); margin-bottom:9px;
+  }
+  .gate-lines i:nth-child(1){width:92%;}
+  .gate-lines i:nth-child(2){width:100%;}
+  .gate-lines i:nth-child(3){width:78%;}
+  .gate-lines i:nth-child(4){width:88%;}
+  .gate-body{
+    padding:16px 18px 20px; margin-top:-26px; position:relative;
+    background:linear-gradient(180deg, rgba(244,246,249,0) 0%, var(--panel-2) 34%);
+  }
+  .gate-title{font-size:15.5px; font-weight:700; margin-bottom:7px; padding-top:22px;}
+  .gate-desc{font-size:12.5px; color:var(--text-dim); line-height:1.75; margin-bottom:16px;}
+  .gate-note{font-size:11.5px; color:var(--text-mute); text-align:center; margin-top:9px;}
 
   /* 해석 */
-  #reading{font-size:14.5px; line-height:1.95; color:#e6e8ec;}
-  #reading h3{
+  #readingBox, #creadingBox{font-size:14.5px; line-height:1.95; color:var(--text);}
+  #readingBox h3, #creadingBox h3{
     font-size:15.5px; color:var(--accent-2); margin:22px 0 8px;
     padding-left:11px; border-left:3px solid var(--accent);
   }
-  #reading h3:first-child{margin-top:0;}
-  #reading p{margin-bottom:12px;}
-  #reading strong{color:#fff;}
+  #readingBox h3:first-child, #creadingBox h3:first-child{margin-top:0;}
+  #readingBox p, #creadingBox p{margin-bottom:12px;}
+  #readingBox strong, #creadingBox strong{color:#fff;}
   .typing::after{
     content:'▌'; color:var(--accent); animation:blink 1s steps(2) infinite; margin-left:2px;
   }
@@ -450,10 +548,11 @@
 
   .site-footer{
     border-top:1px solid var(--border); background:var(--panel);
-    padding:34px 20px 26px; margin-top:20px;
+    padding:28px 16px calc(110px + env(safe-area-inset-bottom));  /* 하단 고정 버튼에 가리지 않게 */
+    margin-top:20px;
   }
   .footer-inner{
-    max-width:1080px; margin:0 auto; display:grid; grid-template-columns:1fr 1fr; gap:34px;
+    max-width:520px; margin:0 auto; display:grid; grid-template-columns:1fr; gap:22px;
   }
   .footer-col{font-size:12.5px; color:var(--text-mute); line-height:1.85;}
   .footer-col p{margin-bottom:9px;}
@@ -464,16 +563,12 @@
   }
   .footer-head{font-size:13px; font-weight:700; color:var(--text); margin-bottom:10px;}
   .footer-bottom{
-    max-width:1080px; margin:26px auto 0; padding-top:18px; border-top:1px solid var(--border);
+    max-width:520px; margin:22px auto 0; padding-top:16px; border-top:1px solid var(--border);
     display:flex; gap:18px; flex-wrap:wrap; font-size:12.5px; color:var(--text-mute);
   }
   .footer-bottom a{color:var(--text-dim);}
   .footer-bottom a:hover{color:var(--accent-2);}
   @media(max-width:760px){ .footer-inner{grid-template-columns:1fr; gap:22px;} }
-
-  @media(max-width:900px){
-    .domain-grid{grid-template-columns:1fr;}
-  }
 
   @media(max-width:820px){
     .form-grid{grid-template-columns:repeat(6,1fr);}
@@ -499,186 +594,685 @@
     .pillar{padding:11px 5px;}
     .pillar .glyph{font-size:25px;}
   }
+
+  /* ── 앱 껍데기 ─────────────────────────────────────────────────────────
+     앱스토어처럼: 큰 제목이 맨 위, 내용은 흰 카드, 이동은 하단 탭바. */
+  :root{ --tabbar-h:58px; }
+
+  .app-title-wrap{padding:14px 16px 4px; max-width:520px; margin:0 auto;}
+  .app-title{font-size:29px; font-weight:800; letter-spacing:-.02em; line-height:1.25;}
+  .app-subtitle{font-size:13.5px; color:var(--text-dim); margin-top:5px; line-height:1.65;}
+
+  .tabview{display:none;}
+  .tabview.on{display:block;}
+
+  .tabbar{
+    position:fixed; left:0; right:0; bottom:0; z-index:40; display:flex;
+    background:rgba(255,255,255,.94); backdrop-filter:blur(14px);
+    border-top:1px solid var(--border);
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  .tabbar button{
+    flex:1; background:none; border:none; cursor:pointer; font-family:inherit;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:3px; height:var(--tabbar-h); color:var(--text-mute); font-size:11px; font-weight:600;
+    padding:0; -webkit-tap-highlight-color:transparent;
+  }
+  .tabbar button svg{width:23px; height:23px; stroke:currentColor; fill:none; stroke-width:1.7;}
+  .tabbar button[aria-selected="true"]{color:var(--accent);}
+  .tabbar button:active{opacity:.6;}
+
+  /* 하단 고정 실행 버튼은 탭바 위에 얹는다 */
+  .cta-bar{bottom:calc(var(--tabbar-h) + env(safe-area-inset-bottom));}
+  .container{padding-bottom:calc(96px + var(--tabbar-h) + env(safe-area-inset-bottom));}
+  .site-footer{padding-bottom:calc(40px + var(--tabbar-h) + env(safe-area-inset-bottom));}
+
+  /* 목록 행 — 더보기 탭 */
+  .list-card{
+    background:var(--panel); border:1px solid var(--border); border-radius:16px;
+    box-shadow:var(--shadow-sm); overflow:hidden; margin-bottom:14px;
+  }
+  .list-row{
+    display:flex; align-items:center; gap:13px; padding:15px 16px; cursor:pointer;
+    border-bottom:1px solid var(--border); background:none; border-left:0; border-right:0;
+    border-top:0; width:100%; text-align:left; font-family:inherit; color:var(--text);
+  }
+  .list-row:last-child{border-bottom:none;}
+  .list-row:active{background:var(--panel-2);}
+  .list-icon{
+    width:34px; height:34px; border-radius:10px; flex:0 0 auto;
+    display:flex; align-items:center; justify-content:center; font-size:17px;
+    background:var(--panel-2);
+  }
+  .list-body{flex:1; min-width:0;}
+  .list-title{font-size:14.5px; font-weight:600;}
+  .list-desc{font-size:12px; color:var(--text-mute); margin-top:2px; line-height:1.5;}
+  .list-arrow{color:var(--text-mute); font-size:18px; flex:0 0 auto;}
+
+  /* 저장된 내 정보 카드 */
+  .saved-card{
+    background:linear-gradient(135deg, var(--accent), #553bdb); color:#fff;
+    border-radius:18px; padding:18px 18px 16px; margin-bottom:14px;
+    box-shadow:0 6px 18px rgba(107,78,255,.28);
+  }
+  .saved-card .sc-label{font-size:11.5px; opacity:.82; margin-bottom:5px;}
+  .saved-card .sc-name{font-size:21px; font-weight:800;}
+  .saved-card .sc-meta{font-size:12.5px; opacity:.9; margin-top:5px; line-height:1.6;}
+  .saved-card .sc-actions{display:flex; gap:8px; margin-top:14px;}
+  .saved-card button{
+    background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.3); color:#fff;
+    border-radius:10px; padding:9px 14px; font-size:12.5px; cursor:pointer;
+    font-family:inherit; min-height:40px;
+  }
+  .saved-card button:active{background:rgba(255,255,255,.3);}
+
+  /* 오늘의 운세 — 매일 바뀌므로 앱을 열자마자 맨 위에 둔다 */
+  .today{
+    background:var(--panel); border:1px solid var(--border); border-radius:18px;
+    padding:16px 16px 14px; margin-bottom:14px; box-shadow:var(--shadow-sm);
+  }
+  .today-head{display:flex; align-items:baseline; justify-content:space-between; gap:10px;}
+  .today-date{font-size:12.5px; color:var(--text-dim); font-weight:600;}
+  .today-ganji{font-size:12px; color:var(--text-mute);}
+  .today-grade{font-size:25px; font-weight:800; margin:8px 0 2px; letter-spacing:-.02em;}
+  .today-sub{font-size:13px; color:var(--text-dim); line-height:1.7;}
+  /* 등급은 말이 먼저고 색은 거들 뿐이다. 다섯 단계를 다섯 색으로 칠하면 어느
+     색맹 조합에서도 서로 구분되게 만들 수 없어(특히 주황과 빨강), 색은 두 가지만
+     쓰고 단계는 글씨 굵기로 나눈다. #1c6fb5 ↔ #9b2412 은 적록색약에서도
+     ΔE 23 으로 갈리고, 둘 다 흰 바탕에서 본문 대비 기준을 넘긴다. */
+  .tone-great{color:#1c6fb5; font-weight:800;} .tone-good{color:#1c6fb5;}
+  .tone-mid{color:var(--text);}
+  .tone-care{color:#9b2412;} .tone-bad{color:#9b2412; font-weight:800;}
+  .today-doms{display:grid; grid-template-columns:repeat(3,1fr); gap:7px; margin-top:14px;}
+  .today-dom{
+    background:var(--bg); border-radius:12px; padding:9px 8px; text-align:center;
+  }
+  .today-dom b{display:block; font-size:11.5px; color:var(--text-mute); font-weight:600;}
+  .today-dom span{display:block; font-size:12.5px; font-weight:700; margin-top:4px;}
+  .today-advice{margin-top:14px; display:grid; gap:8px;}
+  .today-advice div{
+    font-size:13px; line-height:1.65; padding:11px 12px; border-radius:12px;
+    background:var(--bg); border-left:3px solid var(--border);
+  }
+  .today-advice .do{border-left-color:#1c6fb5;}
+  .today-advice .dont{border-left-color:#9b2412;}
+  .today-more{
+    margin-top:12px; width:100%; background:none; border:1px solid var(--border);
+    border-radius:12px; padding:11px; font-family:inherit; font-size:13px;
+    color:var(--text-dim); cursor:pointer; min-height:44px;
+  }
+  .today-all{margin-top:12px; display:none;}
+  .today-all.on{display:block;}
+  .today-row{
+    display:flex; justify-content:space-between; align-items:center; gap:10px;
+    padding:10px 2px; border-top:1px solid var(--border); font-size:13.5px;
+  }
+  .today-row b{font-weight:600; color:var(--text-dim);}
+
+  /* 올해 달력 — 아홉 영역의 좋은 달·조심할 달, 그리고 날짜별 */
+  .year-doms{display:grid; gap:8px; margin-top:14px;}
+  .year-dom{
+    display:grid; grid-template-columns:74px 1fr 1fr; gap:8px; align-items:center;
+    background:var(--bg); border-radius:12px; padding:10px 11px;
+  }
+  .year-dom .yd-name{font-size:13px; font-weight:700;}
+  .year-dom .yd-cell{font-size:12px; line-height:1.5;}
+  .year-dom .yd-cell b{display:block; font-size:10.5px; color:var(--text-mute); font-weight:600;}
+  .ym-head{font-size:12.5px; color:var(--text-dim); margin-bottom:8px; font-weight:600;}
+  .ym-chips{gap:6px;}
+  .ym-chips .chip{padding:8px 12px; font-size:13px; min-height:40px;}
+  .cal{margin-top:14px;}
+  .cal-sub{font-size:12px; color:var(--text-mute); line-height:1.6; margin-bottom:10px;}
+  .cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:4px;}
+  .cal-dow{
+    text-align:center; font-size:10.5px; color:var(--text-mute); font-weight:600; padding-bottom:2px;
+  }
+  .cal-day{
+    aspect-ratio:1; border:1px solid var(--border); background:var(--panel); border-radius:10px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+    font-family:inherit; cursor:pointer; padding:0; color:var(--text); min-height:40px;
+  }
+  .cal-day .d{font-size:12.5px; font-weight:600; line-height:1;}
+  .cal-day .m{font-size:8px; line-height:1; letter-spacing:-.03em;}
+  .cal-day.pad{visibility:hidden;}
+  .cal-day[aria-pressed="true"]{border-color:var(--accent); background:rgba(107,78,255,.09);}
+  .cal-pick{
+    margin-top:12px; background:var(--bg); border-radius:14px; padding:13px 14px;
+  }
+  .cal-pick .cp-head{
+    display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin-bottom:8px;
+  }
+  .cal-pick .cp-date{font-size:15px; font-weight:800;}
+  .cal-pick .cp-ganji{font-size:11.5px; color:var(--text-mute);}
+  .cal-pick .cp-rows{display:grid; grid-template-columns:1fr 1fr; gap:5px 12px;}
+  .cal-pick .cp-row{
+    display:flex; justify-content:space-between; gap:8px; font-size:12.5px;
+    padding:4px 0; border-bottom:1px solid var(--border);
+  }
+  .cal-pick .cp-row b{font-weight:600; color:var(--text-dim);}
+  @media (max-width:400px){ .cal-pick .cp-rows{grid-template-columns:1fr;} }
+
+  /* 12운성 — 대운마다 기운이 얼마나 차 있는지 */
+  .stage-wrap{margin-top:18px;}
+  .stage-head{font-size:13px; font-weight:700; margin-bottom:4px;}
+  .stage-sub{font-size:12px; color:var(--text-mute); line-height:1.65; margin-bottom:11px;}
+  .stage-bars{display:flex; gap:3px; align-items:flex-end; height:96px;}
+  .stage-bar{
+    flex:1; display:flex; flex-direction:column; justify-content:flex-end;
+    align-items:center; gap:3px; min-width:0;
+  }
+  .stage-bar .fill{
+    width:100%; background:var(--border); border-radius:5px 5px 0 0; min-height:4px;
+  }
+  .stage-bar.now .fill{background:var(--accent);}
+  .stage-bar .nm{font-size:9px; color:var(--text-mute); letter-spacing:-.04em; white-space:nowrap;}
+  .stage-bar.now .nm{color:var(--accent); font-weight:700;}
+  .stage-axis{display:flex; gap:3px; margin-top:3px;}
+  .stage-axis span{flex:1; text-align:center; font-size:9px; color:var(--text-mute); min-width:0;}
+  .stage-now{
+    margin-top:12px; background:var(--bg); border-radius:12px; padding:12px 13px;
+    font-size:13px; line-height:1.7;
+  }
+  .stage-now b{font-weight:700;}
+  .stage-peak{display:grid; gap:6px; margin-top:9px;}
+  .stage-peak div{
+    font-size:12.5px; line-height:1.6; padding:9px 11px; border-radius:10px; background:var(--bg);
+  }
+
+  /* 용신·희신·기신·구신 — 네 자리 */
+  .roles{display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin-top:12px;}
+  .role{background:var(--bg); border-radius:11px; padding:9px 6px; text-align:center;}
+  .role b{display:block; font-size:10.5px; color:var(--text-mute); font-weight:600;}
+  .role span{display:block; font-size:16px; font-weight:800; margin-top:3px;}
+  .role.good span{color:#1c6fb5;}
+  .role.bad span{color:#9b2412;}
+  .roles-note{font-size:11.5px; color:var(--text-mute); line-height:1.7; margin-top:9px;}
+
+  /* 관계별 궁합 — 애인·직장·친구·가족 */
+  .rel-wrap{margin:16px 0 4px;}
+  .rel-head{font-size:13px; font-weight:700; margin-bottom:9px;}
+  .rel-chips{display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap;}
+  .rel-chips .chip{padding:9px 15px; font-size:13.5px; min-height:42px;}
+  .rel-card{background:var(--bg); border-radius:14px; padding:14px 15px;}
+  .rel-grade{font-size:19px; font-weight:800; letter-spacing:-.02em;}
+  .rel-note{margin-top:11px; display:grid; gap:7px;}
+  .rel-note div{
+    font-size:13px; line-height:1.65; padding:10px 12px; border-radius:11px;
+    background:var(--panel); border-left:3px solid var(--border);
+  }
+  .rel-note .g{border-left-color:#1c6fb5;}
+  .rel-note .b{border-left-color:#9b2412;}
+  .rel-say{margin-top:14px;}
+  .rel-say .rs-head{font-size:12.5px; font-weight:700; color:var(--text-dim); margin-bottom:7px;}
+  .rel-say .rs-item{
+    font-size:13px; line-height:1.65; padding:10px 12px; border-radius:11px;
+    background:var(--bg); margin-bottom:6px;
+  }
+  .rel-say .rs-item b{font-weight:700;}
+
+  /* 한자 고르기 */
+  .hj-syl{margin-top:12px;}
+  .hj-syl-head{font-size:12.5px; color:var(--text-dim); margin-bottom:7px;}
+  .hj-syl-head b{color:var(--text); font-size:15px;}
+  .hj-list{display:flex; flex-wrap:wrap; gap:6px; max-height:168px; overflow-y:auto;
+           padding:2px; -webkit-overflow-scrolling:touch;}
+  .hj-btn{
+    min-width:46px; min-height:46px; border:1px solid var(--border); background:var(--panel);
+    border-radius:11px; font-family:inherit; cursor:pointer; color:var(--text);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px;
+    padding:4px 6px;
+  }
+  .hj-btn .c{font-size:19px; line-height:1;}
+  .hj-btn .n{font-size:9.5px; color:var(--text-mute);}
+  .hj-btn[aria-pressed="true"]{
+    border-color:var(--accent); background:rgba(107,78,255,.09); color:var(--accent);
+  }
+  .hj-btn[aria-pressed="true"] .n{color:var(--accent);}
+  .hj-note{font-size:11.5px; color:var(--text-mute); line-height:1.65; margin-top:10px;}
+
+  /* 비어 있는 탭 안내 */
+  .empty-state{
+    text-align:center; padding:44px 22px; color:var(--text-mute);
+  }
+  .empty-state .es-emoji{font-size:38px; margin-bottom:12px;}
+  .empty-state .es-title{font-size:16px; font-weight:700; color:var(--text); margin-bottom:6px;}
+  .empty-state .es-desc{font-size:13px; line-height:1.75; margin-bottom:18px;}
+  .empty-state .submit{max-width:280px; margin:0 auto;}
+
+  /* 쉬운 말 풀이 — 용어 옆에 붙는 설명 */
+  .plain{
+    background:var(--panel-2); border:1px solid var(--border); border-radius:13px;
+    padding:14px 15px; font-size:13.5px; line-height:1.8; color:var(--text-dim);
+    margin-bottom:14px;
+  }
+  .plain b{color:var(--text);}
+  .plain .big{font-size:15.5px; color:var(--text); font-weight:700; display:block; margin-bottom:7px;}
+  .term{
+    border-bottom:1px dashed var(--text-mute); cursor:help;
+  }
+  .why-box{
+    margin-top:10px; border:1px solid var(--border); border-radius:12px; overflow:hidden;
+  }
+  .why-head{
+    width:100%; background:var(--panel-2); border:none; text-align:left; cursor:pointer;
+    padding:12px 14px; font-size:12.5px; color:var(--text-dim); font-family:inherit;
+    display:flex; align-items:center; justify-content:space-between; min-height:46px;
+  }
+  .why-body{padding:13px 14px; font-size:12.5px; color:var(--text-mute); line-height:1.85;}
+  .why-body[hidden]{display:none;}
 </style>
 </head>
 <body>
 
-<header class="topbar">
-  <div class="brand"><div class="brand-badge">命</div> 사주·이름 풀이</div>
-  <a class="top-link" href="/youtube">인기영상 대시보드 →</a>
-</header>
+<!-- ══ 탭 1 · 내 사주 ══ -->
+<div class="tabview on" id="tabMe">
+  <div class="app-title-wrap">
+    <div class="app-title">내 사주</div>
+    <div class="app-subtitle">태어난 날의 하늘을 여덟 글자로 옮긴 것이 사주입니다.
+      생년월일만 넣으면 바로 나옵니다.</div>
+  </div>
 
-<div class="hero">
-  <h1>사주와 <span class="accent">이름</span>을 함께 읽습니다</h1>
-  <p>내 사주만 볼 수도, <span class="accent">두 사람 궁합</span>까지 볼 수도 있습니다.
-    절기와 진태양시를 반영해 만세력을 직접 계산합니다.</p>
-</div>
+  <div class="container">
+    <div id="inviteNotice"></div>
+    <div id="savedMe"></div>
+    <div id="todayCard"></div>
 
-<div class="container">
+    <section class="panel" id="formPanel">
+      <div class="steps-dots" id="stepDots"><i></i><i></i><i></i></div>
 
-  <!-- ── 입력 ── -->
-  <section class="panel">
-    <h2>사주 보기 · 궁합 보기</h2>
-    <p class="sub">내 생년월일만 넣으면 <b>내 사주</b>를, 상대까지 넣으면 <b>궁합</b>까지 함께 봅니다.
-      이름은 비워도 됩니다. 입력한 정보는 저장되지 않습니다.</p>
+      <form id="form" autocomplete="off" novalidate>
 
-    <div class="chips mode-tabs" id="mode">
-      <button type="button" class="chip" data-v="pair" aria-pressed="true">사주 · 궁합</button>
-      <button type="button" class="chip" data-v="batch" aria-pressed="false">여러 명과 비교</button>
-    </div>
+        <div class="step on" data-step="0">
+          <div class="step-title">언제 태어나셨나요</div>
+          <div class="step-help">사주에서 한 해는 1월 1일이 아니라 <b>입춘</b>에 바뀝니다.
+            2월 초에 태어나셨다면 결과가 예상과 다를 수 있는데, 그게 맞습니다.</div>
 
-    <form id="form" autocomplete="off" novalidate>
-      <div class="pair-forms" id="pairForms">
-
-        <!-- 나 -->
-        <div class="person-card">
-          <div class="person-head">
-            <span class="person-badge me">나</span>
-            <span class="person-note">생년월일은 필수입니다</span>
+          <div class="field">
+            <label>양력 / 음력</label>
+            <div class="chips" id="calendar">
+              <button type="button" class="chip" data-v="양력" aria-pressed="true">양력</button>
+              <button type="button" class="chip" data-v="음력" aria-pressed="false">음력</button>
+            </div>
           </div>
-          <div class="form-grid">
-            <div class="field f-name">
-              <label for="surname">성</label>
-              <input type="text" id="surname" placeholder="김" maxlength="5">
-            </div>
-            <div class="field f-name">
-              <label for="given">이름</label>
-              <input type="text" id="given" placeholder="민준" maxlength="5">
-            </div>
-            <div class="field f-wide">
-              <label for="hanja">한자 표기 <span class="hint">(선택)</span></label>
-              <input type="text" id="hanja" placeholder="金珉俊" maxlength="5">
-            </div>
-            <div class="field f-half">
-              <label>성별 <span class="hint">— 대운 방향</span></label>
-              <div class="chips" id="gender">
-                <button type="button" class="chip" data-v="남" aria-pressed="true">남</button>
-                <button type="button" class="chip" data-v="여" aria-pressed="false">여</button>
-              </div>
-            </div>
-            <div class="field f-half">
-              <label>양력 / 음력</label>
-              <div class="chips" id="calendar">
-                <button type="button" class="chip" data-v="양력" aria-pressed="true">양력</button>
-                <button type="button" class="chip" data-v="음력" aria-pressed="false">음력</button>
-              </div>
-            </div>
-            <div class="field f-third">
-              <label for="year">태어난 해</label>
-              <input type="number" id="year" min="1900" max="2100" placeholder="1990">
-            </div>
-            <div class="field f-third">
-              <label for="month">월</label>
+
+          <div class="field" style="margin-top:14px">
+            <label>생년월일</label>
+            <div class="ymd">
+              <input type="number" id="year" min="1900" max="2100" placeholder="1990" inputmode="numeric">
               <select id="month"></select>
-            </div>
-            <div class="field f-third">
-              <label for="day">일</label>
               <select id="day"></select>
             </div>
-            <div class="field f-wide" id="leapWrap" hidden>
-              <label class="check"><input type="checkbox" id="leapMonth"> 윤달입니다</label>
-            </div>
-            <div class="field f-third">
-              <label for="hour">태어난 시</label>
+          </div>
+
+          <div class="field" id="leapWrap" hidden style="margin-top:6px">
+            <label class="big-check" id="leapMonthBox">
+              <input type="checkbox" id="leapMonth"> 윤달입니다
+            </label>
+          </div>
+        </div>
+
+        <div class="step" data-step="1">
+          <div class="step-title">몇 시에 태어나셨나요</div>
+          <div class="step-help">태어난 시각은 여덟 글자 중 <b>두 글자</b>를 정합니다.
+            모르셔도 괜찮습니다 — 나머지 여섯 글자로 봅니다.</div>
+
+          <div class="field">
+            <label>태어난 시각</label>
+            <div class="hm">
               <select id="hour"></select>
-            </div>
-            <div class="field f-third">
-              <label for="minute">분</label>
-              <input type="number" id="minute" min="0" max="59" value="0">
-            </div>
-            <div class="field f-third">
-              <label>&nbsp;</label>
-              <label class="check"><input type="checkbox" id="noHour"> 시각 모름</label>
+              <input type="number" id="minute" min="0" max="59" value="0" inputmode="numeric" placeholder="분">
             </div>
           </div>
-        </div>
 
-        <!-- 상대 -->
-        <div class="person-card optional" id="partnerBlock">
-          <div class="person-head">
-            <span class="person-badge them">상대</span>
-            <span class="person-note">비워 두면 내 사주만 봅니다</span>
-            <button type="button" class="btn-sm person-clear" id="clearPartner" hidden>지우기</button>
-          </div>
-          <div class="form-grid">
-            <div class="field f-name">
-              <label for="p_surname">성</label>
-              <input type="text" id="p_surname" placeholder="이" maxlength="5">
-            </div>
-            <div class="field f-name">
-              <label for="p_given">이름</label>
-              <input type="text" id="p_given" placeholder="서연" maxlength="5">
-            </div>
-            <div class="field f-half">
-              <label>성별</label>
-              <div class="chips" id="p_gender">
-                <button type="button" class="chip" data-v="여" aria-pressed="true">여</button>
-                <button type="button" class="chip" data-v="남" aria-pressed="false">남</button>
-              </div>
-            </div>
-            <div class="field f-half">
-              <label>양력 / 음력</label>
-              <div class="chips" id="p_calendar">
-                <button type="button" class="chip" data-v="양력" aria-pressed="true">양력</button>
-                <button type="button" class="chip" data-v="음력" aria-pressed="false">음력</button>
-              </div>
-            </div>
-            <div class="field f-third">
-              <label for="p_year">태어난 해</label>
-              <input type="number" id="p_year" min="1900" max="2100" placeholder="1993">
-            </div>
-            <div class="field f-third">
-              <label for="p_month">월</label>
-              <select id="p_month"></select>
-            </div>
-            <div class="field f-third">
-              <label for="p_day">일</label>
-              <select id="p_day"></select>
-            </div>
-            <div class="field f-wide" id="p_leapWrap" hidden>
-              <label class="check"><input type="checkbox" id="p_leapMonth"> 윤달입니다</label>
-            </div>
-            <div class="field f-third">
-              <label for="p_hour">태어난 시</label>
-              <select id="p_hour"></select>
-            </div>
-            <div class="field f-third">
-              <label for="p_minute">분</label>
-              <input type="number" id="p_minute" min="0" max="59" value="0">
-            </div>
-            <div class="field f-third">
-              <label>&nbsp;</label>
-              <label class="check"><input type="checkbox" id="p_noHour"> 시각 모름</label>
-            </div>
-          </div>
-          <p class="person-foot">상대의 태어난 시각을 모르면 <b>시각 모름</b>을 켜 두세요.
-            시주 없이도 궁합은 나오고, 그만큼만 거칠어집니다.
-            출생지와 계산 방식은 아래에서 고른 것을 두 사람 모두에게 씁니다.</p>
-        </div>
-      </div>
+          <label class="big-check" id="noHourBox">
+            <input type="checkbox" id="noHour"> 태어난 시각을 모릅니다
+          </label>
 
-      <!-- 두 사람에게 함께 적용되는 것 -->
-      <div class="common-row" id="commonRow">
-        <div class="form-grid">
-          <div class="field f-city">
-            <label for="city">태어난 곳 <span class="hint">— 진태양시 보정에 씁니다</span></label>
+          <div class="field" style="margin-top:16px">
+            <label for="city">태어난 곳</label>
             <select id="city"></select>
+            <span class="hint">서울은 시계보다 해가 약 32분 늦게 뜹니다. 그만큼 되돌려 계산합니다.</span>
           </div>
-          <div class="field f-full" id="focusWrap">
-            <label>혼자 볼 때 특히 궁금한 것</label>
+        </div>
+
+        <div class="step" data-step="2">
+          <div class="step-title">성별과 이름</div>
+          <div class="step-help">성별에 따라 <b>10년마다 바뀌는 큰 흐름</b>이 도는 방향이 달라집니다.
+            이름을 넣으면 이름의 소리와 획수까지 함께 봅니다 — 비워도 됩니다.</div>
+
+          <div class="field">
+            <label>성별</label>
+            <div class="chips" id="gender">
+              <button type="button" class="chip" data-v="남" aria-pressed="true">남</button>
+              <button type="button" class="chip" data-v="여" aria-pressed="false">여</button>
+            </div>
+          </div>
+
+          <div class="field" style="margin-top:14px">
+            <label>이름 <span class="hint">(선택)</span></label>
+            <div class="hm">
+              <input type="text" id="surname" placeholder="성 (김)" maxlength="5">
+              <input type="text" id="given" placeholder="이름 (민준)" maxlength="5">
+            </div>
+          </div>
+
+          <div class="field" style="margin-top:12px">
+            <label for="hanja">한자 표기 <span class="hint">(선택)</span></label>
+            <input type="text" id="hanja" placeholder="金珉俊" maxlength="5">
+            <button type="button" class="adv-toggle" id="hanjaToggle" style="margin-top:8px" hidden>
+              한자 골라 넣기</button>
+            <div id="hanjaPicker" hidden></div>
+          </div>
+
+          <div class="field" style="margin-top:16px">
+            <label>특히 궁금한 것</label>
             <div class="chips" id="focus">
-              <button type="button" class="chip" data-v="총운" aria-pressed="true">총운</button>
+              <button type="button" class="chip" data-v="총운" aria-pressed="true">전체</button>
               <button type="button" class="chip" data-v="성격" aria-pressed="false">성격</button>
-              <button type="button" class="chip" data-v="직업·적성" aria-pressed="false">직업·적성</button>
-              <button type="button" class="chip" data-v="재물" aria-pressed="false">재물</button>
-              <button type="button" class="chip" data-v="건강" aria-pressed="false">건강</button>
-              <button type="button" class="chip" data-v="인간관계" aria-pressed="false">인간관계</button>
+              <button type="button" class="chip" data-v="직업·적성" aria-pressed="false">일·적성</button>
+              <button type="button" class="chip" data-v="재물" aria-pressed="false">돈</button>
+              <button type="button" class="chip" data-v="건강" aria-pressed="false">몸·리듬</button>
+              <button type="button" class="chip" data-v="인간관계" aria-pressed="false">사람</button>
+            </div>
+          </div>
+
+          <div style="margin-top:14px">
+            <button type="button" class="adv-toggle" id="advToggle">계산 방식 자세히 설정</button>
+            <div class="adv" id="adv">
+              <div class="field">
+                <label class="check">
+                  <input type="checkbox" id="useSolarTime" checked> 진태양시로 보정
+                </label>
+              </div>
+              <div class="field" style="margin-top:10px">
+                <label for="lateNight">밤 11시 이후 날짜 기준</label>
+                <select id="lateNight">
+                  <option value="야자시">23시부터 다음 날 (기본)</option>
+                  <option value="자정">00시부터 다음 날</option>
+                </select>
+              </div>
             </div>
           </div>
         </div>
+
+        <div class="form-error" id="formError"></div>
+        <div class="step-nav">
+          <button type="button" class="step-back" id="stepBack" hidden>이전</button>
+        </div>
+      </form>
+    </section>
+
+    <div id="result">
+      <div id="boundaryNotice"></div>
+      <div id="plainSummary"></div>
+      <div class="summary-row" id="summary"></div>
+<section class="panel" id="chartPanel">
+      <h2>사주팔자</h2>
+      <p class="sub" id="chartSub"></p>
+      <div class="pillars" id="pillars"></div>
+      <div class="kv" id="chartTags"></div>
+    </section>
+<section class="panel" id="elemPanel">
+      <h2>오행의 균형</h2>
+      <p class="sub">천간·지지 여덟 글자를 오행으로 세고, 지지 속 지장간까지 배당 일수만큼 나눠 담은 값입니다.</p>
+      <div class="bars" id="bars"></div>
+      <p class="bar-legend">막대 길이는 그 기운의 양입니다. 청록색 막대는 지금 사주에 필요하다고 본 기운(용신)입니다.</p>
+      <div id="rolesBlock"></div>
+    </section>
+<section class="panel" id="luckPanel">
+      <h2>대운 — 10년 단위의 흐름</h2>
+      <p class="sub" id="luckSub"></p>
+      <div class="luck-scroll"><div class="luck-row" id="luckRow"></div></div>
+      <div id="stageBlock"></div>
+    </section>
+<section class="panel" id="yearPanel" hidden>
+      <h2 id="yearTitle">올해는 어떤 해인가</h2>
+      <p class="sub" id="yearSub"></p>
+
+      <div class="year-doms" id="yearDoms"></div>
+
+      <div style="margin-top:18px">
+        <div class="ym-head">달을 눌러 날짜별로 보기</div>
+        <div class="chips ym-chips" id="monthChips"></div>
+      </div>
+      <div id="monthView"></div>
+    </section>
+<section class="panel" id="fortunePanel">
+      <h2>언제가 좋고, 언제를 조심할까</h2>
+      <p class="sub">해마다 드는 세운을 원국·대운에 얹어 돈·건강·관계 세 갈래로 점수를 냅니다.
+        점수는 <b>이 사람의 일생 안에서의 상대 비교</b>이지, 남과 견주는 값이 아닙니다.
+        세 갈래가 같은 해를 가리키는 일이 잦은데, 원국을 잘 받쳐 주는 해는 대체로 전반이
+        함께 좋아지기 때문입니다. 차이는 주로 조심할 시기 쪽에서 갈립니다.</p>
+
+      <div class="chips range-chips" id="fortuneRange">
+        <button type="button" class="chip" data-v="30" aria-pressed="true">앞으로 30년</button>
+        <button type="button" class="chip" data-v="life" aria-pressed="false">전 생애</button>
       </div>
 
-      <!-- 연락처 (여러 명과 비교) -->
+      <div class="chart-wrap" id="chartWrap">
+        <svg id="timeline" viewBox="0 0 900 250" role="img" aria-label="연도별 재물·건강·관계 운세 점수"></svg>
+        <div class="chart-tip" id="chartTip"></div>
+      </div>
+      <div class="legend" id="legend"></div>
+      <div class="readout" id="chartReadout"></div>
+
+      <div class="domain-grid" id="domains"></div>
+
+      <div style="margin-top:16px">
+        <button type="button" class="adv-toggle" id="tableToggle">연도별 점수 표로 보기</button>
+        <div class="table-wrap" id="scoreTable" hidden></div>
+      </div>
+    </section>
+<section class="panel" id="namePanel">
+      <h2>이름 풀이</h2>
+      <p class="sub" id="nameSub"></p>
+      <div class="name-grid">
+        <div>
+          <div class="syls" id="syls"></div>
+          <div class="flow" id="flow"></div>
+        </div>
+        <div>
+          <p class="hint" id="suriNote" style="margin-bottom:8px; color:var(--text-mute); font-size:11.5px; line-height:1.6"></p>
+          <table class="frames">
+            <thead><tr><th>격</th><th>획수</th><th>시기</th><th>수리</th></tr></thead>
+            <tbody id="frames"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="kv" id="nameTags"></div>
+    </section>
+    <section class="panel" id="readingPanel" hidden>
+      <h2>글로 풀어 읽기</h2>
+      <p class="sub">위 계산은 여기까지 전부 무료입니다. 아래는 그 결과를 <b>이어서 글로 읽어 주는</b> 부분입니다.</p>
+      <div id="readingGate">
+        <div class="gate-card">
+          <div class="gate-lines"><i></i><i></i><i></i><i></i></div>
+          <div class="gate-body">
+            <div class="gate-title" id="readingGateTitle"></div>
+            <div class="gate-desc" id="readingGateDesc"></div>
+            <button type="button" class="submit" id="readingStart">풀이 받기</button>
+            <div class="gate-note">약 30초 걸립니다.</div>
+          </div>
+        </div>
+      </div>
+      <div id="readingBox"></div>
+      <div class="reading-status" id="readingStatus"></div>
+    </section>
+<div class="disclaimer">
+      만세력(간지·절기·음력)은 천문 계산으로 구한 값이라 재현 가능합니다. 반면 신강·신약 판정, 용신 선택,
+      성명학의 수리 길흉, 그리고 <b>연도별 운세 점수</b>는 유파마다 기준이 다른 <b>해석의 영역</b>이며,
+      이 페이지는 그중 널리 쓰이는 한 가지 방식을 수치로 옮긴 것입니다.
+      '조심할 시기'는 나쁜 일이 예정돼 있다는 뜻이 아니라, 무리한 확장이나 성급한 결정을 미루어 두면
+      좋을 구간이라는 뜻입니다.
+      풀이는 재미와 자기 이해를 위한 참고 자료로 봐 주세요. 의료·법률·투자 판단의 근거로 쓰지 마시고,
+      건강이 걱정된다면 의료기관을 찾아 주세요.
+    </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 탭 2 · 궁합 ══ -->
+<div class="tabview" id="tabCompat">
+  <div class="app-title-wrap">
+    <div class="app-title">궁합</div>
+    <div class="app-subtitle">두 사람의 타고난 자리를 견줍니다.
+      맞고 틀리고가 아니라, 어디서 맞물리고 어디서 어긋나는지를 봅니다.</div>
+  </div>
+
+  <div class="container">
+    <div id="compatNeedMe"></div>
+
+    <div id="compatForm" hidden>
+      <div id="savedMeMini"></div>
+
+      <section class="panel">
+        <h2>상대는 어떤 분인가요</h2>
+        <p class="sub">생년월일만 있으면 됩니다. 태어난 시각과 이름은 알면 더 자세해집니다.</p>
+
+        <div class="field">
+          <label>양력 / 음력</label>
+          <div class="chips" id="p_calendar">
+            <button type="button" class="chip" data-v="양력" aria-pressed="true">양력</button>
+            <button type="button" class="chip" data-v="음력" aria-pressed="false">음력</button>
+          </div>
+        </div>
+
+        <div class="field" style="margin-top:14px">
+          <label>생년월일</label>
+          <div class="ymd">
+            <input type="number" id="p_year" min="1900" max="2100" placeholder="1993" inputmode="numeric">
+            <select id="p_month"></select>
+            <select id="p_day"></select>
+          </div>
+        </div>
+
+        <div class="field" id="p_leapWrap" hidden style="margin-top:6px">
+          <label class="big-check"><input type="checkbox" id="p_leapMonth"> 윤달입니다</label>
+        </div>
+
+        <div class="field" style="margin-top:14px">
+          <label>태어난 시각</label>
+          <div class="hm">
+            <select id="p_hour"></select>
+            <input type="number" id="p_minute" min="0" max="59" value="0" inputmode="numeric" placeholder="분">
+          </div>
+        </div>
+        <label class="big-check" id="p_noHourBox">
+          <input type="checkbox" id="p_noHour"> 상대의 시각을 모릅니다
+        </label>
+
+        <div class="field" style="margin-top:14px">
+          <label>성별</label>
+          <div class="chips" id="p_gender">
+            <button type="button" class="chip" data-v="여" aria-pressed="true">여</button>
+            <button type="button" class="chip" data-v="남" aria-pressed="false">남</button>
+          </div>
+        </div>
+
+        <div class="field" style="margin-top:14px">
+          <label>이름 <span class="hint">(선택)</span></label>
+          <div class="hm">
+            <input type="text" id="p_surname" placeholder="성 (이)" maxlength="5">
+            <input type="text" id="p_given" placeholder="이름 (서연)" maxlength="5">
+          </div>
+        </div>
+
+        <div class="form-error" id="compatError"></div>
+      </section>
+
+      <div id="compatResult">
+        <div id="compatPlain"></div>
+<section class="panel" id="compatPanel" hidden>
+      <h2>궁합</h2>
+      <p class="sub" id="compatSub"></p>
+
+      <div class="compat-head">
+        <div class="compat-score"><div class="n" id="compatScore">–</div><div class="u">두 사주의 배치</div></div>
+        <div class="desc" id="compatDesc"></div>
+      </div>
+
+      <div class="pair-row" id="pairRow"></div>
+
+      <div id="relBlock"></div>
+
+      <div id="axes"></div>
+      <p class="bar-legend">막대 길이는 그 축이 얼마나 받쳐 주는지를 나타냅니다.
+        위의 한 줄 평가는 네 축을 함께 본 뒤, 무작위로 짝지은 48,180쌍과 견주어 어디쯤인지를
+        말로 옮긴 것입니다. 사람을 점수로 매기는 값이 아니라 두 사주의 배치를 견준 결과입니다.</p>
+
+      <div class="sf-grid">
+        <div>
+          <div class="sf-title good">▲ 잘 맞는 지점</div>
+          <div id="compatStrengths"></div>
+        </div>
+        <div>
+          <div class="sf-title bad">▼ 부딪히기 쉬운 지점</div>
+          <div id="compatFrictions"></div>
+        </div>
+      </div>
+    </section>
+    <section class="panel" id="creadingPanel" hidden>
+      <h2>글로 풀어 읽기</h2>
+      <p class="sub">위 계산은 무료입니다. 아래는 두 사람을 <b>이어서 글로 읽어 주는</b> 부분입니다.</p>
+      <div id="creadingGate">
+        <div class="gate-card">
+          <div class="gate-lines"><i></i><i></i><i></i><i></i></div>
+          <div class="gate-body">
+            <div class="gate-title" id="creadingGateTitle"></div>
+            <div class="gate-desc" id="creadingGateDesc"></div>
+            <button type="button" class="submit" id="creadingStart">풀이 받기</button>
+            <div class="gate-note">약 30초 걸립니다.</div>
+          </div>
+        </div>
+      </div>
+      <div id="creadingBox"></div>
+      <div class="reading-status" id="creadingStatus"></div>
+    </section>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 탭 3 · 더보기 ══ -->
+<div class="tabview" id="tabMore">
+  <div class="app-title-wrap">
+    <div class="app-title">더보기</div>
+  </div>
+
+  <div class="container">
+    <div class="list-card">
+      <button type="button" class="list-row" data-go="batch">
+        <span class="list-icon">👥</span>
+        <span class="list-body">
+          <span class="list-title">여러 명과 한 번에 비교</span>
+          <span class="list-desc">연락처를 불러와 나와 잘 맞는 순서로</span>
+        </span>
+        <span class="list-arrow">›</span>
+      </button>
+      <button type="button" class="list-row" data-go="share">
+        <span class="list-icon">🔗</span>
+        <span class="list-body">
+          <span class="list-title">궁합 링크 보내기</span>
+          <span class="list-desc">내 사주를 담은 링크로 상대가 바로 확인</span>
+        </span>
+        <span class="list-arrow">›</span>
+      </button>
+      <button type="button" class="list-row" data-go="reset">
+        <span class="list-icon">🗑️</span>
+        <span class="list-body">
+          <span class="list-title">저장된 정보 지우기</span>
+          <span class="list-desc">이 휴대폰에 저장된 사주를 지웁니다</span>
+        </span>
+        <span class="list-arrow">›</span>
+      </button>
+    </div>
+
+    <div id="moreNeedMe"></div>
+
+<section class="panel" id="batchPanel" hidden>
+      <h2>여러 명과 한 번에 비교</h2>
+      <p class="sub">연락처를 불러오면 저장된 생일과 내 사주를 하나씩 견줘 순서대로 보여 줍니다.</p>
+      <button type="button" class="adv-toggle" id="batchToggle">연락처 불러오기</button>
       <div class="sub-block" id="batchBlock" hidden>
         <div class="sub-block-head">비교할 사람들</div>
         <p class="sub-block-note">
@@ -700,79 +1294,15 @@
         </div>
         <div class="parse-status" id="parseStatus"></div>
       </div>
-
-      <div style="margin-top:14px">
-        <button type="button" class="adv-toggle" id="advToggle">계산 방식 자세히 설정</button>
-        <div class="adv" id="adv">
-          <div class="form-grid">
-            <div class="field f-adv">
-              <label class="check">
-                <input type="checkbox" id="useSolarTime" checked>
-                진태양시로 보정 <span class="hint">(경도차 + 균시차)</span>
-              </label>
-              <span class="hint">한국 표준시는 동경 135° 기준이라, 서울은 실제 태양시보다 약 32분 빠릅니다. 끄면 시계 시각을 그대로 씁니다.</span>
-            </div>
-            <div class="field f-adv">
-              <label for="lateNight">밤 11시 이후 일주 기준</label>
-              <select id="lateNight">
-                <option value="야자시">야자시 — 23시부터 다음 날 일주 (기본)</option>
-                <option value="자정">자정 — 00시부터 다음 날 일주</option>
-              </select>
-              <span class="hint">유파에 따라 다릅니다. 밤 11시~자정 사이 출생만 결과가 달라집니다.</span>
-            </div>
-          </div>
-        </div>
+      <div id="batchRun" hidden style="margin-top:14px">
+        <button type="button" class="submit" id="batchBtn">전부 비교하기</button>
       </div>
-
-      <div class="form-error" id="formError"></div>
-      <div style="margin-top:18px"><button type="submit" class="submit" id="submitBtn">사주 뽑고 풀이 받기</button></div>
-    </form>
-  </section>
-
-  <div id="inviteNotice"></div>
-
-  <!-- ── 결과 ── -->
-  <div id="result">
-    <div id="boundaryNotice"></div>
-
-    <div class="summary-row" id="summary"></div>
-
-    <section class="panel" id="chartPanel">
-      <h2>사주팔자</h2>
-      <p class="sub" id="chartSub"></p>
-      <div class="pillars" id="pillars"></div>
-      <div class="kv" id="chartTags"></div>
-    </section>
-
-    <section class="panel" id="compatPanel" hidden>
-      <h2>궁합</h2>
-      <p class="sub" id="compatSub"></p>
-
-      <div class="compat-head">
-        <div class="compat-score"><div class="n" id="compatScore">–</div><div class="u">궁합 점수</div></div>
-        <div class="desc" id="compatDesc"></div>
-      </div>
-
-      <div class="pair-row" id="pairRow"></div>
-
-      <div id="axes"></div>
-      <p class="bar-legend">네 축은 각각 0~100입니다. 위의 궁합 점수는 이 네 축을 가중평균한 뒤,
-        무작위로 짝지은 48,180쌍의 분포에 견주어 환산한 값입니다 — 70이면 "무작위로 만난 상대
-        100명 중 상위 30번째"라는 뜻입니다.</p>
-
-      <div class="sf-grid">
-        <div>
-          <div class="sf-title good">▲ 잘 맞는 지점</div>
-          <div id="compatStrengths"></div>
-        </div>
-        <div>
-          <div class="sf-title bad">▼ 부딪히기 쉬운 지점</div>
-          <div id="compatFrictions"></div>
-        </div>
+      <div id="batchResult" hidden>
+        <div class="batch-summary" id="batchSummary"></div>
+        <div class="rank-wrap"><table class="rank" id="rankTable"></table></div>
       </div>
     </section>
-
-    <section class="panel" id="sharePanel" hidden>
+<section class="panel" id="sharePanel" hidden>
       <h2>궁합 링크 보내기</h2>
       <p class="sub">내 사주를 담은 링크를 만들어 상대에게 보내면, 상대가 자기 생년월일만 넣고
         바로 궁합을 볼 수 있습니다. 카카오톡·문자 어디에 붙여넣어도 됩니다.</p>
@@ -801,90 +1331,40 @@
       </div>
     </section>
 
-    <section class="panel" id="batchPanel" hidden>
-      <h2>나와 잘 맞는 순서</h2>
-      <p class="sub" id="batchSub"></p>
-      <div class="batch-summary" id="batchSummary"></div>
-      <div class="rank-wrap"><table class="rank" id="rankTable"></table></div>
-    </section>
-
-    <section class="panel" id="elemPanel">
-      <h2>오행의 균형</h2>
-      <p class="sub">천간·지지 여덟 글자를 오행으로 세고, 지지 속 지장간까지 배당 일수만큼 나눠 담은 값입니다.</p>
-      <div class="bars" id="bars"></div>
-      <p class="bar-legend">막대 길이는 그 기운의 양입니다. 청록색 막대는 지금 사주에 필요하다고 본 기운(용신)입니다.</p>
-    </section>
-
-    <section class="panel" id="luckPanel">
-      <h2>대운 — 10년 단위의 흐름</h2>
-      <p class="sub" id="luckSub"></p>
-      <div class="luck-scroll"><div class="luck-row" id="luckRow"></div></div>
-    </section>
-
-    <section class="panel" id="fortunePanel">
-      <h2>언제가 좋고, 언제를 조심할까</h2>
-      <p class="sub">해마다 드는 세운을 원국·대운에 얹어 돈·건강·관계 세 갈래로 점수를 냅니다.
-        점수는 <b>이 사람의 일생 안에서의 상대 비교</b>이지, 남과 견주는 값이 아닙니다.
-        세 갈래가 같은 해를 가리키는 일이 잦은데, 원국을 잘 받쳐 주는 해는 대체로 전반이
-        함께 좋아지기 때문입니다. 차이는 주로 조심할 시기 쪽에서 갈립니다.</p>
-
-      <div class="chips range-chips" id="fortuneRange">
-        <button type="button" class="chip" data-v="30" aria-pressed="true">앞으로 30년</button>
-        <button type="button" class="chip" data-v="life" aria-pressed="false">전 생애</button>
-      </div>
-
-      <div class="chart-wrap" id="chartWrap">
-        <svg id="timeline" viewBox="0 0 900 250" role="img" aria-label="연도별 재물·건강·관계 운세 점수"></svg>
-        <div class="chart-tip" id="chartTip"></div>
-      </div>
-      <div class="legend" id="legend"></div>
-      <div class="readout" id="chartReadout"></div>
-
-      <div class="domain-grid" id="domains"></div>
-
-      <div style="margin-top:16px">
-        <button type="button" class="adv-toggle" id="tableToggle">연도별 점수 표로 보기</button>
-        <div class="table-wrap" id="scoreTable" hidden></div>
-      </div>
-    </section>
-
-    <section class="panel" id="namePanel">
-      <h2>이름 풀이</h2>
-      <p class="sub" id="nameSub"></p>
-      <div class="name-grid">
-        <div>
-          <div class="syls" id="syls"></div>
-          <div class="flow" id="flow"></div>
-        </div>
-        <div>
-          <p class="hint" id="suriNote" style="margin-bottom:8px; color:var(--text-mute); font-size:11.5px; line-height:1.6"></p>
-          <table class="frames">
-            <thead><tr><th>격</th><th>획수</th><th>시기</th><th>수리</th></tr></thead>
-            <tbody id="frames"></tbody>
-          </table>
-        </div>
-      </div>
-      <div class="kv" id="nameTags"></div>
-    </section>
-
-    <section class="panel" id="readingPanel">
-      <h2>풀이</h2>
-      <p class="sub">위 계산 결과를 바탕으로 Claude 가 사주와 이름을 이어서 읽습니다.</p>
-      <div id="reading"></div>
-      <div class="reading-status" id="readingStatus"></div>
-    </section>
-
-    <div class="disclaimer">
-      만세력(간지·절기·음력)은 천문 계산으로 구한 값이라 재현 가능합니다. 반면 신강·신약 판정, 용신 선택,
-      성명학의 수리 길흉, 그리고 <b>연도별 운세 점수</b>는 유파마다 기준이 다른 <b>해석의 영역</b>이며,
-      이 페이지는 그중 널리 쓰이는 한 가지 방식을 수치로 옮긴 것입니다.
-      '조심할 시기'는 나쁜 일이 예정돼 있다는 뜻이 아니라, 무리한 확장이나 성급한 결정을 미루어 두면
-      좋을 구간이라는 뜻입니다.
-      풀이는 재미와 자기 이해를 위한 참고 자료로 봐 주세요. 의료·법률·투자 판단의 근거로 쓰지 마시고,
-      건강이 걱정된다면 의료기관을 찾아 주세요.
+    <div class="list-card">
+      <a class="list-row" href="/youtube">
+        <span class="list-icon">▶️</span>
+        <span class="list-body">
+          <span class="list-title">인기영상 대시보드</span>
+          <span class="list-desc">같은 사이트의 다른 페이지</span>
+        </span>
+        <span class="list-arrow">›</span>
+      </a>
     </div>
   </div>
 </div>
+
+<div class="cta-bar" id="ctaBar">
+  <div class="inner">
+    <button type="submit" form="form" class="submit" id="submitBtn">다음</button>
+    <div class="cta-hint" id="ctaHint"></div>
+  </div>
+</div>
+
+<nav class="tabbar" id="tabbar">
+  <button type="button" data-tab="tabMe" aria-selected="true">
+    <svg viewBox="0 0 24 24"><path d="M12 3l7 4v6c0 4-3 7-7 8-4-1-7-4-7-8V7z" stroke-linejoin="round"/></svg>
+    내 사주
+  </button>
+  <button type="button" data-tab="tabCompat" aria-selected="false">
+    <svg viewBox="0 0 24 24"><circle cx="9" cy="9" r="3.2"/><circle cx="16" cy="15" r="3.2"/><path d="M11 11.5l3 2" stroke-linecap="round"/></svg>
+    궁합
+  </button>
+  <button type="button" data-tab="tabMore" aria-selected="false">
+    <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none"/></svg>
+    더보기
+  </button>
+</nav>
 
 <footer class="site-footer">
   <div class="footer-inner">
@@ -918,8 +1398,8 @@
     <a href="https://github.com/asdqwe8511/-" target="_blank" rel="noopener">소스 코드</a>
   </div>
 </footer>
-
 <script src="/saju-engine.js"></script>
+<script src="/hanja-data.js"></script>
 <script>
 (function () {
   'use strict';
@@ -977,79 +1457,215 @@
   });
 
   // ── 모드 ────────────────────────────────────────────────────────────
-  // 화면 모드는 둘뿐이다: 사주·궁합(pair) / 여러 명과 비교(batch).
-  // pair 안에서 혼자 볼지 궁합을 볼지는 탭이 아니라 "상대 칸을 채웠는가"로 갈린다.
+  // ── 탭 ───────────────────────────────────────────────────────────────
+  var TABS = ['tabMe', 'tabCompat', 'tabMore'];
+  var tab = 'tabMe';
+
+  function switchTab(next) {
+    tab = next;
+    TABS.forEach(function (t) { $(t).classList.toggle('on', t === next); });
+    Array.prototype.forEach.call($('tabbar').children, function (b) {
+      b.setAttribute('aria-selected', String(b.dataset.tab === next));
+    });
+    // 실행 버튼은 탭마다 하는 일이 다르다.
+    $('ctaBar').hidden = (next === 'tabMore');
+    if (next === 'tabMe') renderStep();
+    if (next === 'tabCompat') refreshCompatTab();
+    if (next === 'tabMore') refreshMoreTab();
+    window.scrollTo({ top: 0 });
+  }
+  $('tabbar').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-tab]');
+    if (b) switchTab(b.dataset.tab);
+  });
+
+  // ── 이 휴대폰에만 저장 ─────────────────────────────────────────────────
+  // 계정도 서버도 없다. 다음에 열었을 때 다시 입력하지 않아도 되게만 한다.
+  var STORE_KEY = 'saju.me.v1';
+  var savedMe = null;
+
+  function loadSaved() {
+    try {
+      var raw = localStorage.getItem(STORE_KEY);
+      savedMe = raw ? JSON.parse(raw) : null;
+    } catch (e) { savedMe = null; }
+    return savedMe;
+  }
+  function saveMe(input) {
+    savedMe = input;
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(input)); } catch (e) {}
+    renderSavedCards();
+  }
+  function clearMe() {
+    savedMe = null;
+    myReading = null;
+    fortuneState.reading = null;
+    try { localStorage.removeItem(STORE_KEY); } catch (e) {}
+    renderSavedCards();
+    $('result').classList.remove('show');
+    PANELS.solo.forEach(function (id) { var el = $(id); if (el) el.hidden = true; });
+    $('formPanel').hidden = false;
+    $('compatPanel').hidden = true;
+    goStep(0);
+    $('todayCard').innerHTML = '';
+    refreshCompatTab();
+    refreshMoreTab();
+    switchTab('tabMe');
+  }
+  function savedLabel(s) {
+    if (!s) return '';
+    var name = (s.surname && s.given) ? s.surname + s.given : '내 사주';
+    var when = s.year + '.' + s.month + '.' + s.day +
+      (s.hour === null || s.hour === undefined ? ' (시각 모름)' : ' ' + s.hour + '시');
+    return { name: name, when: (s.calendar === '음력' ? '음력 ' : '') + when + ' · ' + s.gender };
+  }
+
+  function renderSavedCards() {
+    var box = $('savedMe'), mini = $('savedMeMini');
+    if (!savedMe) { box.innerHTML = ''; mini.innerHTML = ''; return; }
+    var L = savedLabel(savedMe);
+    box.innerHTML =
+      '<div class="saved-card"><div class="sc-label">저장된 내 사주</div>' +
+      '<div class="sc-name">' + esc(L.name) + '</div>' +
+      '<div class="sc-meta">' + esc(L.when) + '</div>' +
+      '<div class="sc-actions">' +
+        '<button type="button" id="savedAgain">다시 보기</button>' +
+        '<button type="button" id="savedEdit">고치기</button>' +
+      '</div></div>';
+    mini.innerHTML =
+      '<div class="saved-card" style="padding:14px 16px"><div class="sc-label">내 사주</div>' +
+      '<div class="sc-name" style="font-size:17px">' + esc(L.name) + '</div>' +
+      '<div class="sc-meta">' + esc(L.when) + '</div></div>';
+    var again = document.getElementById('savedAgain');
+    if (again) again.onclick = function () { applySaved(savedMe); submitAll(); };
+    var edit = document.getElementById('savedEdit');
+    if (edit) edit.onclick = function () {
+      applySaved(savedMe);
+      $('result').classList.remove('show');
+      $('formPanel').hidden = false;
+      goStep(0);
+    };
+    $('formPanel').hidden = true;
+  }
+
+  function applySaved(s) {
+    if (!s) return;
+    setChip('calendar', s.calendar);
+    $('year').value = s.year; $('month').value = String(s.month); $('day').value = String(s.day);
+    $('leapWrap').hidden = (s.calendar !== '음력');
+    $('leapMonth').checked = !!s.leapMonth;
+    var noH = (s.hour === null || s.hour === undefined);
+    $('noHour').checked = noH;
+    $('noHour').dispatchEvent(new Event('change'));
+    if (!noH) { $('hour').value = String(s.hour); $('minute').value = String(s.minute || 0); }
+    setChip('gender', s.gender);
+    $('surname').value = s.surname || ''; $('given').value = s.given || '';
+    $('hanja').value = s.hanja || '';
+    if (s.longitude) $('city').value = String(s.longitude);
+  }
+  function setChip(groupId, value) {
+    Array.prototype.forEach.call($(groupId).querySelectorAll('.chip'), function (c) {
+      c.setAttribute('aria-pressed', String(c.dataset.v === value));
+    });
+  }
+
+  // ── 단계 진행 (내 사주 탭) ─────────────────────────────────────────────
+  var stepIndex = 0;
+
   var PANELS = {
-    solo:   ['chartPanel', 'elemPanel', 'luckPanel', 'fortunePanel', 'namePanel', 'sharePanel', 'readingPanel'],
-    compat: ['chartPanel', 'compatPanel', 'sharePanel', 'readingPanel'],
-    batch:  ['chartPanel', 'batchPanel']
+    solo: ['chartPanel', 'elemPanel', 'luckPanel', 'yearPanel', 'fortunePanel',
+           'namePanel', 'readingPanel'],
+    more: ['batchPanel', 'sharePanel']
   };
-  var ALL_PANELS = ['chartPanel', 'compatPanel', 'batchPanel', 'elemPanel', 'luckPanel',
-                    'fortunePanel', 'namePanel', 'sharePanel', 'readingPanel'];
-  var tab = 'pair';
-
-  function partnerFilled() {
-    var y = parseInt($('p_year').value, 10);
-    return !!(y && y >= 1900 && y <= 2100);
-  }
-  function effectiveMode() {
-    if (tab === 'batch') return 'batch';
-    return partnerFilled() ? 'compat' : 'solo';
+  function showPanels() {
+    PANELS.solo.concat(PANELS.more).forEach(function (id) {
+      var el = $(id); if (el) el.hidden = false;
+    });
   }
 
-  // 상대 칸 상태에 따라 버튼 문구와 카드 테두리를 바꿔, 무엇이 나올지 미리 알린다.
-  function refreshPairState() {
-    var filled = partnerFilled();
-    $('partnerBlock').classList.toggle('filled', filled);
-    $('clearPartner').hidden = !filled;
-    $('focusWrap').style.opacity = filled ? .45 : 1;
-    if (tab === 'pair') {
-      $('submitBtn').textContent = filled ? '두 사람 궁합 보기' : '내 사주 보기';
+  function stepEls() { return Array.prototype.slice.call($('formPanel').querySelectorAll('.step')); }
+
+  function renderStep() {
+    if (tab !== 'tabMe') return;
+    var els = stepEls();
+    if ($('formPanel').hidden) { $('ctaBar').hidden = true; return; }
+    $('ctaBar').hidden = false;
+    els.forEach(function (el, i) { el.classList.toggle('on', i === stepIndex); });
+    Array.prototype.forEach.call($('stepDots').children, function (d, i) {
+      d.classList.toggle('done', i <= stepIndex);
+    });
+    $('stepBack').hidden = (stepIndex === 0);
+    var last = (stepIndex === els.length - 1);
+    $('submitBtn').textContent = last ? '내 사주 보기' : '다음';
+    $('ctaHint').textContent = last
+      ? '계산은 이 휴대폰 안에서 끝납니다. 서버로 보내지 않습니다.'
+      : (stepIndex + 1) + ' / ' + els.length;
+    if ($('formPanel').getBoundingClientRect().top < 0) {
+      $('formPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }
 
-  function showPanels(mode) {
-    var show = PANELS[mode] || [];
-    ALL_PANELS.forEach(function (id) {
-      var el = $(id);
-      if (el) el.hidden = show.indexOf(id) < 0;
-    });
+  function validateStep(i) {
+    if (i === 0) {
+      var y = parseInt($('year').value, 10);
+      if (!y || y < 1900 || y > 2100) return '태어난 해를 1900~2100 사이로 넣어 주세요.';
+      if (getCalendar() === '음력' && $('leapMonth').checked) {
+        var leaps = E.leapMonthsOf(y) || [];
+        if (leaps.indexOf(parseInt($('month').value, 10)) < 0) {
+          return y + '년에는 윤' + $('month').value + '월이 없습니다.';
+        }
+      }
+    }
+    if (i === 2) {
+      var s = $('surname').value.trim(), g = $('given').value.trim();
+      if ((s && !g) || (!s && g)) return '성과 이름을 함께 넣거나, 둘 다 비워 주세요.';
+      if (s && !/^[가-힣]{1,5}$/.test(s + g)) return '이름은 한글로만 넣어 주세요.';
+      var hj = $('hanja').value.trim();
+      if (hj && !/^[㐀-䶿一-鿿]{1,5}$/.test(hj)) return '한자 표기에는 한자만 넣어 주세요.';
+    }
+    return null;
   }
 
-  function applyTab(next) {
-    tab = next;
-    // 여러 명과 비교할 때도 기준이 되는 내 사주는 있어야 한다 — 상대 칸만 접는다.
-    var batch = (tab === 'batch');
-    $('partnerBlock').hidden = batch;
-    $('pairForms').classList.toggle('single', batch);
-    $('batchBlock').hidden = !batch;
-    $('focusWrap').hidden = batch;
-    if (batch) $('submitBtn').textContent = '전부 비교하기';
-    else refreshPairState();
-    showPanels(effectiveMode());
+  function goStep(next) {
+    showError('');
+    stepIndex = Math.max(0, Math.min(stepEls().length - 1, next));
+    renderStep();
+  }
+  $('stepBack').addEventListener('click', function () { goStep(stepIndex - 1); });
+
+  ['noHour', 'p_noHour', 'leapMonth'].forEach(function (id) {
+    var box = $(id + 'Box');
+    var el = $(id);
+    if (!el) return;
+    el.addEventListener('change', function () { if (box) box.classList.toggle('on', this.checked); });
+  });
+
+  // ── 더보기 탭의 이동 ───────────────────────────────────────────────────
+  // 여러 명 비교와 링크 보내기는 둘 다 내 사주를 밑감으로 쓴다. 저장된 사주가
+  // 없으면 패널을 열어 봤자 빈 화면이므로, 먼저 넣으라고 안내한다.
+  function refreshMoreTab() {
+    var has = !!myReading;
+    PANELS.more.forEach(function (id) { var el = $(id); if (el) el.hidden = !has; });
+    $('moreNeedMe').innerHTML = has ? '' :
+      '<div class="empty-state"><div class="es-emoji">🧭</div>' +
+      '<div class="es-title">먼저 내 사주를 넣어 주세요</div>' +
+      '<div class="es-desc">여러 명과 비교하거나 링크를 보내려면<br>내 사주가 먼저 있어야 합니다.</div>' +
+      '<button type="button" class="submit" id="goMe2">내 사주 넣으러 가기</button></div>';
+    var go2 = document.getElementById('goMe2');
+    if (go2) go2.onclick = function () { switchTab('tabMe'); };
   }
 
-  $('mode').addEventListener('click', function (e) {
-    var btn = e.target.closest('.chip');
-    if (!btn) return;
-    Array.prototype.forEach.call(this.querySelectorAll('.chip'), function (c) {
-      c.setAttribute('aria-pressed', String(c === btn));
-    });
-    applyTab(btn.dataset.v);
-  });
-
-  ['p_year', 'p_month', 'p_day'].forEach(function (id) {
-    $(id).addEventListener('input', refreshPairState);
-    $(id).addEventListener('change', refreshPairState);
-  });
-  $('clearPartner').addEventListener('click', function () {
-    ['p_surname', 'p_given', 'p_year'].forEach(function (id) { $(id).value = ''; });
-    $('p_month').value = '1'; $('p_day').value = '1';
-    $('p_hour').value = '12'; $('p_minute').value = '0';
-    $('p_leapMonth').checked = false;
-    $('p_noHour').checked = false;
-    $('p_noHour').dispatchEvent(new Event('change'));
-    refreshPairState();
+  $('tabMore').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-go]');
+    if (!b) return;
+    var go = b.dataset.go;
+    if (go === 'reset') {
+      if (window.confirm('이 휴대폰에 저장된 사주를 지울까요?')) clearMe();
+      return;
+    }
+    if (!myReading) return switchTab('tabMe');
+    $(go === 'batch' ? 'batchPanel' : 'sharePanel')
+      .scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 
   // ── 연락처 읽기 ──────────────────────────────────────────────────────
@@ -1108,7 +1724,9 @@
       ['일간 — 나를 뜻하는 글자', p.day.stem + '(' + p.day.hanja.charAt(0) + ')',
        a.dayMaster.elem + ' · ' + (a.dayMaster.yang ? '양' : '음')],
       ['기운의 세기', a.strength.replace(/\(.*\)/, ''),
-       '일간을 돕는 힘 ' + Math.round(a.strengthRatio * 100) + '%'],
+       a.strengthRatio >= 0.6 ? '뿌리가 단단한 편' :
+       a.strengthRatio >= 0.45 ? '받쳐 주는 힘이 있는 편' :
+       a.strengthRatio >= 0.35 ? '받쳐 주는 힘이 얕은 편' : '기대는 자리가 필요한 편'],
       ['필요한 기운(용신)', a.primaryYongsin + '(' + E.ELEM_H[a.primaryYongsin] + ')',
        a.yongsin.join(' → ')]
     ].map(function (s) {
@@ -1182,6 +1800,39 @@
         '<div class="bar-val"><b>' + v.toFixed(1) + '</b>' + (need ? '<span class="bar-tag">용신</span>' : '') + '</div>' +
       '</div>';
     }).join('');
+    renderRoles(r);
+  }
+
+  // ── 용신·희신·기신·구신 ─────────────────────────────────────────────────
+  // 용신 하나만 말하면 "그럼 나머지는?"이 남는다. 용신을 정하면 나머지 네
+  // 자리도 따라서 정해지므로 넷을 같이 보여 준다.
+  function renderRoles(r) {
+    var a = r.analysis, f = a.fiveRoles;
+    var cells = [
+      { k: '용신', v: f.용신, cls: 'good', why: '지금 나에게 가장 필요한 기운' },
+      { k: '희신', v: f.희신, cls: 'good', why: '용신을 도와주는 기운' },
+      { k: '기신', v: f.기신, cls: 'bad',  why: '용신을 깨뜨리는 기운' },
+      { k: '구신', v: f.구신, cls: 'bad',  why: '기신을 도와주는 기운' }
+    ];
+    var have = a.yongsinHave;
+    var b1 = hasBatchim(f.용신);
+    var haveText = have.strong
+      ? '용신 ' + esc(f.용신) + (b1 ? '은' : '는') + ' 이미 사주 안에 넉넉히 있습니다. 쓸 줄만 알면 되는 자리예요.'
+      : have.present
+        ? '용신 ' + esc(f.용신) + (b1 ? '이' : '가') + ' 사주 안에 있긴 하지만 두껍지는 않습니다. 밖에서 끌어와 보태면 좋습니다.'
+        : '용신 ' + esc(f.용신) + (b1 ? '이' : '가') + ' 사주 안에 거의 없습니다. 타고나기보다 살면서 채워 넣어야 하는 자리예요.';
+
+    var pf = E.ELEM_PROFILE[f.용신];
+    $('rolesBlock').innerHTML =
+      '<div class="roles">' + cells.map(function (c) {
+        return '<div class="role ' + c.cls + '" title="' + esc(c.why) + '">' +
+          '<b>' + esc(c.k) + '</b><span>' + esc(c.v) + '</span></div>';
+      }).join('') + '</div>' +
+      '<div class="roles-note">' + haveText +
+        (pf ? '<br>' + esc(f.용신) + ' 기운은 <b>' + esc(pf.color) + '</b>, <b>' + esc(pf.dir) +
+              '</b>, 숫자 <b>' + pf.nums.join('·') + '</b>에 붙습니다. ' + esc(pf.life) + '.' : '') +
+        '<br>희신은 용신을 도와주고, 기신은 용신을 깨뜨리고, 구신은 그 기신을 도와줍니다.' +
+      '</div>';
   }
 
   function renderLuck(r) {
@@ -1197,6 +1848,51 @@
         '<div class="tg">' + esc(l.tenGod.replace('/', ' · ')) + '</div>' +
       '</div>';
     }).join('');
+    renderStages(r);
+  }
+
+  // ── 12운성 — 대운마다 기운이 얼마나 차 있는가 ───────────────────────────
+  // 사주에서 힘의 세기는 점수가 아니라 한살이에 빗댄 열두 단계로 말한다.
+  // 막대 높이는 그 단계의 세기이고, 아래에 그 단계 이름을 그대로 적는다.
+  function renderStages(r) {
+    var ls;
+    try { ls = E.luckStages(r); }
+    catch (err) { $('stageBlock').innerHTML = ''; return; }
+
+    var bars = ls.list.map(function (L) {
+      return '<div class="stage-bar' + (L.current ? ' now' : '') + '">' +
+        '<span class="nm">' + esc(L.stage) + '</span>' +
+        '<span class="fill" style="height:' + Math.round(L.power * 0.62) + 'px"></span>' +
+        '</div>';
+    }).join('');
+    var axis = ls.list.map(function (L) {
+      return '<span>' + Math.floor(L.ageFrom) + '</span>';
+    }).join('');
+
+    var now = ls.current
+      ? '<div class="stage-now">지금은 <b>' + esc(ls.current.hanja) + ' 대운</b>, ' +
+        '열두 단계로는 <b>' + esc(ls.current.stage) + '</b>입니다 — ' + esc(ls.current.plain) + '.</div>'
+      : '';
+    var peak = '';
+    if (ls.peak && ls.trough && ls.peak.order !== ls.trough.order) {
+      peak = '<div class="stage-peak">' +
+        '<div>앞으로 20년 중 기운이 가장 높은 때는 <b>' + ls.peak.yearFrom + '~' + ls.peak.yearTo +
+          '년</b>(' + esc(ls.peak.hanja) + ' · ' + esc(ls.peak.stage) + ')입니다.</div>' +
+        '<div>가장 낮은 때는 <b>' + ls.trough.yearFrom + '~' + ls.trough.yearTo +
+          '년</b>(' + esc(ls.trough.hanja) + ' · ' + esc(ls.trough.stage) + ')입니다. ' +
+          '나쁜 일이 정해졌다는 뜻이 아니라, 벌이기보다 지킬 때라는 뜻이에요.</div>' +
+        '</div>';
+    }
+
+    $('stageBlock').innerHTML =
+      '<div class="stage-wrap">' +
+        '<div class="stage-head">기운의 오르내림 (12운성)</div>' +
+        '<div class="stage-sub">태어나 자라고 저물었다 다시 태어나는 열두 단계로, ' +
+          '대운마다 내 기운이 어디쯤 차 있는지를 봅니다. 아래 숫자는 나이예요.</div>' +
+        '<div class="stage-bars">' + bars + '</div>' +
+        '<div class="stage-axis">' + axis + '</div>' +
+        now + peak +
+      '</div>';
   }
 
   function renderName(r) {
@@ -1246,12 +1942,36 @@
     }).join('');
   }
 
+  // ── 점수를 말로 ──────────────────────────────────────────────────────
+  //
+  // 계산은 안에서 0~100 으로 하되 화면에는 숫자를 내지 않는다. 건강이나 사람
+  // 사이를 숫자로 매겨 보여 주면, 읽는 사람이 그것을 측정값으로 받아들이기
+  // 쉽다. 실제로는 유파 하나를 수치로 옮긴 해석일 뿐이다.
+  var FLOW_GRADES = [
+    [82, '아주 좋은 편'], [64, '좋은 편'], [42, '무난한 편'],
+    [24, '조금 눌리는 편'], [0, '많이 눌리는 편']
+  ];
+  var PAIR_GRADES = [
+    [85, '드물게 잘 맞는 편'], [70, '잘 맞는 편'], [55, '무난한 편'],
+    [40, '보통'], [25, '맞춰가야 하는 편'], [0, '많이 다른 편']
+  ];
+  var AXIS_GRADES = [
+    [78, '아주 강함'], [60, '강한 편'], [42, '보통'], [25, '약한 편'], [0, '많이 약함']
+  ];
+  function gradeBy(table, v) {
+    for (var i = 0; i < table.length; i++) if (v >= table[i][0]) return table[i][1];
+    return table[table.length - 1][1];
+  }
+  var flowGrade = function (v) { return gradeBy(FLOW_GRADES, v); };
+  var pairGrade = function (v) { return gradeBy(PAIR_GRADES, v); };
+  var axisGrade = function (v) { return gradeBy(AXIS_GRADES, v); };
+
   // ── 운세 시기 ────────────────────────────────────────────────────────
   // 세 계열은 색만으로 구분하지 않는다. 선 끝에 이름을 직접 달고 범례도 함께 두어,
   // 색을 구분하기 어려운 사람도 어느 선이 무엇인지 읽을 수 있게 한다.
   var SERIES = [
     { key: 'money',    label: '재물', color: '#3987e5' },
-    { key: 'health',   label: '건강', color: '#d95926' },
+    { key: 'health',   label: '몸·리듬', color: '#d95926' },
     { key: 'relation', label: '관계', color: '#199e70' }
   ];
   var DOMAIN_ICON = { money: '💰', health: '🌿', relation: '🤝' };
@@ -1296,9 +2016,10 @@
 
     var out = [];
     // 눈금은 뒤로 물러나 있어야 한다 — 데이터가 주인공이다.
-    [0, 50, 100].forEach(function (v) {
+    [[100, '높음'], [50, '보통'], [0, '낮음']].forEach(function (g) {
+      var v = g[0];
       out.push('<line class="chart-grid" x1="' + padL + '" y1="' + y(v) + '" x2="' + (W - padR) + '" y2="' + y(v) + '"/>');
-      out.push('<text class="chart-axis" x="' + (padL - 7) + '" y="' + (y(v) + 3.5) + '" text-anchor="end">' + v + '</text>');
+      out.push('<text class="chart-axis" x="' + (padL - 7) + '" y="' + (y(v) + 3.5) + '" text-anchor="end">' + g[1] + '</text>');
     });
     var step = Math.max(1, Math.round(n / 8));
     for (var i = 0; i < n; i += step) {
@@ -1351,7 +2072,7 @@
   function drawLegend() {
     $('legend').innerHTML = SERIES.map(function (s) {
       return '<span class="item"><span class="swatch" style="background:' + s.color + '"></span>' + s.label + '</span>';
-    }).join('') + '<span class="item legend-note">100에 가까울수록 이 사람의 일생 중 좋은 편</span>';
+    }).join('') + '<span class="item legend-note">위로 갈수록 이 사람의 일생 중 힘이 실리는 때</span>';
   }
 
   // 차트 아래 고정 판독 줄. 좁은 화면에서는 떠 있는 툴팁이 그래프를 통째로
@@ -1363,7 +2084,7 @@
       '<span>만 ' + row.age + '세 · ' + esc(row.seun) + (row.daeun ? ' · 대운 ' + esc(row.daeun) : '') + '</span>' +
       SERIES.map(function (s) {
         return '<span class="r-item"><span class="swatch" style="background:' + s.color + '"></span>' +
-               s.label + ' <b>' + row[s.key] + '</b></span>';
+               s.label + ' <b>' + esc(flowGrade(row[s.key])) + '</b></span>';
       }).join('');
   }
   function defaultReadoutRow() {
@@ -1396,7 +2117,7 @@
       (row.daeun ? ' <span style="color:var(--text-mute)">대운 ' + esc(row.daeun) + '</span>' : '') + '</div>' +
       SERIES.map(function (s) {
         return '<div class="tip-row"><span class="swatch" style="background:' + s.color + '"></span>' +
-               s.label + '<b>' + row[s.key] + '</b></div>';
+               s.label + '<b>' + esc(flowGrade(row[s.key])) + '</b></div>';
       }).join('');
     tip.classList.add('on');
     var wrap = $('chartWrap').getBoundingClientRect();
@@ -1432,7 +2153,7 @@
           (p.daeun ? ' · 대운 ' + esc(p.daeun) : '') + '</div>' +
         (p.reasons.length ? '<div class="why">' + esc(p.reasons.join(' · ')) + '</div>' : '') +
       '</span>' +
-      '<span class="pill">' + p.score + '</span>' +
+      '<span class="pill">' + esc(flowGrade(p.score)) + '</span>' +
     '</div>';
   }
 
@@ -1442,24 +2163,25 @@
       var goodList = d.best.map(function (p, i) { return periodHtml(p, 'good', i + 1); }).join('');
       var badList = d.worst.map(function (p, i) { return periodHtml(p, 'bad', i + 1); }).join('');
       var sub = s.key === 'money' ? '재성·식상이 어떻게 드는가'
-              : s.key === 'health' ? '일간의 균형이 흔들리는가'
+              : s.key === 'health' ? '일간의 균형이 흔들리는가 — 생활 리듬의 이야기입니다'
               : '관성·인성과 합충이 어떻게 드는가';
       return '<div class="domain-card">' +
         '<h3><span class="swatch" style="background:' + s.color + '"></span>' + DOMAIN_ICON[s.key] + ' ' + s.label + '</h3>' +
         '<div class="card-sub">' + sub + '</div>' +
-        '<div class="plist-title good">▲ 좋은 시기 TOP 3</div>' + goodList +
-        '<div class="plist-title bad">▼ 조심할 시기 TOP 3</div>' + badList +
+        '<div class="plist-title good">▲ 힘이 실리는 시기</div>' + goodList +
+        '<div class="plist-title bad">▼ 속도를 늦출 시기</div>' + badList +
       '</div>';
     }).join('');
   }
 
   function drawScoreTable() {
     var thisYear = new Date().getFullYear();
-    var head = '<tr><th>연도</th><th>만나이</th><th>세운</th><th>재물</th><th>건강</th><th>관계</th></tr>';
+    var head = '<tr><th>연도</th><th>만나이</th><th>세운</th><th>재물</th><th>몸·리듬</th><th>관계</th></tr>';
     var body = fortuneState.rows.map(function (r) {
       return '<tr' + (r.year === thisYear ? ' class="now"' : '') + '>' +
         '<td>' + r.year + '</td><td>' + r.age + '</td><td>' + esc(r.seun) + '</td>' +
-        '<td>' + r.money + '</td><td>' + r.health + '</td><td>' + r.relation + '</td></tr>';
+        '<td>' + esc(flowGrade(r.money)) + '</td><td>' + esc(flowGrade(r.health)) +
+        '</td><td>' + esc(flowGrade(r.relation)) + '</td></tr>';
     }).join('');
     $('scoreTable').innerHTML = '<table class="scores"><thead>' + head + '</thead><tbody>' + body + '</tbody></table>';
   }
@@ -1509,10 +2231,60 @@
     }).join('');
   }
 
-  function streamReading(payload) {
-    var box = $('reading'), status = $('readingStatus');
+  // 계산은 원가가 들지 않지만 풀이 한 번은 실제 요금이 나간다. 그래서 결과가
+  // 나오자마자 자동으로 부르지 않고, 사용자가 원할 때만 부른다. 결제를 붙일 때는
+  // 아래 start 핸들러 앞에 확인만 끼우면 되고, 계산 결과는 그대로 무료로 남는다.
+  //
+  // 내 사주 탭과 궁합 탭이 각자 풀이 칸을 갖는다. 한 벌을 옮겨 다니게 하면
+  // 탭을 오갈 때 앞서 읽던 글이 사라진다.
+  var READERS = {
+    solo:   { panel: 'readingPanel',  gate: 'readingGate',  box: 'readingBox',
+              status: 'readingStatus', title: 'readingGateTitle', desc: 'readingGateDesc',
+              start: 'readingStart' },
+    compat: { panel: 'creadingPanel', gate: 'creadingGate', box: 'creadingBox',
+              status: 'creadingStatus', title: 'creadingGateTitle', desc: 'creadingGateDesc',
+              start: 'creadingStart' }
+  };
+  var lastPayload = null;
+
+  function prepareReading(payload) {
+    var r = READERS[payload.mode === 'compat' ? 'compat' : 'solo'];
+    $(r.panel).hidden = false;
+    $(r.box).innerHTML = '';
+    $(r.status).innerHTML = '';
+    $(r.gate).hidden = false;
+    var compat = payload.mode === 'compat';
+    $(r.title).textContent = compat
+      ? '두 사람을 이어서 읽어 드립니다'
+      : '사주와 이름을 이어서 읽어 드립니다';
+    $(r.desc).textContent = compat
+      ? '무엇이 서로를 당기고 어디서 부딪히는지, 오래 가져가려면 무엇을 조심하면 좋은지 이어서 읽습니다.'
+      : '어떤 기질을 타고났는지, 지금 무엇이 모자라고 무엇이 넉넉한지, 이름이 거기에 어떻게 얹히는지 이어서 읽습니다.';
+  }
+
+  Object.keys(READERS).forEach(function (k) {
+    var r = READERS[k];
+    $(r.start).addEventListener('click', function () {
+      if (!lastPayload) return;
+      $(r.gate).hidden = true;
+      streamReading(lastPayload, r);
+    });
+  });
+
+  function markdownToHtml(md) {
+    return md.split(/\n{2,}/).map(function (block) {
+      var b2 = block.trim();
+      if (!b2) return '';
+      if (/^##\s+/.test(b2)) return '<h3>' + esc(b2.replace(/^##\s+/, '')) + '</h3>';
+      var html = esc(b2).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+      return '<p>' + html + '</p>';
+    }).join('');
+  }
+
+  function streamReading(payload, r) {
+    var box = $(r.box), status = $(r.status);
     box.innerHTML = ''; box.classList.add('typing');
-    status.innerHTML = '<div class="spinner"></div><span>사주와 이름을 읽는 중입니다… 30초쯤 걸립니다.</span>';
+    status.innerHTML = '<div class="spinner"></div><span>읽는 중입니다… 30초쯤 걸립니다.</span>';
 
     fetch('/api/saju', {
       method: 'POST',
@@ -1522,22 +2294,16 @@
       if (!res.ok) {
         return res.json().then(function (j) {
           var err = new Error((j.error && j.error.message) || ('요청이 실패했습니다 (' + res.status + ')'));
-          err.status = res.status;
-          throw err;
+          err.status = res.status; throw err;
         }, function () {
           var err = new Error('요청이 실패했습니다 (' + res.status + ')');
-          err.status = res.status;
-          throw err;
+          err.status = res.status; throw err;
         });
       }
       var reader = res.body.getReader(), decoder = new TextDecoder(), acc = '';
       function pump() {
         return reader.read().then(function (chunk) {
-          if (chunk.done) {
-            box.classList.remove('typing');
-            status.innerHTML = '';
-            return;
-          }
+          if (chunk.done) { box.classList.remove('typing'); status.innerHTML = ''; return; }
           acc += decoder.decode(chunk.value, { stream: true });
           box.innerHTML = markdownToHtml(acc);
           status.innerHTML = '<div class="spinner"></div><span>이어서 쓰는 중…</span>';
@@ -1547,34 +2313,171 @@
       return pump();
     }).catch(function (err) {
       box.classList.remove('typing');
-      // 사용량 상한(429)은 고장이 아니라 안내다. 붉은 경고로 띄우면 뭔가
-      // 잘못한 것처럼 읽힌다.
       var quota = err.status === 429;
-      status.innerHTML = '<span style="color:' + (quota ? 'var(--warn)' : '#ffb3c1') + '">' +
+      status.innerHTML = '<span style="color:' + (quota ? 'var(--warn)' : 'var(--danger)') + '">' +
         esc(err.message) + '</span>';
       if (!quota) {
         var btn = document.createElement('button');
         btn.className = 'retry-btn'; btn.textContent = '다시 시도';
-        btn.onclick = function () { streamReading(lastPayload); };
+        btn.onclick = function () { streamReading(lastPayload, r); };
         status.appendChild(document.createElement('br'));
         status.appendChild(btn);
       }
     });
   }
 
-  // ── 궁합 ─────────────────────────────────────────────────────────────
+  // ── 쉬운 말 ──────────────────────────────────────────────────────────
+  //
+  // 사주 용어는 그대로 두면 아무 말도 전하지 못한다. "경금 일간 신강" 은
+  // 배운 사람에게만 문장이고, 나머지에게는 암호다. 그래서 결과 맨 위에
+  // 용어 없는 한 문단을 두고, 원래 용어는 접어서 아래에 붙인다.
+  var ELEM_STORY = {
+    목: { thing: '나무', force: '위로 자라려는 힘', color: '푸른색', dir: '동쪽' },
+    화: { thing: '불',   force: '환하게 퍼지는 힘', color: '붉은색', dir: '남쪽' },
+    토: { thing: '흙',   force: '품고 버티는 힘',   color: '노란색', dir: '가운데' },
+    금: { thing: '쇠',   force: '단단하게 다듬는 힘', color: '흰색', dir: '서쪽' },
+    수: { thing: '물',   force: '스며들어 흐르는 힘', color: '검은색', dir: '북쪽' }
+  };
+  var STRENGTH_STORY = [
+    [0.60, '혼자서도 버티는 힘이 넉넉한 편이에요.'],
+    [0.45, '스스로 서는 힘이 어느 정도 있는 편이에요.'],
+    [0.35, '기댈 곳이 있으면 훨씬 잘 풀리는 편이에요.'],
+    [0,    '주변이 받쳐 줄 때 힘이 크게 나는 편이에요.']
+  ];
+
+  function renderPlainSummary(r) {
+    var a = r.analysis;
+    var me = ELEM_STORY[a.dayMaster.elem];
+    var yong = ELEM_STORY[a.primaryYongsin];
+    var strength = '';
+    for (var i = 0; i < STRENGTH_STORY.length; i++) {
+      if (a.strengthRatio >= STRENGTH_STORY[i][0]) { strength = STRENGTH_STORY[i][1]; break; }
+    }
+    var missing = a.missing.length
+      ? '태어날 때 ' + a.missing.map(function (m) { return ELEM_STORY[m].thing; }).join('·') +
+        '의 기운은 받지 못했어요. 없다고 나쁜 건 아니고, 그쪽 일은 남보다 더 챙겨야 한다는 뜻이에요.'
+      : '다섯 기운을 고루 받고 태어났어요.';
+
+    $('plainSummary').innerHTML =
+      '<div class="plain">' +
+        '<span class="big">당신은 ' + esc(me.thing) + ' 같은 사람이에요.</span>' +
+        esc(me.force) + '을 타고났다는 뜻이에요. ' + esc(strength) + '<br><br>' +
+        '지금 당신에게 가장 도움이 되는 기운은 <b>' + esc(yong.thing) + '</b>이에요 — ' +
+        esc(yong.force) + '이죠. ' + esc(yong.color) + '과 ' + esc(yong.dir) + '이 그 기운을 부릅니다.<br><br>' +
+        esc(missing) +
+        '<br><br>' + zodiacLine(r) +
+        '<div class="why-box">' +
+          '<button type="button" class="why-head" data-why="whyMe">' +
+            '<span>원래 용어로는 어떻게 부르나요</span><span>＋</span></button>' +
+          '<div class="why-body" id="whyMe" hidden>' +
+            '나를 나타내는 글자(<b>일간</b>)는 <b>' + esc(a.dayMaster.stem) + '(' + esc(a.dayMaster.hanja) + ')</b>,' +
+            ' 오행으로는 <b>' + esc(a.dayMaster.elem) + '</b>이고 ' + (a.dayMaster.yang ? '양' : '음') + '에 속합니다. ' +
+            '힘의 세기는 <b>' + esc(a.strength) + '</b>, 도움이 되는 기운(<b>용신</b>)은 ' +
+            '<b>' + esc(a.yongsin.join(' > ')) + '</b> 순서로 봅니다. ' +
+            '태어난 계절은 ' + esc(a.season) + '입니다.' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function renderCompatPlain(A, B, c) {
+    var nameA = personLabel(A, '나'), nameB = personLabel(B, '상대');
+    var ea = ELEM_STORY[A.analysis.dayMaster.elem], eb = ELEM_STORY[B.analysis.dayMaster.elem];
+    var best = null, worst = null;
+    E.COMPAT_AXES.forEach(function (k) {
+      if (!best || c.axes[k].score > c.axes[best].score) best = k;
+      if (!worst || c.axes[k].score < c.axes[worst].score) worst = k;
+    });
+    var AXIS_STORY = {
+      attraction: ['서로 끌리는 힘', '처음부터 눈이 가고 마음이 움직이는 쪽'],
+      stability: ['함께 있을 때의 편안함', '서로 모자란 걸 채워 주는 쪽'],
+      communication: ['말이 통하는 정도', '무슨 말을 해도 알아듣는 쪽'],
+      endurance: ['오래 갈 수 있는 힘', '시간이 지나도 덜 지치는 쪽']
+    };
+    $('compatPlain').innerHTML =
+      '<div class="plain">' +
+        '<span class="big">' + esc(nameA) + '님과 ' + esc(nameB) + '님은 ' +
+          esc(pairGrade(c.total)) + '이에요.</span>' +
+        esc(ea.thing) + ' 같은 사람과 ' + esc(eb.thing) + ' 같은 사람이 만난 사이예요.<br><br>' +
+        '<b>가장 잘 맞는 곳</b>은 ' + esc(AXIS_STORY[best][0]) + '이에요 — ' + esc(AXIS_STORY[best][1]) + '이죠.<br>' +
+        '<b>가장 신경 쓸 곳</b>은 ' + esc(AXIS_STORY[worst][0]) + '이에요. 여기가 약하면 서로 노력해서 메워야 합니다.<br><br>' +
+        '궁합은 정해진 결과가 아니에요. 어디서 잘 맞물리고 어디서 어긋나는지를 미리 알아 두는 것뿐입니다.' +
+      '</div>';
+  }
+
+  // 접힘 설명 열고 닫기
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-why]');
+    if (!b) return;
+    var body = document.getElementById(b.dataset.why);
+    if (!body) return;
+    body.hidden = !body.hidden;
+    b.lastElementChild.textContent = body.hidden ? '＋' : '－';
+  });
+
   function scoreBand(n) {
-    if (n >= 85) return { label: '드물게 잘 맞는 조합', tone: 'good' };
+    if (n >= 85) return { label: '드물게 잘 맞는 편', tone: 'good' };
     if (n >= 70) return { label: '잘 맞는 편', tone: 'good' };
     if (n >= 55) return { label: '무난한 편', tone: 'mid' };
     if (n >= 40) return { label: '보통', tone: 'mid' };
-    if (n >= 25) return { label: '맞추려는 노력이 필요한 편', tone: 'bad' };
-    return { label: '부딪히기 쉬운 조합', tone: 'bad' };
+    if (n >= 25) return { label: '맞춰가야 하는 편', tone: 'bad' };
+    return { label: '많이 다른 편', tone: 'bad' };
   }
 
   function personLabel(r, fallback) {
     if (r.name) return r.name.surname + r.name.given;
     return fallback;
+  }
+
+  // ── 관계별 궁합 ───────────────────────────────────────────────────────
+  // 같은 두 사람이라도 애인으로 볼 때와 같이 일할 때 중요한 것이 다르다.
+  var relState = { data: null, type: 'lover' };
+  function renderRelations(A, B, c) {
+    var rel;
+    try { rel = E.relationCompat(A, B, c); }
+    catch (err) { $('relBlock').innerHTML = ''; return; }
+    relState.data = rel;
+    drawRelation();
+  }
+  function drawRelation() {
+    var rel = relState.data;
+    if (!rel) { $('relBlock').innerHTML = ''; return; }
+    var t = rel.types[relState.type];
+
+    var chips = E.REL_TYPES.map(function (k) {
+      return '<button type="button" class="chip" data-rel="' + k + '" aria-pressed="' +
+        (k === relState.type) + '">' + esc(E.REL_TYPE_LABEL[k]) + '</button>';
+    }).join('');
+
+    var notes =
+      t.good.map(function (x) { return '<div class="g">' + esc(x) + '</div>'; }).join('') +
+      t.bad.map(function (x) { return '<div class="b">' + esc(x) + '</div>'; }).join('');
+
+    var say = '';
+    if (rel.talk || rel.act) {
+      say = '<div class="rel-say"><div class="rs-head">이 사람에게는 이렇게</div>' +
+        (rel.talk ? '<div class="rs-item"><b>하면 좋은 말</b> — ' + esc(rel.talk.good) + '</div>' +
+                    '<div class="rs-item"><b>피할 말</b> — ' + esc(rel.talk.bad) + '</div>' : '') +
+        (rel.act ? '<div class="rs-item"><b>하면 좋은 행동</b> — ' + esc(rel.act.good) + '</div>' +
+                   '<div class="rs-item"><b>피할 행동</b> — ' + esc(rel.act.bad) + '</div>' : '') +
+        '</div>';
+    }
+
+    $('relBlock').innerHTML =
+      '<div class="rel-wrap">' +
+        '<div class="rel-head">어떤 사이로 볼까요</div>' +
+        '<div class="chips rel-chips" id="relChips">' + chips + '</div>' +
+        '<div class="rel-card">' +
+          '<div class="rel-grade">' + esc(E.REL_TYPE_LABEL[t.key]) +
+            (hasBatchim(E.REL_TYPE_LABEL[t.key]) ? '으로는 ' : '로는 ') + esc(t.grade) + '</div>' +
+          '<div class="rel-note">' + notes + '</div>' +
+          say +
+        '</div>' +
+      '</div>';
+
+    Array.prototype.forEach.call($('relChips').children, function (b) {
+      b.onclick = function () { relState.type = this.dataset.rel; drawRelation(); };
+    });
   }
 
   function renderCompat(A, B, c) {
@@ -1587,7 +2490,7 @@
       nameB + '(' + B.solar.year + '.' + B.solar.month + '.' + B.solar.day + ')의 원국을 견줍니다. ' +
       '대운·세운이 아니라 타고난 자리끼리의 비교라, 시기에 따라 체감은 달라집니다.';
 
-    $('compatScore').textContent = c.total;
+    $('compatScore').textContent = pairGrade(c.total);
     $('compatScore').parentNode.style.borderColor =
       band.tone === 'good' ? 'var(--accent-2)' : band.tone === 'bad' ? 'var(--danger)' : 'var(--accent)';
 
@@ -1617,7 +2520,7 @@
           return i.label + ' (' + (i.delta > 0 ? '+' : '') + i.delta + ')'; }).join(' / ')) + '">' +
         '<div class="axis-name">' + esc(ax.label) + '</div>' +
         '<div class="axis-track"><div class="axis-fill" style="width:' + Math.max(2, ax.score) + '%"></div></div>' +
-        '<div class="axis-val">' + ax.score + '</div></div>';
+        '<div class="axis-val">' + esc(axisGrade(ax.score)) + '</div></div>';
     }).join('');
 
     function items(list, empty) {
@@ -1654,21 +2557,17 @@
     out.sort(function (a, b) { return b.compat.total - a.compat.total; });
     batchRows = out;
 
-    $('batchSub').textContent =
-      '연락처의 생년월일과 내 원국을 하나씩 견줘 점수 순으로 세웠습니다. ' +
-      '태어난 시각과 이름이 없으므로 시주·성명 궁합은 빠져 있고, 그만큼 거친 비교입니다.';
     $('batchSummary').innerHTML =
       '<b>' + out.length + '명</b>과 비교했습니다.' +
       (contacts.skipped.length ? ' ' + contacts.skipped.length + '명은 생일을 읽지 못해 빠졌습니다.' : '') +
-      ' 점수는 무작위로 만난 상대와 견준 백분위입니다 — 50이 평범, 80이면 상위 20%.';
+      ' 순서는 무작위로 만난 상대와 견줘 어디쯤인지로 매겼습니다.';
 
     if (!out.length) {
       $('rankTable').innerHTML = '<tbody><tr><td style="color:var(--text-mute)">비교할 사람이 없습니다. 연락처 파일을 올리거나 목록을 붙여넣어 주세요.</td></tr></tbody>';
       return;
     }
-    var head = '<thead><tr><th class="num">#</th><th>이름</th><th>생일 · 띠</th><th>일주</th>' +
-      '<th class="num">궁합</th><th class="num">끌림</th><th class="num">안정</th><th class="num">소통</th><th class="num">지속</th>' +
-      '<th>주로 이런 이유</th><th></th></tr></thead>';
+    var head = '<thead><tr><th class="num">#</th><th>이름</th><th>생일 · 띠</th>' +
+      '<th>두 사주의 배치</th><th>주로 이런 이유</th><th></th></tr></thead>';
     var body = out.map(function (row, i) {
       var c = row.compat, r = row.reading;
       // 용신 보완은 어느 짝에나 잘 붙는 항목이라 그것만 두 줄 나오면 구별이 안 된다.
@@ -1686,12 +2585,8 @@
         '<td><span class="who">' + esc(row.person.name) + '</span></td>' +
         '<td class="sub2">' + row.person.year + '.' + row.person.month + '.' + row.person.day +
           ' · ' + esc(r.pillars.year.animal) + '띠</td>' +
-        '<td class="sub2">' + esc(r.pillars.day.hanja) + ' ' + esc(r.analysis.dayMaster.elem) + '</td>' +
-        '<td class="num"><span class="mini-bar"><i style="width:' + Math.max(3, c.total) + '%"></i></span><b>' + c.total + '</b></td>' +
-        '<td class="num sub2">' + c.axes.attraction.score + '</td>' +
-        '<td class="num sub2">' + c.axes.stability.score + '</td>' +
-        '<td class="num sub2">' + c.axes.communication.score + '</td>' +
-        '<td class="num sub2">' + c.axes.endurance.score + '</td>' +
+        '<td><span class="mini-bar"><i style="width:' + Math.max(3, c.total) + '%"></i></span>' +
+          '<b>' + esc(pairGrade(c.total)) + '</b></td>' +
         '<td class="rank-why">' + esc(why) + '</td>' +
         '<td><button type="button" class="btn-sm" style="padding:5px 10px;font-size:11.5px" data-i="' + i + '">자세히</button></td>' +
       '</tr>';
@@ -1712,19 +2607,35 @@
     $('p_day').value = String(p.day);
     $('p_noHour').checked = true;
     $('p_noHour').dispatchEvent(new Event('change'));
-    Array.prototype.forEach.call($('mode').querySelectorAll('.chip'), function (c) {
-      c.setAttribute('aria-pressed', String(c.dataset.v === 'pair'));
-    });
-    applyTab('pair');
-    $('form').dispatchEvent(new Event('submit', { cancelable: true }));
+    switchTab('tabCompat');
+    setTimeout(runCompat, 60);
+  });
+
+  // ── 여러 명과 비교 (결과 화면에서 따로 실행) ──────────────────────────
+  var myReading = null;
+
+  $('batchToggle').addEventListener('click', function () {
+    var b = $('batchBlock');
+    b.hidden = !b.hidden;
+    $('batchRun').hidden = b.hidden;
+    this.textContent = b.hidden ? '연락처 불러오기' : '접기';
+  });
+  $('batchBtn').addEventListener('click', function () {
+    if (!myReading) return;
+    if (!contacts.people.length) {
+      $('parseStatus').innerHTML =
+        '<span class="warn">비교할 사람이 없습니다. 연락처 파일을 올리거나 목록을 붙여넣어 주세요.</span>';
+      return;
+    }
+    runBatch(myReading);
+    $('batchResult').hidden = false;
+    $('batchResult').scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 
   // ── 궁합 링크 ────────────────────────────────────────────────────────
   //
   // 내 사주를 URL 의 프래그먼트(#)에 담는다. 브라우저는 # 뒤를 서버로 보내지
   // 않으므로, 링크가 우리 서버를 지나가도 생년월일은 로그에 남지 않는다.
-  // 대신 링크를 가진 사람은 누구나 볼 수 있고, 서버에 저장하지 않으니 회수도
-  // 안 된다 — 화면에 그대로 적어 둔다.
   function toBase64Url(str) {
     var bytes = new TextEncoder().encode(str), bin = '';
     for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
@@ -1737,8 +2648,6 @@
     for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     return new TextDecoder().decode(bytes);
   }
-
-  // 짧게 담으려고 키를 줄인다. 링크가 카카오톡에서 잘리지 않도록.
   function packPerson(p, withName) {
     var o = { c: p.calendar === '음력' ? 1 : 0, y: p.year, m: p.month, d: p.day,
               g: p.gender === '여' ? 1 : 0 };
@@ -1776,52 +2685,34 @@
     return p;
   }
 
-  function currentMeInput() {
-    var noHour = $('noHour').checked;
-    return {
-      calendar: getCalendar(),
-      year: parseInt($('year').value, 10),
-      month: parseInt($('month').value, 10),
-      day: parseInt($('day').value, 10),
-      leapMonth: $('leapMonth').checked && getCalendar() === '음력',
-      hour: noHour ? null : parseInt($('hour').value, 10),
-      minute: noHour ? null : (parseInt($('minute').value, 10) || 0),
-      gender: getGender(),
-      surname: $('surname').value.trim(),
-      given: $('given').value.trim(),
-      longitude: parseFloat($('city').value),
-      useSolarTime: $('useSolarTime').checked,
-      lateNightRule: $('lateNight').value
-    };
-  }
-
   $('makeLink').addEventListener('click', function () {
-    var me = currentMeInput();
-    if (!me.year) return showError('먼저 내 생년월일을 채워 주세요.');
-    var packed = packPerson(me, $('shareIncludeName').checked);
+    if (!savedMe) {
+      $('shareOut').hidden = true;
+      $('parseStatus').innerHTML = '';
+      switchTab('tabMe');
+      return;
+    }
+    var packed = packPerson(savedMe, $('shareIncludeName').checked);
     var link = location.origin + location.pathname + '#invite=' + toBase64Url(JSON.stringify(packed));
     $('shareUrl').value = link;
     $('shareOut').hidden = false;
     if (navigator.share) $('shareLink').hidden = false;
     $('shareUrl').focus(); $('shareUrl').select();
   });
-
   $('copyLink').addEventListener('click', function () {
     var input = $('shareUrl'), btn = this;
     var done = function () { btn.textContent = '복사됨'; setTimeout(function () { btn.textContent = '복사'; }, 1600); };
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(input.value).then(done, function () { input.select(); document.execCommand('copy'); done(); });
-    } else {
-      input.select(); document.execCommand('copy'); done();
-    }
+    } else { input.select(); document.execCommand('copy'); done(); }
   });
   $('shareLink').addEventListener('click', function () {
     if (!navigator.share) return;
     navigator.share({ title: '궁합 보기', text: '우리 궁합 한번 볼래?', url: $('shareUrl').value })
-      .catch(function () { /* 사용자가 취소한 경우 */ });
+      .catch(function () {});
   });
 
-  // 초대 링크로 들어온 경우: 보낸 사람을 '상대' 칸에 채우고 궁합 모드로 연다.
+  // 초대 링크로 들어온 경우: 보낸 사람을 상대 칸에 채우고 궁합 탭으로 연다.
   function consumeInvite() {
     var m = /[#&]invite=([A-Za-z0-9_-]+)/.exec(location.hash || '');
     if (!m) return;
@@ -1841,23 +2732,18 @@
     $('p_noHour').checked = (person.hour === null);
     $('p_noHour').dispatchEvent(new Event('change'));
     if (person.hour !== null) { $('p_hour').value = String(person.hour); $('p_minute').value = String(person.minute); }
-    Array.prototype.forEach.call($('p_gender').querySelectorAll('.chip'), function (c) {
-      c.setAttribute('aria-pressed', String(c.dataset.v === person.gender));
-    });
-    Array.prototype.forEach.call($('p_calendar').querySelectorAll('.chip'), function (c) {
-      c.setAttribute('aria-pressed', String(c.dataset.v === person.calendar));
-    });
+    setChip('p_gender', person.gender);
+    setChip('p_calendar', person.calendar);
     $('p_leapWrap').hidden = (person.calendar !== '음력');
-
-    Array.prototype.forEach.call($('mode').querySelectorAll('.chip'), function (c) {
-      c.setAttribute('aria-pressed', String(c.dataset.v === 'pair'));
-    });
-    applyTab('pair');
 
     var who = person.surname ? esc(person.surname + person.given) + '님' : '';
     $('inviteNotice').innerHTML =
       '<div class="invite-banner">' + (who ? '<b>' + who + '</b>이 보낸 궁합 링크입니다. ' : '<b>궁합 링크</b>로 들어오셨습니다. ') +
-      '상대 칸은 이미 채워 두었습니다 — <b>내 생년월일만 넣고</b> 아래 버튼을 눌러 주세요.</div>';
+      (savedMe
+        ? '궁합 탭에서 바로 확인하실 수 있습니다.'
+        : '먼저 <b>내 사주</b>를 넣어 주세요. 그러면 바로 궁합이 나옵니다.') +
+      '</div>';
+    if (savedMe) switchTab('tabCompat');
   }
 
   // ── 제출 ─────────────────────────────────────────────────────────────
@@ -1865,121 +2751,455 @@
     var box = $('formError');
     if (!msg) { box.classList.remove('show'); return; }
     box.textContent = msg; box.classList.add('show');
+    box.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
-  function readPartner() {
-    var noHour = $('p_noHour').checked;
+  function readPerson(pfx) {
+    var q = function (id) { return $(pfx ? pfx + id : id); };
+    var cal = pfx ? getPCalendar() : getCalendar();
+    var noHour = q('noHour').checked;
     return {
-      calendar: getPCalendar(),
-      year: parseInt($('p_year').value, 10),
-      month: parseInt($('p_month').value, 10),
-      day: parseInt($('p_day').value, 10),
-      leapMonth: $('p_leapMonth').checked && getPCalendar() === '음력',
-      hour: noHour ? null : parseInt($('p_hour').value, 10),
-      minute: noHour ? null : (parseInt($('p_minute').value, 10) || 0),
-      gender: getPGender(),
-      surname: $('p_surname').value.trim(),
-      given: $('p_given').value.trim(),
+      calendar: cal,
+      year: parseInt(q('year').value, 10),
+      month: parseInt(q('month').value, 10),
+      day: parseInt(q('day').value, 10),
+      leapMonth: q('leapMonth').checked && cal === '음력',
+      hour: noHour ? null : parseInt(q('hour').value, 10),
+      minute: noHour ? null : (parseInt(q('minute').value, 10) || 0),
+      gender: pfx ? getPGender() : getGender(),
+      surname: q('surname').value.trim(),
+      given: q('given').value.trim(),
+      hanja: pfx ? '' : $('hanja').value.trim(),
       longitude: parseFloat($('city').value),
       useSolarTime: $('useSolarTime').checked,
       lateNightRule: $('lateNight').value
     };
   }
 
-  function checkPerson(p, who) {
-    if (!p.year || p.year < 1900 || p.year > 2100) return who + '의 태어난 해를 1900~2100 사이로 입력해 주세요.';
-    if ((p.surname && !p.given) || (!p.surname && p.given)) return who + '의 성과 이름을 함께 입력하거나, 둘 다 비워 주세요.';
-    if (p.surname && !/^[가-힣]{1,5}$/.test(p.surname + p.given)) return who + '의 이름은 한글로만 입력해 주세요.';
-    return null;
-  }
-
   $('form').addEventListener('submit', function (ev) {
     ev.preventDefault();
     showError('');
-
-    var mode = effectiveMode();
-    var noHour = $('noHour').checked;
-    var payload = {
-      mode: mode === 'batch' ? 'solo' : mode,   // 서버는 solo/compat 만 안다
-      calendar: getCalendar(),
-      year: parseInt($('year').value, 10),
-      month: parseInt($('month').value, 10),
-      day: parseInt($('day').value, 10),
-      leapMonth: $('leapMonth').checked && getCalendar() === '음력',
-      hour: noHour ? null : parseInt($('hour').value, 10),
-      minute: noHour ? null : (parseInt($('minute').value, 10) || 0),
-      gender: getGender(),
-      surname: $('surname').value.trim(),
-      given: $('given').value.trim(),
-      hanja: $('hanja').value.trim(),
-      longitude: parseFloat($('city').value),
-      useSolarTime: $('useSolarTime').checked,
-      lateNightRule: $('lateNight').value,
-      focus: getFocus()
-    };
-
-    var bad = checkPerson(payload, '나');
+    var bad = validateStep(stepIndex);
     if (bad) return showError(bad);
-    if (payload.hanja && !/^[㐀-䶿一-鿿]{1,5}$/.test(payload.hanja)) {
-      return showError('한자 표기에는 한자만 입력해 주세요.');
-    }
+    if (stepIndex < stepEls().length - 1) return goStep(stepIndex + 1);
+    submitAll();
+  });
+
+  function submitAll(quiet) {
+    showError('');
+    var payload = readPerson('');
+    payload.mode = 'solo';
+    payload.focus = getFocus();
 
     var reading;
-    try {
-      reading = E.fullReading(payload);
-    } catch (err) {
-      return showError('계산 중 오류가 났습니다: ' + err.message);
-    }
+    try { reading = E.fullReading(payload); }
+    catch (err) { return showError('계산 중 오류가 났습니다: ' + err.message); }
     if (reading.error) return showError(reading.error);
 
-    // 내 사주는 어느 모드에서든 그린다. 모드를 바꿔도 이미 채워져 있도록.
+    saveMe(payload);
+
     renderBoundary(reading);
+    renderPlainSummary(reading);
     renderSummary(reading);
     renderPillars(reading);
     renderBars(reading);
     renderLuck(reading);
     renderName(reading);
 
-    var partner = null, compat = null, partnerReading = null;
-    if (mode === 'compat') {
-      partner = readPartner();
-      var badP = checkPerson(partner, '상대');
-      if (badP) return showError(badP);
-      try {
-        partnerReading = E.fullReading(partner);
-      } catch (err2) {
-        return showError('상대 사주 계산 중 오류가 났습니다: ' + err2.message);
-      }
-      if (partnerReading.error) return showError('상대: ' + partnerReading.error);
-      compat = E.compatibility(reading, partnerReading);
-      renderCompat(reading, partnerReading, compat);
-      payload.partner = partner;
-    }
-
-    if (mode === 'batch' && !contacts.people.length) {
-      return showError('비교할 사람이 없습니다. 연락처 파일을 올리거나 목록을 붙여넣어 주세요.');
-    }
-
     $('result').classList.add('show');
-    showPanels(mode);   // 무엇을 채웠는지에 따라 필요한 패널만 펴 둔다
-
-    // 차트는 결과 영역이 화면에 붙은 뒤에 그린다 — 숨어 있는 동안에는 폭이 0이라
-    // viewBox 를 컨테이너에 맞출 수가 없다.
+    $('formPanel').hidden = true;
+    showPanels();
     fortuneState.reading = reading;
-    if (mode === 'solo') renderFortune();
-    if (mode === 'batch') runBatch(reading);
+    myReading = reading;
+    renderFortune();
+    renderStep();
+    refreshMoreTab();
+    renderToday();
+    renderYear();
 
-    $('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (!quiet) $('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    lastPayload = payload;
+    prepareReading(payload);
+  }
 
-    if (mode !== 'batch') {
-      lastPayload = payload;
-      streamReading(payload);
+  // ── 올해 달력 — 아홉 영역의 좋은 달·조심할 달, 그리고 날짜별 ─────────────
+  var yearState = { months: null, days: null, month: null, pickedDay: null };
+
+  function renderYear() {
+    if (!myReading) return;
+    var Y = myReading.currentYear.year;
+    var ym;
+    try { ym = E.yearMonths(myReading, Y); }
+    catch (err) { $('yearPanel').hidden = true; return; }
+    yearState.months = ym;
+
+    var luck = myReading.currentLuck;
+    var seun = myReading.currentYear.pillar;
+    var seunGod = E.tenGodOfStem(myReading.chart.pillars.day.stem, seun.stemIdx);
+    $('yearTitle').textContent = Y + '년은 어떤 해인가';
+    $('yearSub').innerHTML =
+      (luck
+        ? '지금은 <b>' + esc(luck.hanja) + ' 대운</b>(만 ' + luck.ageFrom + '~' + luck.ageTo +
+          '세) 한가운데예요. 10년쯤 이어지는 배경 같은 흐름입니다.<br>'
+        : '') +
+      '올해 드는 기운(<b>세운</b>)은 <b>' + esc(seun.hanja) + '</b>, 나에게는 <b>' +
+      esc(seunGod) + '</b>에 해당합니다. 아래는 <b>절기 기준</b>으로 나눈 열두 달이라, ' +
+      '달력의 1일이 아니라 절기가 드는 날에 달이 바뀝니다.';
+
+    $('yearDoms').innerHTML = E.DOMAIN9.map(function (k) {
+      var d = ym.domains[k];
+      return '<div class="year-dom">' +
+        '<span class="yd-name">' + esc(d.label) + '</span>' +
+        '<span class="yd-cell"><b>가장 좋은 달</b>' + esc(monthName(d.best)) + '</span>' +
+        '<span class="yd-cell"><b>가장 조심할 달</b>' + esc(monthName(d.worst)) + '</span>' +
+        '</div>';
+    }).join('');
+
+    $('monthChips').innerHTML = ym.months.map(function (m, i) {
+      return '<button type="button" class="chip" data-m="' + i + '" aria-pressed="false">' +
+        esc(monthChipLabel(m)) + '</button>';
+    }).join('');
+    Array.prototype.forEach.call($('monthChips').children, function (b) {
+      b.onclick = function () { pickMonth(parseInt(this.dataset.m, 10)); };
+    });
+
+    // 이번 달을 미리 열어 둔다. 한 번 더 누르게 하면 대부분은 안 누른다.
+    // 절기 달은 달력의 달과 어긋나므로, 오늘이 어느 구간 안에 드는지로 찾는다.
+    var now = new Date();
+    var todayNum = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+    var cur = 0;
+    ym.months.forEach(function (m, i) {
+      var a = m.fromDate.y * 10000 + m.fromDate.m * 100 + m.fromDate.d;
+      var b = m.toDate.y * 10000 + m.toDate.m * 100 + m.toDate.d;
+      if (todayNum >= a && todayNum < b) cur = i;
+    });
+    pickMonth(cur);
+  }
+
+  // 절기로 나눈 열두 달은 입춘에서 시작해 이듬해 입춘 전날에 끝난다. 그래서
+  // 마지막 한 달(소한 달)은 다음 해 1월에 놓인다 — 그걸 밝히지 않으면 "1월"이
+  // 지나간 달인지 다가올 달인지 알 수 없다.
+  function monthName(m) {
+    var next = yearState.months && m.fromDate.y > yearState.months.year;
+    return (next ? '내년 ' : '') + m.fromDate.m + '월 ' + m.fromDate.d + '일부터';
+  }
+  function monthChipLabel(m) {
+    var next = yearState.months && m.fromDate.y > yearState.months.year;
+    return m.civilMonth + '월' + (next ? '(내년)' : '');
+  }
+
+  function pickMonth(i) {
+    var ym = yearState.months;
+    if (!ym || !ym.months[i]) return;
+    yearState.month = i;
+    yearState.pickedDay = null;
+    Array.prototype.forEach.call($('monthChips').children, function (b) {
+      b.setAttribute('aria-pressed', String(parseInt(b.dataset.m, 10) === i));
+    });
+    renderMonthView();
+  }
+
+  // 절기로 나눈 한 달은 달력의 한 달과 어긋난다(예: 4월 5일 ~ 5월 5일). 그래서
+  // 달력 칸은 그 구간에 든 날짜만 채우고, 나머지는 비워 둔다.
+  function renderMonthView() {
+    var ym = yearState.months, mi = yearState.month;
+    if (!ym || mi === null) { $('monthView').innerHTML = ''; return; }
+    var m = ym.months[mi];
+    var Y = ym.year;
+
+    // 절기 달은 해를 넘어갈 수 있으므로(소한 달은 12월 말 ~ 1월 초) 걸친 해를
+    // 모두 불러 하나의 표로 합친다.
+    var byDate = {};
+    try {
+      var years = [m.fromDate.y];
+      if (m.toDate.y !== m.fromDate.y) years.push(m.toDate.y);
+      years.forEach(function (yy) {
+        E.yearDays(myReading, yy).forEach(function (x) {
+          byDate[x.year * 10000 + x.month * 100 + x.day] = x;
+        });
+      });
+    } catch (err) { $('monthView').innerHTML = ''; return; }
+
+    // 구간의 첫날부터 마지막 날까지
+    var from = new Date(Date.UTC(m.fromDate.y, m.fromDate.m - 1, m.fromDate.d));
+    var to = new Date(Date.UTC(m.toDate.y, m.toDate.m - 1, m.toDate.d));
+    var cells = [];
+    for (var t = from.getTime(); t < to.getTime(); t += 86400000) {
+      var dt = new Date(t);
+      var y2 = dt.getUTCFullYear(), m2 = dt.getUTCMonth() + 1, d2 = dt.getUTCDate();
+      cells.push({ y: y2, m: m2, d: d2, dow: dt.getUTCDay(),
+                   rec: byDate[y2 * 10000 + m2 * 100 + d2] || null });
     }
+    if (!cells.length) { $('monthView').innerHTML = ''; return; }
+
+    var pad = cells[0].dow;
+    var grid = ['일', '월', '화', '수', '목', '금', '토']
+      .map(function (w) { return '<div class="cal-dow">' + w + '</div>'; }).join('');
+    for (var k = 0; k < pad; k++) grid += '<div class="cal-day pad"></div>';
+    cells.forEach(function (c, idx) {
+      if (!c.rec) { grid += '<div class="cal-day pad"></div>'; return; }
+      var g = E.gradeOf(c.rec.overall);
+      grid += '<button type="button" class="cal-day" data-i="' + idx + '" aria-pressed="' +
+        (yearState.pickedDay === idx) + '">' +
+        '<span class="d">' + c.d + '</span>' +
+        '<span class="m tone-' + g.tone + '">' + esc(shortGrade(g.word)) + '</span></button>';
+    });
+
+    var picked = yearState.pickedDay !== null ? cells[yearState.pickedDay] : null;
+    $('monthView').innerHTML =
+      '<div class="cal">' +
+        '<div class="cal-sub">' + esc(m.label) + ' — <b>' + esc(m.ganji.hanja) + '</b> 달입니다. ' +
+          '날짜를 누르면 그날의 아홉 가지를 볼 수 있어요.</div>' +
+        '<div class="cal-grid">' + grid + '</div>' +
+        (picked ? dayCard(picked) : '') +
+      '</div>';
+
+    Array.prototype.forEach.call($('monthView').querySelectorAll('.cal-day[data-i]'), function (b) {
+      b.onclick = function () {
+        var i = parseInt(this.dataset.i, 10);
+        yearState.pickedDay = (yearState.pickedDay === i) ? null : i;
+        renderMonthView();
+      };
+    });
+  }
+
+  // 달력 칸은 좁다. 네 글자를 다 넣으면 줄이 깨진다.
+  var SHORT_GRADE = { '아주 좋아요': '아주좋음', '좋아요': '좋음', '보통이에요': '보통',
+                      '조금 조심': '조심', '많이 조심': '많이조심' };
+  function shortGrade(w) { return SHORT_GRADE[w] || w; }
+
+  function dayCard(c) {
+    var rec = c.rec;
+    var rows = E.DOMAIN9.map(function (k) {
+      var g = E.gradeOf(rec.score[k]);
+      return '<div class="cp-row"><b>' + esc(E.DOMAIN9_LABEL[k]) + '</b>' +
+        '<span class="tone-' + g.tone + '">' + esc(g.word) + '</span></div>';
+    }).join('');
+    var g0 = E.gradeOf(rec.overall);
+    return '<div class="cal-pick">' +
+      '<div class="cp-head">' +
+        '<span class="cp-date">' + c.m + '월 ' + c.d + '일 — <span class="tone-' + g0.tone + '">' +
+          esc(g0.word) + '</span></span>' +
+        '<span class="cp-ganji">' + esc(rec.ganji.hanja) + ' ' + esc(rec.ganji.kor) + '날' +
+          (rec.gongmang ? ' · 공망' : '') + '</span>' +
+      '</div>' +
+      '<div class="cp-rows">' + rows + '</div>' +
+      '</div>';
+  }
+
+  // 받침이 있으면 "민으로 / 물병자리이에요", 없으면 "서로 / 황소자리예요".
+  // 마지막 글자로 판단한다.
+  function hasBatchim(word) {
+    if (!word) return false;
+    var c = word.charCodeAt(word.length - 1) - 0xAC00;
+    return c >= 0 && c <= 11171 && (c % 28) !== 0;
+  }
+
+  // ── 별자리·띠 ────────────────────────────────────────────────────────
+  // 사주와 뿌리가 다른 체계다. 같은 칸에 섞어 놓으면 어느 쪽 말인지 헷갈리므로
+  // 한 문단으로 떼어 두고, 다른 체계라는 것도 밝힌다.
+  function zodiacLine(r) {
+    var z = r.zodiac;
+    return '태어난 해의 동물(띠)은 <b>' + esc(r.animal) + '</b>, 별자리는 <b>' +
+      esc(z.name) + '</b>' + (hasBatchim(z.name) ? '이에요' : '예요') + ' — ' +
+      esc(z.trait) + '이라고 봅니다. ' +
+      '<span class="hint">별자리는 사주와 다른 체계라 참고로만 곁들입니다.</span>';
+  }
+
+  // ── 오늘의 운세 ───────────────────────────────────────────────────────
+  // 앱을 열면 가장 먼저 보이는 것. 등급은 "그 사람의 그 해 365일 안에서 몇
+  // 번째인가"로 매긴다. 절대 점수를 내놓으면 어떤 해는 온통 좋은 날이 된다.
+  var todayOpen = false;
+  function renderToday() {
+    var box = $('todayCard');
+    if (!myReading) { box.innerHTML = ''; return; }
+    var f;
+    try { f = E.dailyFortune(myReading); }
+    catch (err) { box.innerHTML = ''; return; }
+    if (!f || f.error) { box.innerHTML = ''; return; }
+
+    var d = f.date;
+    var top3 = f.best.map(function (x) {
+      return '<div class="today-dom"><b>' + esc(x.label) + '</b><span class="tone-' +
+        x.grade.tone + '">' + esc(x.grade.word) + '</span></div>';
+    }).join('');
+    var rows = f.domains.map(function (x) {
+      return '<div class="today-row"><b>' + esc(x.label) + '</b>' +
+        '<span class="tone-' + x.grade.tone + '">' + esc(x.grade.word) + '</span></div>';
+    }).join('');
+
+    box.innerHTML =
+      '<div class="today">' +
+        '<div class="today-head">' +
+          '<span class="today-date">' + d.month + '월 ' + d.day + '일 오늘의 운세</span>' +
+          '<span class="today-ganji">' + esc(f.ganji.hanja) + ' ' + esc(f.ganji.kor) + '날</span>' +
+        '</div>' +
+        '<div class="today-grade tone-' + f.grade.tone + '">' + esc(f.grade.word) + '</div>' +
+        '<div class="today-sub">오늘 특히 괜찮은 쪽은 <b>' + esc(f.best[0].label) + '</b>, ' +
+          '한 번 더 살필 쪽은 <b>' + esc(f.worst[0].label) + '</b>이에요.' +
+          (f.gongmang ? ' 오늘은 <b>공망</b>이 든 날이라, 무엇이든 손에 잘 안 잡힐 수 있어요.' : '') +
+        '</div>' +
+        '<div class="today-doms">' + top3 + '</div>' +
+        (f.advice ?
+          '<div class="today-advice">' +
+            '<div class="do">🟢 ' + esc(f.advice.good) + '</div>' +
+            '<div class="dont">🟠 ' + esc(f.advice.bad) + '</div>' +
+          '</div>' : '') +
+        '<button type="button" class="today-more" id="todayMore">' +
+          (todayOpen ? '접기' : '아홉 가지 전부 보기') + '</button>' +
+        '<div class="today-all' + (todayOpen ? ' on' : '') + '" id="todayAll">' + rows +
+          '<div class="hj-note">등급은 올해 365일 가운데 오늘이 어디쯤인지로 매깁니다. ' +
+          '"보통이에요"가 가장 흔하고, 좋은 날과 조심할 날은 그만큼 드뭅니다.</div>' +
+        '</div>' +
+      '</div>';
+
+    $('todayMore').onclick = function () {
+      todayOpen = !todayOpen;
+      $('todayAll').classList.toggle('on', todayOpen);
+      this.textContent = todayOpen ? '접기' : '아홉 가지 전부 보기';
+    };
+  }
+
+  // ── 한자 고르기 ───────────────────────────────────────────────────────
+  // 한자를 직접 칠 수 있는 사람은 많지 않다. 한글을 넣으면 그 음으로 읽는
+  // 한자를 늘어놓고 고르게 한다. 목록은 KS X 1001 — 한글 워드프로세서의 한자
+  // 변환 목록과 같은 범위다.
+  var hanjaPick = [];
+  function nameSyllables() {
+    return ($('surname').value.trim() + $('given').value.trim()).split('')
+      .filter(function (c) { return /[가-힣]/.test(c); });
+  }
+  function renderHanjaPicker() {
+    var HD = window.HanjaData;
+    var syls = nameSyllables();
+    var can = HD && syls.length && syls.some(function (c) { return HD.has(c); });
+    $('hanjaToggle').hidden = !can;
+    if (!can) { $('hanjaPicker').hidden = true; return; }
+    if ($('hanjaPicker').hidden) return;
+
+    if (hanjaPick.length !== syls.length) hanjaPick = syls.map(function () { return null; });
+
+    var html = syls.map(function (syl, i) {
+      var list = HD.candidates(syl);
+      if (!list.length) {
+        return '<div class="hj-syl"><div class="hj-syl-head"><b>' + esc(syl) +
+          '</b> — 이 음으로 읽는 한자가 표에 없습니다.</div></div>';
+      }
+      var btns = list.map(function (c) {
+        return '<button type="button" class="hj-btn" data-i="' + i + '" data-ch="' + esc(c.ch) +
+          '" aria-pressed="' + (hanjaPick[i] === c.ch) + '">' +
+          '<span class="c">' + esc(c.ch) + '</span>' +
+          '<span class="n">' + (c.strokes === null ? '?' : c.strokes + '획') + '</span></button>';
+      }).join('');
+      return '<div class="hj-syl"><div class="hj-syl-head"><b>' + esc(syl) + '</b>' +
+        (hasBatchim(syl) ? '으로' : '로') + ' 읽는 한자 ' + list.length + '자' +
+        '</div><div class="hj-list">' + btns + '</div></div>';
+    }).join('');
+
+    $('hanjaPicker').innerHTML = html +
+      '<div class="hj-note">한글 워드프로세서의 한자 변환 목록과 같은 범위(KS X 1001)입니다. ' +
+      '숫자는 획수이고 <b>?</b>는 획수 자료가 없는 글자입니다 — 골라도 되지만, ' +
+      '한자 획수로 셈하는 수리는 건너뜁니다. 뜻은 아직 붙어 있지 않습니다.</div>';
+
+    Array.prototype.forEach.call($('hanjaPicker').querySelectorAll('.hj-btn'), function (b) {
+      b.onclick = function () {
+        var i = parseInt(this.dataset.i, 10);
+        hanjaPick[i] = (hanjaPick[i] === this.dataset.ch) ? null : this.dataset.ch;
+        $('hanja').value = hanjaPick.map(function (c) { return c || ''; }).join('');
+        renderHanjaPicker();
+      };
+    });
+  }
+  $('hanjaToggle').addEventListener('click', function () {
+    var box = $('hanjaPicker');
+    box.hidden = !box.hidden;
+    this.textContent = box.hidden ? '한자 골라 넣기' : '한자 목록 접기';
+    renderHanjaPicker();
+  });
+  ['surname', 'given'].forEach(function (id) {
+    $(id).addEventListener('input', function () { hanjaPick = []; renderHanjaPicker(); });
   });
 
-  // 기본값
-  $('year').value = 1990;
-  applyTab('pair');
+  // ── 궁합 탭 ───────────────────────────────────────────────────────────
+  function refreshCompatTab() {
+    var has = !!savedMe;
+    $('compatForm').hidden = !has;
+    $('compatNeedMe').innerHTML = has ? '' :
+      '<div class="empty-state"><div class="es-emoji">🧭</div>' +
+      '<div class="es-title">먼저 내 사주를 넣어 주세요</div>' +
+      '<div class="es-desc">궁합은 두 사람을 견주는 것이라,<br>내 사주가 있어야 시작할 수 있습니다.</div>' +
+      '<button type="button" class="submit" id="goMe">내 사주 넣으러 가기</button></div>';
+    var go = document.getElementById('goMe');
+    if (go) go.onclick = function () { switchTab('tabMe'); };
+    $('submitBtn').textContent = '궁합 보기';
+    $('ctaHint').textContent = '상대의 정보도 이 휴대폰 안에서만 씁니다.';
+    $('ctaBar').hidden = !has;
+  }
+
+  function runCompat() {
+    $('compatError').textContent = '';
+    $('compatError').classList.remove('show');
+    if (!savedMe) return;
+    var partner = readPerson('p_');
+    if (!partner.year || partner.year < 1900 || partner.year > 2100) {
+      return showCompatError('상대의 태어난 해를 1900~2100 사이로 넣어 주세요.');
+    }
+    if (partner.calendar === '음력' && partner.leapMonth) {
+      var leaps = E.leapMonthsOf(partner.year) || [];
+      if (leaps.indexOf(partner.month) < 0) {
+        return showCompatError(partner.year + '년에는 윤' + partner.month + '월이 없습니다.');
+      }
+    }
+    if ((partner.surname && !partner.given) || (!partner.surname && partner.given)) {
+      return showCompatError('상대의 성과 이름을 함께 넣거나, 둘 다 비워 주세요.');
+    }
+    if (partner.surname && !/^[가-힣]{1,5}$/.test(partner.surname + partner.given)) {
+      return showCompatError('상대의 이름은 한글로만 넣어 주세요.');
+    }
+
+    var me, other;
+    try {
+      me = E.fullReading(savedMe);
+      other = E.fullReading(partner);
+    } catch (err) { return showCompatError('계산 중 오류가 났습니다: ' + err.message); }
+    if (me.error) return showCompatError(me.error);
+    if (other.error) return showCompatError('상대: ' + other.error);
+
+    var compat = E.compatibility(me, other);
+    renderCompatPlain(me, other, compat);
+    renderRelations(me, other, compat);
+    renderCompat(me, other, compat);
+    $('compatPanel').hidden = false;
+
+    var payload = {};
+    Object.keys(savedMe).forEach(function (k) { payload[k] = savedMe[k]; });
+    payload.mode = 'compat';
+    payload.focus = '총운';
+    payload.partner = partner;
+    lastPayload = payload;
+    prepareReading(payload);
+    $('compatPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  function showCompatError(msg) {
+    var box = $('compatError');
+    box.textContent = msg; box.classList.add('show');
+    box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  $('submitBtn').addEventListener('click', function (e) {
+    if (tab === 'tabCompat') { e.preventDefault(); runCompat(); }
+  });
+
+  // 생년은 비워 두고 시작한다. 미리 채워 두면 남의 생일이 들어간 채로 결과가
+  // 나오고, 첫 단계가 검증 없이 그냥 넘어간다.
+  loadSaved();
+  renderSavedCards();
+  // 저장된 사주가 있으면 계산까지 다시 해 둔다. 계산은 0.01초면 끝나고,
+  // 이래야 새로고침한 뒤에도 결과와 더보기 기능이 그대로 남는다.
+  if (savedMe) { applySaved(savedMe); submitAll(true); }
+  refreshCompatTab();
+  refreshMoreTab();
+  switchTab('tabMe');
   consumeInvite();
 })();
 </script>
