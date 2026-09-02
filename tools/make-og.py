@@ -13,9 +13,25 @@ ACCENT   = (124, 92, 255)
 ACCENT2  = (45, 212, 191)
 DANGER   = (255, 84, 112)
 
-F = "C:/Windows/Fonts/"
-bold, reg = "malgunbd.ttf", "malgun.ttf"
-def font(n, s): return ImageFont.truetype(F + n, s)
+# 한글 폰트 찾기. 윈도우에서 만든 스크립트지만 리눅스/맥에서도 돌아가야 한다.
+import os
+_CANDIDATES = [
+    ("C:/Windows/Fonts/malgunbd.ttf", "C:/Windows/Fonts/malgun.ttf"),
+    ("/System/Library/Fonts/AppleSDGothicNeo.ttc", "/System/Library/Fonts/AppleSDGothicNeo.ttc"),
+    ("/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf", "/usr/share/fonts/truetype/nanum/NanumGothic.ttf"),
+    ("/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc", "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
+    ("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc", "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"),
+]
+for _b, _r in _CANDIDATES:
+    if os.path.exists(_b) and os.path.exists(_r):
+        BOLD_PATH, REG_PATH = _b, _r
+        break
+else:
+    raise SystemExit("한글 폰트를 찾지 못했습니다. tools/make-og.py 의 _CANDIDATES 에 경로를 추가해 주세요.")
+
+bold, reg = "bold", "reg"
+def font(n, s):
+    return ImageFont.truetype(BOLD_PATH if n == "bold" else REG_PATH, s)
 
 img = Image.new("RGB", (W, H), BG)
 

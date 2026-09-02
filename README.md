@@ -9,26 +9,34 @@ YouTube의 국가별 실시간 인기영상과 채널 정보를 보여주는 공
 
 | 경로 | 내용 |
 |---|---|
-| `/` | YouTube 국가별 인기영상 대시보드 |
-| `/saju` | 사주팔자 + 이름 풀이 + 돈·건강·관계 시기 + 궁합 + 연락처 일괄 비교 |
+| `/` | 사주팔자 + 이름 풀이 + 돈·건강·관계 시기 + 궁합 + 연락처 일괄 비교 |
+| `/youtube` | YouTube 국가별 인기영상 대시보드 |
+
+예전에 공유된 `/saju` 주소는 `/` 로 넘겨 줍니다(`vercel.json` 의 redirects).
 
 ## 아키텍처
 
 ```
-index.html            인기영상 대시보드 UI 전체
-saju.html             사주·이름 풀이 UI 전체
-saju-engine.js        만세력·오행·성명학 계산 엔진.
-                       브라우저와 서버가 같은 파일을 씁니다.
-api/yt/[...path].js   YouTube Data API 프록시.
-                       - 허용된 읽기 엔드포인트(videos/videoCategories/channels)만 전달
-                       - 성공 응답은 Vercel 엣지에서 30분간 캐시
-                       - 여기서만 YouTube API 키를 사용
-api/saju.js           사주 해석 엔드포인트. 서버가 직접 계산한 뒤
-                       그 결과만 Claude 에게 넘기고 응답을 스트리밍합니다.
-og-image.png          링크 미리보기 이미지 (카카오톡/슬랙 등)
-favicon.png           브라우저 탭 아이콘
-tools/make-og.py      위 두 이미지 생성 스크립트
-vercel.json           깔끔한 URL(/saju), 함수 실행 시간 제한
+index.html              사주·이름 풀이 UI 전체 (사이트 메인)
+youtube.html            인기영상 대시보드 UI 전체
+saju-engine.js          만세력·오행·성명학·궁합 계산 엔진.
+                         브라우저와 서버가 같은 파일을 씁니다.
+api/saju.js             사주 해석 엔드포인트. 서버가 직접 계산한 뒤 그 결과만
+                         Claude 에게 넘기고 응답을 스트리밍합니다. 사용량 제한도 여기서.
+api/yt/[...path].js     YouTube Data API 프록시.
+                         - 허용된 읽기 엔드포인트(videos/videoCategories/channels)만 전달
+                         - 성공 응답은 Vercel 엣지에서 30분간 캐시
+                         - 여기서만 YouTube API 키를 사용
+og-saju.png             사주 페이지 링크 미리보기 이미지
+og-image.png            인기영상 대시보드 링크 미리보기 이미지
+favicon.png             브라우저 탭 아이콘
+robots.txt, sitemap.xml 검색 노출
+tools/make-og-saju.py   사주 미리보기 이미지 생성
+tools/make-og.py        대시보드 미리보기 이미지·파비콘 생성
+tools/dev-server.js     PC용 개발 서버
+tools/test-saju.js      만세력·궁합·연락처 계산 점검
+tools/test-quota.js     사용량 제한 점검
+vercel.json             깔끔한 URL, /saju → / 리다이렉트, 함수 실행 시간 제한
 ```
 
 브라우저는 `googleapis.com`을 직접 호출하지 않고 항상 `/api/yt/...`를 거칩니다.
@@ -53,7 +61,7 @@ git clone https://github.com/asdqwe8511/-.git saju
 cd saju
 
 npm install                 # 사주 해석(Claude 호출)에만 필요합니다
-node tools/dev-server.js     # http://localhost:3000/saju
+node tools/dev-server.js     # http://localhost:3000
 ```
 
 git 이 없다면 GitHub 페이지에서 **Code → Download ZIP** 으로 받아 풀어도 됩니다.
@@ -98,7 +106,7 @@ Claude 가 쓰는 해석 문장만 나오지 않고, 그 자리에 안내와 다
 
 ### 좋은 시기 · 조심할 시기
 
-`/saju` 는 돈·건강·관계 세 갈래로 해마다 점수를 매기고, 연속된 해를 하나의 시기로 묶어
+메인 페이지는 돈·건강·관계 세 갈래로 해마다 점수를 매기고, 연속된 해를 하나의 시기로 묶어
 좋은 시기 TOP 3와 조심할 시기 TOP 3를 보여 줍니다. 계산 재료는 세 가지입니다.
 
 1. **십신** — 그 해 세운(과 배경이 되는 대운)의 천간·지지가 일간에게 무엇인지.
@@ -125,7 +133,7 @@ Claude 가 쓰는 해석 문장만 나오지 않고, 그 자리에 안내와 다
 
 ### 궁합 — 두 사람 견주기
 
-`/saju` 의 **둘이 보기** 는 두 사람의 원국을 네 축으로 견줍니다.
+**둘이 보기** 는 두 사람의 원국을 네 축으로 견줍니다.
 
 | 축 | 무엇을 보는가 |
 |---|---|
@@ -182,21 +190,50 @@ Claude 가 쓰는 해석 문장만 나오지 않고, 그 자리에 안내와 다
 
 ## 환경변수
 
-Vercel 프로젝트의 **Settings → Environment Variables** 에 아래 두 개를 넣습니다.
+Vercel 프로젝트의 **Settings → Environment Variables** 에 넣습니다.
 
-| 이름 | 값 | 쓰는 곳 |
+| 이름 | 필요한가 | 쓰는 곳 |
 |---|---|---|
-| `YOUTUBE_API_KEY` | Google Cloud Console에서 발급한 YouTube Data API v3 키 | `/` |
-| `ANTHROPIC_API_KEY` | console.anthropic.com 에서 발급한 API 키 | `/saju` |
+| `ANTHROPIC_API_KEY` | 풀이 문장을 쓰려면 필수 | `/` 의 풀이 |
+| `YOUTUBE_API_KEY` | 대시보드를 쓰려면 필수 | `/youtube` |
+| `UPSTASH_REDIS_REST_URL` | 공개 운영이면 사실상 필수 | 사용량 제한 |
+| `UPSTASH_REDIS_REST_TOKEN` | 위와 한 쌍 | 사용량 제한 |
+| `SAJU_DAILY_LIMIT` | 선택 (기본 300) | 하루 총 풀이 횟수 |
+| `SAJU_IP_HOURLY_LIMIT` | 선택 (기본 10) | 한 사람이 한 시간에 부를 수 있는 횟수 |
+| `SAJU_IP_SALT` | 선택 | IP 해시에 섞는 값 |
 
-> 사주 풀이는 호출할 때마다 Claude API 요금이 발생합니다. 콘솔에서 지출 한도를
-> 걸어 두는 것을 권합니다. 코드에도 인스턴스당 시간 20회 제한이 있지만, 서버리스라
-> 완전한 방어는 아닙니다.
+키가 하나도 없어도 **사주표·오행·대운·시기·이름·궁합·연락처 비교는 전부 동작합니다.**
+계산이 브라우저에서 끝나기 때문입니다. 풀이 문장 자리에만 안내가 뜹니다.
 
-> 예전에 쓰던 `SITE_PASSWORD` / `SESSION_SECRET` 은 로그인 기능을 없애면서
-> 더 이상 사용하지 않습니다. 남아 있어도 무해하지만 지워도 됩니다.
+## 공개 운영 — 요금이 새지 않게
 
-환경변수를 바꾼 뒤에는 **Deployments → 맨 위 배포의 ⋯ → Redeploy** 를 해야 반영됩니다.
+`/api/saju` 는 부를 때마다 Claude API 요금이 나갑니다. 사이트가 공개되어 있으니
+누구든 반복해서 부를 수 있고, 서버리스는 인스턴스가 여러 개라 메모리 카운터로는
+막히지 않습니다. 그래서 **Upstash Redis(REST)에 공용 카운터**를 둡니다.
+
+- 하루 총 풀이 횟수 (`SAJU_DAILY_LIMIT`, 기본 300)
+- 한 사람이 한 시간에 부를 수 있는 횟수 (`SAJU_IP_HOURLY_LIMIT`, 기본 10)
+
+상한에 걸리면 429 와 함께 안내가 뜨고, **계산 결과는 그대로 보입니다** —
+풀이 문장만 나오지 않습니다. IP 는 그대로 저장하지 않고 해시한 값만 최대 이틀간
+둡니다. Redis 가 설정되지 않았거나 잠시 응답하지 않으면 통과시킵니다(fail-open) —
+사이트가 통째로 멈추는 것보다 낫기 때문입니다.
+
+> **마지막 방어선은 Anthropic 콘솔의 지출 한도입니다.** 위 카운터는 정상적인 남용을
+> 막는 장치일 뿐이니, console.anthropic.com 에서 월 지출 한도를 꼭 걸어 두세요.
+
+Upstash 는 Vercel 대시보드의 **Storage → Upstash Redis** 에서 무료 티어로 붙일 수
+있고, 붙이면 위 두 환경변수가 자동으로 들어갑니다.
+
+동작 확인:
+
+```bash
+node tools/test-quota.js
+```
+
+Redis 와 Claude 를 가짜로 세워 두고 실제 핸들러를 부릅니다 — 상한에 걸리는지,
+형식이 틀린 요청이 하루 분량을 깎지 않는지, Redis 가 죽었을 때 통과하는지,
+IP 가 그대로 저장되지 않는지를 봅니다.
 
 ## 배포
 
@@ -224,11 +261,13 @@ node tools/test-saju.js
 
 ## 링크 미리보기 이미지 수정
 
-`tools/make-og.py` 를 고친 뒤 실행하면 `og-image.png` 와 `favicon.png` 가 다시 생성됩니다.
-
 ```bash
-python tools/make-og.py
+python tools/make-og-saju.py   # og-saju.png  (메인 = 사주 페이지)
+python tools/make-og.py        # og-image.png, favicon.png  (인기영상 대시보드)
 ```
+
+두 스크립트 모두 Pillow 가 필요합니다(`pip install pillow`). 한글 폰트는 윈도우·맥·리눅스
+순서로 찾아 쓰므로 어느 PC에서 돌려도 됩니다.
 
 카카오톡·페이스북은 미리보기를 캐시하므로, 바꾼 뒤에도 예전 이미지가 보이면
 [카카오 디버거](https://developers.kakao.com/tool/debugger/sharing)에서 캐시를 초기화하거나

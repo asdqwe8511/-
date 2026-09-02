@@ -13,18 +13,87 @@ const SajuEngine = require('../saju-engine.js');
 
 const MODEL = 'claude-opus-5';
 
-// 한 인스턴스 안에서만 유효한 최소한의 브레이크. 서버리스라 완벽한 제한은
-// 아니고, 실수나 단순 반복 호출로 요금이 새는 것을 막는 용도다.
-const RATE_LIMIT = { windowMs: 60 * 60 * 1000, max: 20 };
-const hits = new Map();
+// ── 사용량 제한 ────────────────────────────────────────────────────────────
+//
+// 이 엔드포인트는 호출될 때마다 Claude API 요금이 나간다. 사이트가 공개되어
+// 있으므로 누구든 반복해서 부를 수 있고, 서버리스는 인스턴스가 여러 개라
+// 메모리 카운터로는 막히지 않는다. 그래서 Upstash Redis(REST) 에 공용 카운터를
+// 두고 하루 총량과 IP당 시간당 횟수를 함께 센다.
+//
+//   UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN  (Vercel 통합이 넣어 준다)
+//   SAJU_DAILY_LIMIT       하루 총 풀이 횟수 (기본 300)
+//   SAJU_IP_HOURLY_LIMIT   한 사람이 한 시간에 부를 수 있는 횟수 (기본 10)
+//
+// Redis 가 설정되지 않았거나 잠시 응답하지 않으면 통과시킨다(fail-open).
+// 사이트가 통째로 멈추는 것보다는 낫고, 마지막 방어선은 Anthropic 콘솔의
+// 지출 한도다 — 그쪽은 꼭 걸어 두어야 한다.
+const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL;
+const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
+const DAILY_LIMIT = Number(process.env.SAJU_DAILY_LIMIT || 300);
+const IP_HOURLY_LIMIT = Number(process.env.SAJU_IP_HOURLY_LIMIT || 10);
 
-function rateLimited(ip) {
+// 인스턴스 안에서만 유효한 1차 브레이크. Redis 가 없을 때의 최소한의 방어다.
+const LOCAL_WINDOW_MS = 60 * 60 * 1000;
+const localHits = new Map();
+function locallyRateLimited(ip) {
   const now = Date.now();
-  const list = (hits.get(ip) || []).filter((t) => now - t < RATE_LIMIT.windowMs);
+  const list = (localHits.get(ip) || []).filter((t) => now - t < LOCAL_WINDOW_MS);
   list.push(now);
-  hits.set(ip, list);
-  if (hits.size > 5000) hits.clear(); // 메모리 방어
-  return list.length > RATE_LIMIT.max;
+  localHits.set(ip, list);
+  if (localHits.size > 5000) localHits.clear();
+  return list.length > IP_HOURLY_LIMIT;
+}
+
+// 방문자 IP 를 그대로 저장하지 않는다. 세는 데는 해시로 충분하다.
+function ipKey(ip) {
+  return require('crypto').createHash('sha256')
+    .update(ip + '|' + (process.env.SAJU_IP_SALT || 'saju')).digest('hex').slice(0, 16);
+}
+
+async function redisPipeline(commands) {
+  const res = await fetch(REDIS_URL + '/pipeline', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + REDIS_TOKEN, 'Content-Type': 'application/json' },
+    body: JSON.stringify(commands)
+  });
+  if (!res.ok) throw new Error('redis ' + res.status);
+  return res.json();
+}
+
+/**
+ * 하루 총량과 IP당 시간당 횟수를 함께 올리고 확인한다.
+ * @returns {{ok: boolean, reason?: string, retryAfter?: number}}
+ */
+async function checkQuota(ip) {
+  if (!REDIS_URL || !REDIS_TOKEN) {
+    return locallyRateLimited(ip)
+      ? { ok: false, reason: 'ip', retryAfter: 600 }
+      : { ok: true, unmetered: true };
+  }
+  const now = new Date();
+  const day = now.toISOString().slice(0, 10);          // YYYY-MM-DD (UTC)
+  const hour = now.toISOString().slice(0, 13);         // YYYY-MM-DDTHH
+  const dayKey = 'saju:day:' + day;
+  const hourKey = 'saju:ip:' + hour + ':' + ipKey(ip);
+  try {
+    const out = await redisPipeline([
+      ['INCR', dayKey], ['EXPIRE', dayKey, 172800],
+      ['INCR', hourKey], ['EXPIRE', hourKey, 7200]
+    ]);
+    const dayCount = Number(out[0] && out[0].result);
+    const ipCount = Number(out[2] && out[2].result);
+    if (Number.isFinite(ipCount) && ipCount > IP_HOURLY_LIMIT) {
+      return { ok: false, reason: 'ip', retryAfter: 600 };
+    }
+    if (Number.isFinite(dayCount) && dayCount > DAILY_LIMIT) {
+      return { ok: false, reason: 'day', retryAfter: 3600 };
+    }
+    return { ok: true, dayCount, ipCount };
+  } catch (e) {
+    // 카운터가 죽었다고 사이트를 멈추지는 않는다.
+    console.error('[quota] Redis 확인 실패, 통과시킴:', e.message);
+    return { ok: true, degraded: true };
+  }
 }
 
 const HANGUL = /^[가-힣]{1,5}$/;
@@ -283,9 +352,6 @@ module.exports = async (req, res) => {
     return fail(res, 500, '서버에 ANTHROPIC_API_KEY 환경변수가 설정되지 않았습니다.');
   }
 
-  const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
-  if (rateLimited(ip)) return fail(res, 429, '요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요.');
-
   let body = req.body;
   if (typeof body === 'string') {
     try { body = JSON.parse(body); } catch (e) { return fail(res, 400, '요청 형식이 올바르지 않습니다.'); }
@@ -295,6 +361,18 @@ module.exports = async (req, res) => {
   const checked = validate(body);
   if (checked.error) return fail(res, 400, checked.error);
   const input = checked.value;
+
+  // 형식이 틀린 요청이 하루 분량을 깎지 않도록, 검증을 통과한 뒤에 센다.
+  const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
+  const quota = await checkQuota(ip);
+  if (!quota.ok) {
+    res.setHeader('Retry-After', String(quota.retryAfter || 600));
+    return fail(res, 429, quota.reason === 'day'
+      ? '오늘 준비된 풀이 분량이 모두 나갔습니다. 내일 다시 찾아와 주세요. ' +
+        '사주표·오행·대운·시기·이름·궁합 계산은 지금도 그대로 보실 수 있습니다.'
+      : '조금 빠르게 여러 번 요청하셨습니다. 10분쯤 뒤에 다시 시도해 주세요. ' +
+        '아래 계산 결과는 그대로 보실 수 있습니다.');
+  }
 
   let reading, partnerReading = null, compat = null;
   try {

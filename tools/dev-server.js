@@ -34,6 +34,15 @@ const ROOT = path.resolve(__dirname, '..');
 
 const PORT = process.env.PORT || 3000;
 
+// vercel.json 의 redirects 를 그대로 흉내 낸다. 여기서 안 되면 로컬에서 확인한 것이
+// 배포와 달라진다(예전 /saju 주소가 로컬에서만 404 가 되는 식으로).
+const REDIRECTS = (() => {
+  try {
+    const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));
+    return Array.isArray(cfg.redirects) ? cfg.redirects : [];
+  } catch (e) { return []; }
+})();
+
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js':   'text/javascript; charset=utf-8',
@@ -109,6 +118,12 @@ async function serveApi(req, res, parsed) {
 }
 
 function serveStatic(req, res, parsed) {
+  const hit = REDIRECTS.find((r) => r.source === parsed.pathname);
+  if (hit) {
+    res.writeHead(hit.permanent ? 308 : 307, { Location: hit.destination });
+    res.end();
+    return;
+  }
   let rel = decodeURIComponent(parsed.pathname);
   if (rel === '/') rel = '/index.html';
   if (!path.extname(rel)) rel += '.html';           // /saju → /saju.html
