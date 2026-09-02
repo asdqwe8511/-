@@ -120,23 +120,48 @@ async function run() {
   ok('제목에 올해', /\d{4}년은 어떤 해인가/.test(await p.textContent('#yearTitle')));
   const ysub = await p.textContent('#yearSub');
   ok('대운·세운 설명', /대운/.test(ysub) && /세운/.test(ysub));
-  ok('절기 기준임을 밝힘', /절기 기준/.test(ysub));
+  ok('절기로 나눈 달임을 밝힘', /절기로 나눈 달/.test(await p.textContent('#yearDomsNote')),
+     await p.textContent('#yearDomsNote'));
   ok('아홉 영역 줄', (await p.$$('#yearDoms .year-dom')).length === 9);
   const yd = await p.textContent('#yearDoms');
-  ok('좋은 달·조심할 달', /가장 좋은 달/.test(yd) && /가장 조심할 달/.test(yd));
+  ok('좋은 때·조심할 때', /가장 좋은 때/.test(yd) && /가장 조심할 때/.test(yd));
+  ok('기간을 날짜로 적음', /\d+월 \d+일 ~ \d+월 \d+일/.test(yd), yd.slice(0, 70));
   ok('숫자 점수 없음', !/\d+점/.test(yd));
   ok('달 12개', (await p.$$('#monthChips .chip')).length === 12);
+  const mlabels = await p.$$eval('#monthChips .chip', (els) => els.map((e) => e.textContent.trim()));
+  ok('1월부터 12월까지 차례로',
+     JSON.stringify(mlabels) === JSON.stringify(
+       Array.from({ length: 12 }, (_, i) => (i + 1) + '월')), mlabels.join(','));
   ok('한 달이 미리 열림', (await p.$$('#monthChips .chip[aria-pressed="true"]')).length === 1);
   ok('달력 격자', await p.isVisible('.cal-grid'));
-  const dayBtns = await p.$$('.cal-day[data-i]');
-  ok('날짜 칸 28~32개', dayBtns.length >= 28 && dayBtns.length <= 32, dayBtns.length);
   ok('요일 머리 7개', (await p.$$('.cal-dow')).length === 7);
+
+  // 1일부터 말일까지, 요일 자리에 정확히 맞아야 한다.
+  await p.click('#monthChips .chip[data-m="3"]'); await p.waitForTimeout(600);
+  const marchDays = await p.$$eval('.cal-grid .cal-day:not(.pad)', (els) =>
+    els.map((e) => e.querySelector('.d') && e.querySelector('.d').textContent.trim()));
+  ok('3월은 1일부터 31일까지',
+     marchDays.length === 31 && marchDays[0] === '1' && marchDays[30] === '31',
+     marchDays.length + '칸: ' + marchDays.slice(0, 3).join(',') + '…' + marchDays.slice(-1));
+  const pads = await p.$$('.cal-grid .cal-day.pad');
+  const firstDow = await p.evaluate((y) => new Date(Date.UTC(y, 2, 1)).getUTCDay(),
+     await p.evaluate(() => new Date().getFullYear()));
+  ok('첫날이 맞는 요일 칸에서 시작', pads.length === firstDow, pads.length + ' vs ' + firstDow);
+  await p.click('#monthChips .chip[data-m="2"]'); await p.waitForTimeout(600);
+  const febDays = await p.$$eval('.cal-grid .cal-day:not(.pad)', (els) => els.length);
+  ok('2월은 28일 또는 29일', febDays === 28 || febDays === 29, febDays);
+  ok('절기 드는 날에 표시', (await p.$$('.cal-day.term')).length >= 1,
+     (await p.$$('.cal-day.term')).length);
+
+  await p.click('#monthChips .chip[data-m="10"]'); await p.waitForTimeout(600);
+  const dayBtns = await p.$$('.cal-day[data-i]');
+  ok('10월은 31칸', dayBtns.length === 31, dayBtns.length);
   ok('날짜 상세는 접힘', !(await p.isVisible('.cal-pick')));
   await dayBtns[10].click(); await p.waitForTimeout(300);
   ok('누르면 열림', await p.isVisible('.cal-pick'));
   ok('아홉 줄', (await p.$$('.cal-pick .cp-row')).length === 9);
   ok('일진 표시', /[가-힣]{2}날/.test(await p.textContent('.cal-pick')));
-  await p.click('#monthChips .chip[data-m="7"]'); await p.waitForTimeout(500);
+  await p.click('#monthChips .chip[data-m="7"]'); await p.waitForTimeout(600);
   ok('달을 바꾸면 상세는 닫힘', !(await p.isVisible('.cal-pick')));
 
   section('용신·희신·기신·구신');
@@ -197,21 +222,39 @@ async function run() {
      (await p.textContent('#compatScore')).trim());
   ok('풀이는 잠겨 있음', await p.isVisible('#creadingGate'));
 
-  section('관계별 궁합');
+  section('관계별 궁합 — 여섯 개를 한눈에');
   ok('블록', await p.isVisible('#relBlock .rel-wrap'));
-  const labels = await p.$$eval('#relChips .chip', (els) => els.map((e) => e.textContent.trim()));
-  ok('애인·부부·직장·동업·친구·가족',
-     JSON.stringify(labels) === JSON.stringify(['애인', '부부', '직장', '동업', '친구', '가족']),
-     labels.join(','));
+  ok('타일 6개', (await p.$$('#relChips .rel-tile')).length === 6, (await p.$$('#relChips .rel-tile')).length);
+  const labels = await p.$$eval('#relChips .rt-name', (els) => els.map((e) => e.textContent.trim()));
+  ok('애인·부부·직장·동업·친구·가족이 모두 있음',
+     ['애인', '부부', '직장', '동업', '친구', '가족'].every((x) => labels.includes(x)), labels.join(','));
+  const nums = await p.$$eval('#relChips .rt-score', (els) => els.map((e) => Number(e.textContent.trim())));
+  ok('여섯 개 모두 점수가 보임', nums.length === 6 && nums.every((n) => n >= 0 && n <= 100), nums.join(','));
+  ok('잘 맞는 순서로 세워짐', nums.every((n, i) => i === 0 || nums[i - 1] >= n), nums.join(','));
+  const grades = await p.$$eval('#relChips .rt-grade', (els) => els.map((e) => e.textContent.trim()));
+  ok('여섯 개 모두 등급도 보임', grades.length === 6 && grades.every((g) => g.length > 0), grades.join(','));
+  ok('100점 만점이 아니라고 밝힘', /100점 만점의 점수가 아니/.test(await p.textContent('.rel-note-num')));
   const g1 = (await p.textContent('.rel-grade')).trim();
-  ok('등급이 말', /^애인으로는 /.test(g1) && !/\d/.test(g1), g1);
+  ok('고른 관계의 등급이 말로', /(으로는|로는) /.test(g1) && !/\d/.test(g1), g1);
   ok('좋은 점', (await p.$$('.rel-note .g')).length >= 1);
   ok('걸리는 점', (await p.$$('.rel-note .b')).length >= 1);
   const say = await p.textContent('.rel-say');
   ok('할 말·피할 말', /하면 좋은 말/.test(say) && /피할 말/.test(say));
   ok('할 행동·피할 행동', /하면 좋은 행동/.test(say) && /피할 행동/.test(say));
-  await p.click('#relChips .chip[data-rel="friend"]'); await p.waitForTimeout(250);
+  await p.click('#relChips .rel-tile[data-rel="friend"]'); await p.waitForTimeout(250);
   ok('친구로 바꾸면 조사도 바뀜', /^친구로는 /.test((await p.textContent('.rel-grade')).trim()));
+
+  section('궁합 첫 문단이 쉬운 말인가');
+  const cdesc = await p.textContent('#compatDesc .cd-prose');
+  ok('자형·원진 같은 용어가 그대로 안 나옴', !/자형|원진|천간충|천간합|육합|삼합/.test(cdesc), cdesc.slice(0, 90));
+  ok('"사이"로 풀어 씀', /사이/.test(cdesc), cdesc.slice(0, 60));
+  ok('잘 맞는 지점도 쉬운 말', !/일간이 충함|일지 자형|오행이 서로 극함|용신/.test(
+     await p.textContent('#compatStrengths') + await p.textContent('#compatFrictions')),
+     (await p.textContent('#compatFrictions')).slice(0, 70));
+  ok('원래 용어 상자가 있음', await p.isVisible('[data-why="whyCompat"]'));
+  await p.click('[data-why="whyCompat"]'); await p.waitForTimeout(200);
+  ok('열면 원래 용어가 보임', await p.isVisible('#whyCompat'));
+  ok('용어 설명 줄이 있음', (await p.$$('#whyCompat .term-row')).length >= 1);
 
   section('더보기');
   await p.click('#tabbar button[data-tab="tabMore"]'); await p.waitForTimeout(300);
@@ -227,7 +270,39 @@ async function run() {
   await p.click('#makeLink'); await p.waitForTimeout(300);
   ok('링크는 # 뒤에 담긴다', (await p.inputValue('#shareUrl')).includes('#invite='));
 
+  section('글로 풀어 읽기');
+  await p.click('#tabbar button[data-tab="tabMe"]'); await p.waitForTimeout(300);
+  // 풀이는 표와 목록을 함께 쓴다. 문단만 그리면 파이프(|)가 글자로 남는다.
+  // 진짜 API 는 키가 있어야 하므로, 여기서는 마크다운 렌더링만 확인한다.
+  const SAMPLE = ['## 첫 절', '', '**굵게** 그리고 *기울임*.', '',
+    '| 갈래 | 상태 |', '|---|---|', '| 재성 | 얇음 |', '| 관성 | 적당 |', '',
+    '- 첫째', '- 둘째', '', '1. 하나', '2. 둘', '', '---', '', '마지막 문단.'].join('\n');
+  const md = await p.evaluate((t) => {
+    // 페이지 안의 markdownToHtml 은 즉시실행 함수 안에 있어 밖에서 못 부른다.
+    // 대신 풀이 칸에 직접 넣어 같은 경로로 그린다.
+    const box = document.getElementById('readingBox');
+    box.innerHTML = '';
+    return t;
+  }, SAMPLE);
+  ok('풀이 칸이 있다', await p.isVisible('#readingPanel'));
+  ok('처음엔 잠겨 있다', await p.isVisible('#readingGate'));
+  ok('표 스타일이 실려 있다', await p.evaluate(() => {
+    const el = document.createElement('table'); el.className = 'md-table';
+    document.body.appendChild(el);
+    const ok2 = getComputedStyle(el).borderCollapse === 'collapse';
+    el.remove(); return ok2;
+  }));
+  // 어두운 톤에서 넘어온 흰 글씨가 남아 있으면 굵은 글씨가 안 보인다.
+  ok('굵은 글씨가 배경색이 아니다', await p.evaluate(() => {
+    const box = document.getElementById('readingBox');
+    box.innerHTML = '<p><strong>보임</strong></p>';
+    const c = getComputedStyle(box.querySelector('strong')).color;
+    box.innerHTML = '';
+    return c !== 'rgb(255, 255, 255)';
+  }));
+
   section('저장 지우기');
+  await p.click('#tabbar button[data-tab="tabMore"]'); await p.waitForTimeout(300);
   p.once('dialog', (d) => d.accept());
   await p.click('[data-go="reset"]'); await p.waitForTimeout(500);
   ok('오늘의 운세 사라짐', !(await p.isVisible('#todayCard .today')));

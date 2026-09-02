@@ -231,8 +231,9 @@
   }
   .luck-cell.now{border-color:var(--accent-2); background:rgba(13,148,136,.08);}
   .luck-cell .age{font-size:11.5px; color:var(--text-dim);}
-  .luck-cell .gz{font-size:21px; font-weight:800; margin:4px 0 2px;}
-  .luck-cell .tg{font-size:10.5px; color:var(--text-mute); line-height:1.3;}
+  .luck-cell .gz{font-size:20px; font-weight:800; margin:4px 0 0;}
+  .luck-cell .hj{font-size:11px; color:var(--text-mute); margin-bottom:3px;}
+  .luck-cell .tg{font-size:10px; color:var(--text-mute); line-height:1.35;}
   .luck-cell.now .age{color:var(--accent-2);}
 
   .mode-tabs{margin:12px 0 16px;}
@@ -517,7 +518,10 @@
   }
   #readingBox h3:first-child, #creadingBox h3:first-child{margin-top:0;}
   #readingBox p, #creadingBox p{margin-bottom:12px;}
-  #readingBox strong, #creadingBox strong{color:#fff;}
+  /* 밝은 톤으로 바꿀 때 #fff 가 남아 흰 배경에 흰 글씨였다. 굵은 글씨는
+     색이 아니라 굵기로 드러나면 된다. */
+  #readingBox strong, #creadingBox strong{color:var(--text); font-weight:700;}
+  #readingBox em, #creadingBox em{color:var(--text-dim); font-style:italic;}
   .typing::after{
     content:'▌'; color:var(--accent); animation:blink 1s steps(2) infinite; margin-left:2px;
   }
@@ -736,6 +740,8 @@
   .cal-day .m{font-size:8px; line-height:1; letter-spacing:-.03em;}
   .cal-day.pad{visibility:hidden;}
   .cal-day[aria-pressed="true"]{border-color:var(--accent); background:rgba(107,78,255,.09);}
+  /* 절기가 드는 날 — 그날부터 달의 기운이 바뀐다 */
+  .cal-day.term{border-color:var(--accent-2); border-width:1.5px;}
   .cal-pick{
     margin-top:12px; background:var(--bg); border-radius:14px; padding:13px 14px;
   }
@@ -751,6 +757,42 @@
   }
   .cal-pick .cp-row b{font-weight:600; color:var(--text-dim);}
   @media (max-width:400px){ .cal-pick .cp-rows{grid-template-columns:1fr;} }
+
+  /* 풀이 안의 표와 목록 */
+  .md-table-wrap{overflow-x:auto; margin:12px 0; -webkit-overflow-scrolling:touch;}
+  .md-table{border-collapse:collapse; width:100%; font-size:12.5px; min-width:280px;}
+  .md-table th, .md-table td{
+    border:1px solid var(--border); padding:7px 9px; text-align:left; line-height:1.55;
+  }
+  .md-table th{background:var(--bg); font-weight:700; white-space:nowrap;}
+  .md-list{margin:10px 0; padding-left:20px; line-height:1.85;}
+  .md-list li{margin:4px 0;}
+  .md-hr{border:none; border-top:1px solid var(--border); margin:16px 0;}
+
+  /* 태어난 곳 안내 — 무엇을 고를지 기준이 없으면 아무도 못 고른다 */
+  .place-help{
+    margin-top:9px; font-size:12px; line-height:1.75; color:var(--text-dim);
+    background:var(--bg); border-radius:12px; padding:11px 13px;
+  }
+  .place-help b{color:var(--text);}
+  .place-help ul{margin:7px 0; padding-left:17px;}
+  .place-help li{margin:3px 0;}
+
+  /* 원래 용어는 쉬운 말 뒤에 작게 */
+  .term-src{
+    font-size:.78em; color:var(--text-mute); margin-left:3px; font-weight:400;
+    letter-spacing:0;
+  }
+  .term-src::before{content:'(';} .term-src::after{content:')';}
+  .hanja-src{font-size:.82em; color:var(--text-mute); margin-left:2px; font-weight:400;}
+  .term-row{
+    display:grid; grid-template-columns:74px 1fr; gap:9px; padding:7px 0;
+    border-top:1px solid var(--border); font-size:12.5px; line-height:1.6;
+  }
+  .term-row:first-of-type{border-top:none;}
+  .term-row b{font-weight:700; color:var(--text);}
+  .term-row span{color:var(--text-dim);}
+  .term-intro{font-size:12px; color:var(--text-mute); margin:0 0 8px; line-height:1.6;}
 
   /* 길흉일 — 무슨 일에 어느 날이 맞는가 */
   .act-box{margin-top:12px; background:var(--bg); border-radius:14px; padding:13px 14px;}
@@ -768,6 +810,29 @@
   .act-day .ad-body b{color:var(--text); font-weight:600;}
   .act-head{font-size:12px; font-weight:700; color:var(--text-dim); margin:11px 0 6px;}
   .act-head:first-of-type{margin-top:0;}
+
+  /* 여섯 관계를 한눈에 — 궁합 화면의 주인공 */
+  .rel-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:7px;}
+  .rel-tile{
+    background:var(--panel); border:1.5px solid var(--border); border-radius:14px;
+    padding:11px 8px 9px; font-family:inherit; cursor:pointer; color:var(--text);
+    display:flex; flex-direction:column; align-items:center; gap:2px;
+    min-height:88px; -webkit-tap-highlight-color:transparent;
+  }
+  .rel-tile.on{border-color:var(--accent); background:rgba(107,78,255,.06);}
+  .rel-tile .rt-name{font-size:12.5px; font-weight:700;}
+  .rel-tile .rt-score{font-size:23px; font-weight:800; line-height:1.15; letter-spacing:-.03em;}
+  .rel-tile .rt-grade{font-size:10px; color:var(--text-mute); line-height:1.3; text-align:center;}
+  .rel-tile .rt-bar{
+    display:block; width:100%; height:3px; background:var(--border);
+    border-radius:2px; margin-top:5px; overflow:hidden;
+  }
+  .rel-tile .rt-bar i{display:block; height:100%; background:currentColor; opacity:.5;}
+  .rel-tile.on .rt-bar i{background:var(--accent); opacity:1;}
+  .rel-note-num{
+    font-size:11.5px; color:var(--text-mute); line-height:1.7; margin:10px 0 12px;
+  }
+  @media (max-width:360px){ .rel-grid{grid-template-columns:repeat(2,1fr);} }
 
   /* 12운성 — 대운마다 기운이 얼마나 차 있는지 */
   .stage-wrap{margin-top:18px;}
@@ -801,6 +866,7 @@
   .role{background:var(--bg); border-radius:11px; padding:9px 6px; text-align:center;}
   .role b{display:block; font-size:10.5px; color:var(--text-mute); font-weight:600;}
   .role span{display:block; font-size:16px; font-weight:800; margin-top:3px;}
+  .role i{display:block; font-size:9.5px; color:var(--text-mute); font-style:normal; margin-top:2px;}
   .role.good span{color:#1c6fb5;}
   .role.bad span{color:#9b2412;}
   .roles-note{font-size:11.5px; color:var(--text-mute); line-height:1.7; margin-top:9px;}
@@ -948,7 +1014,20 @@
           <div class="field" style="margin-top:16px">
             <label for="city">태어난 곳</label>
             <select id="city"></select>
-            <span class="hint">서울은 시계보다 해가 약 32분 늦게 뜹니다. 그만큼 되돌려 계산합니다.</span>
+            <div class="place-help">
+              <b>어디를 고르면 되나요?</b> 태어난 <b>병원이나 집이 있던 도시</b>를 고르세요.
+              사주는 그 자리에서 해가 어디에 있었는지로 시각을 되돌려 계산하기 때문입니다.
+              <ul>
+                <li><b>기억이 안 나면</b> — 어머니가 살던 곳, 또는 주민등록상 첫 주소지의 도시</li>
+                <li><b>모르면 서울</b>로 두세요. 목록에서 가장 먼 두 도시(목포·포항)라도
+                    시각 차이는 <b>12분</b>입니다. 태어난 시각을 15분 간격으로 모두 넣어 본 결과,
+                    도시를 바꿔서 태어난 시각의 기둥이 갈리는 경우는 <b>여덟 번에 한 번</b>이었습니다.</li>
+                <li><b>외국에서 태어났다면</b> 목록에 없습니다. 시각 보정이 크게 달라지므로
+                    결과를 그대로 믿지 마세요.</li>
+              </ul>
+              태어난 시각이 <b>홀수 시각 정각 근처</b>(01시, 03시, 05시…)라면 그 여덟 번에
+              한 번에 걸릴 수 있으니, 그때만 정확히 고르면 됩니다.
+            </div>
           </div>
         </div>
 
@@ -1027,7 +1106,9 @@
       <h2>사주팔자</h2>
       <p class="sub" id="chartSub"></p>
       <div class="pillars" id="pillars"></div>
+      <div id="pillarTerms"></div>
       <div class="kv" id="chartTags"></div>
+      <div id="chartTagTerms"></div>
     </section>
 <section class="panel" id="elemPanel">
       <h2>오행의 균형</h2>
@@ -1040,12 +1121,14 @@
       <h2>대운 — 10년 단위의 흐름</h2>
       <p class="sub" id="luckSub"></p>
       <div class="luck-scroll"><div class="luck-row" id="luckRow"></div></div>
+      <div id="luckTerms"></div>
       <div id="stageBlock"></div>
     </section>
 <section class="panel" id="yearPanel" hidden>
       <h2 id="yearTitle">올해는 어떤 해인가</h2>
       <p class="sub" id="yearSub"></p>
 
+      <p class="sub" id="yearDomsNote"></p>
       <div class="year-doms" id="yearDoms"></div>
 
       <div style="margin-top:18px">
@@ -1427,6 +1510,9 @@
   'use strict';
   var E = window.SajuEngine;
 
+  // 경도가 동쪽일수록 해가 일찍 뜬다. 한국 안에서 가장 서쪽(목포 126.39)과 가장
+  // 동쪽(포항 129.36)의 차이는 경도 3도, 시각으로 12분이다. 그래서 도시를 잘못
+  // 골라도 시주가 바뀌는 일은 드물다 — 태어난 시각이 두 시진 경계에 걸릴 때만이다.
   var CITIES = [
     ['서울', 126.98], ['인천', 126.71], ['수원', 127.01], ['춘천', 127.73], ['강릉', 128.90],
     ['대전', 127.38], ['청주', 127.49], ['천안', 127.15], ['전주', 127.15], ['광주', 126.85],
@@ -1450,6 +1536,8 @@
   fillSelect($('day'), days, 1);
   fillSelect($('hour'), hours, 12);
   fillSelect($('city'), CITIES.map(function (c) { return [c[1], c[0]]; }), 126.98);
+  // 기본값이 무엇인지 보이지 않으면 "안 고르면 어떻게 되나"를 알 수 없다.
+  $('city').options[0].textContent = '서울 (모르면 이대로 두세요)';
 
   function chipGroup(id) {
     var root = $(id);
@@ -1743,14 +1831,14 @@
     $('summary').innerHTML = [
       ['생년월일', r.solar.year + '.' + r.solar.month + '.' + r.solar.day,
        '음력 ' + lunar],
-      ['일간 — 나를 뜻하는 글자', p.day.stem + '(' + p.day.hanja.charAt(0) + ')',
-       a.dayMaster.elem + ' · ' + (a.dayMaster.yang ? '양' : '음')],
-      ['기운의 세기', a.strength.replace(/\(.*\)/, ''),
+      ['나를 뜻하는 글자', p.day.stem + '(' + p.day.hanja.charAt(0) + ')',
+       E.plainTerm(a.dayMaster.elem) + ' · ' + (a.dayMaster.yang ? '양' : '음')],
+      ['내 힘의 세기', E.plainTerm(a.strength.replace(/\(.*\)/, '')),
        a.strengthRatio >= 0.6 ? '뿌리가 단단한 편' :
        a.strengthRatio >= 0.45 ? '받쳐 주는 힘이 있는 편' :
        a.strengthRatio >= 0.35 ? '받쳐 주는 힘이 얕은 편' : '기대는 자리가 필요한 편'],
-      ['필요한 기운(용신)', a.primaryYongsin + '(' + E.ELEM_H[a.primaryYongsin] + ')',
-       a.yongsin.join(' → ')]
+      ['가장 필요한 기운', E.plainTerm(a.primaryYongsin) + '(' + a.primaryYongsin + ')',
+       a.yongsin.map(function (x) { return E.plainTerm(x); }).join(' → ')]
     ].map(function (s) {
       return '<div class="stat"><div class="label">' + esc(s[0]) + '</div>' +
              '<div class="value">' + esc(s[1]) + ' <small>' + esc(s[2]) + '</small></div></div>';
@@ -1766,27 +1854,36 @@
     $('pillars').innerHTML = order.map(function (o) {
       var key = o[1], p = r.pillars[key], pos = o[0];
       if (!p) {
-        return '<div class="pillar empty"><div class="pos">' + pos + '주</div>' +
+        return '<div class="pillar empty"><div class="pos">' + POS_NAME[pos] + '</div>' +
                '<div class="god">&nbsp;</div><div class="glyph">?</div>' +
                '<div class="kor">시간 미상</div><div class="divider"></div>' +
                '<div class="glyph">?</div><div class="kor">&nbsp;</div>' +
                '<div class="hidden-stems">&nbsp;</div></div>';
       }
       var g1 = gods['s' + pos] || '', g2 = gods['b' + pos] || '';
+      // 한자를 크게 두면 못 읽는 사람이 많다. 한글을 앞세우고 한자는 괄호로.
+      // 십신도 "편인" 대신 "남다른 배움"이 먼저 보이게 한다.
       return '<div class="pillar' + (key === 'day' ? ' day' : '') + '">' +
-        '<div class="pos">' + pos + '주</div>' +
-        '<div class="god">' + esc(key === 'day' ? '일간(나)' : g1) + '</div>' +
-        '<div class="glyph">' + esc(p.hanja.charAt(0)) + '</div>' +
-        '<div class="kor">' + esc(p.stem) + '</div>' +
-        '<div class="elem">' + esc(p.stemElem + ' · ' + p.stemYinYang) + '</div>' +
+        '<div class="pos">' + POS_NAME[pos] + '</div>' +
+        '<div class="god">' + (key === 'day' ? '나' : esc(E.plainTerm(g1))) + '</div>' +
+        '<div class="glyph">' + esc(p.stem) + '</div>' +
+        '<div class="kor">' + esc(p.hanja.charAt(0)) + '</div>' +
+        '<div class="elem">' + esc(E.plainTerm(p.stemElem)) + '</div>' +
         '<div class="divider"></div>' +
-        '<div class="glyph">' + esc(p.hanja.charAt(1)) + '</div>' +
-        '<div class="kor">' + esc(p.branch) + ' <span style="color:var(--text-mute)">' + esc(p.animal) + '</span></div>' +
-        '<div class="elem">' + esc(p.branchElem) + '</div>' +
-        '<div class="god" style="margin-top:6px">' + esc(g2) + '</div>' +
-        '<div class="hidden-stems">지장간 ' + esc(p.hidden.join('·')) + '</div>' +
+        '<div class="glyph">' + esc(p.branch) + '</div>' +
+        '<div class="kor">' + esc(p.hanja.charAt(1)) + ' <span style="color:var(--text-mute)">' + esc(p.animal) + '</span></div>' +
+        '<div class="elem">' + esc(E.plainTerm(p.branchElem)) + '</div>' +
+        '<div class="god" style="margin-top:6px">' + esc(E.plainTerm(g2)) + '</div>' +
+        '<div class="hidden-stems">속에 숨은 기운<br>' + esc(p.hidden.join('·')) + '</div>' +
       '</div>';
     }).join('');
+
+    // 표에 쓴 십신을 아래 상자에 모은다.
+    var usedGods = [];
+    r.analysis.tenGods.stems.forEach(function (g) { if (g.god !== '일간(나)') usedGods.push(g.god); });
+    r.analysis.tenGods.branches.forEach(function (g) { usedGods.push(g.god); });
+    $('pillarTerms').innerHTML = termBox('whyPillars', usedGods.concat(['일간', '지장간']),
+      '표의 위·아래 칸에 적힌 말은 나(일간)와 그 글자의 사이를 뜻합니다.');
 
     var t = r.chart.time;
     $('chartSub').textContent =
@@ -1799,15 +1896,24 @@
       (t.standardOffset !== 9 ? ' 당시 한국 표준시는 UTC+' + t.standardOffset + '였습니다.' : '');
 
     var a = r.analysis;
+    // "공망 자·축", "천을귀인 시지 미" 는 사주를 아는 사람의 말이다.
     var tags = [
-      ['공망', a.gongmang.join('·')],
+      ['기운이 비는 자리', a.gongmang.join('·')],
       ['태어난 계절', a.season],
-      ['없는 오행', a.missing.length ? a.missing.join('·') : '없음']
+      ['없는 기운', a.missing.length
+        ? a.missing.map(function (e) { return E.plainTerm(e); }).join('·') : '없음']
     ];
-    a.shinsal.forEach(function (s) { tags.push([s.name, s.at + ' ' + s.branch]); });
+    var shinsalTerms = [];
+    a.shinsal.forEach(function (sh) {
+      shinsalTerms.push(sh.name);
+      tags.push([E.plainTerm(sh.name), POS_NAME[sh.at.charAt(0)] || sh.at]);
+    });
     $('chartTags').innerHTML = tags.map(function (t2) {
       return '<span class="tag">' + esc(t2[0]) + ' <b>' + esc(t2[1]) + '</b></span>';
     }).join('');
+    $('chartTagTerms').innerHTML = termBox('whyTags',
+      shinsalTerms.concat(['공망', '지장간']),
+      '표 아래 딱지에 쓴 말을 명리 용어로는 이렇게 부릅니다.');
   }
 
   function renderBars(r) {
@@ -1816,10 +1922,10 @@
     $('bars').innerHTML = E.ELEMS.map(function (e) {
       var v = a.weighted[e], pct = max > 0 ? Math.max(2, v / max * 100) : 2;
       var need = a.yongsin.indexOf(e) === 0;
-      return '<div class="bar-row" title="' + esc(e + '(' + E.ELEM_H[e] + ') — 글자 수 ' + a.count[e] + '개, 지장간 포함 ' + v) + '">' +
-        '<div class="bar-name"><b>' + esc(e) + '</b> ' + esc(E.ELEM_H[e]) + '</div>' +
+      return '<div class="bar-row" title="' + esc(e + '(' + E.ELEM_H[e] + ') — 글자 수 ' + a.count[e] + '개, 속에 숨은 기운까지 ' + v) + '">' +
+        '<div class="bar-name"><b>' + esc(E.plainTerm(e)) + '</b> ' + esc(e) + '</div>' +
         '<div class="bar-track"><div class="bar-fill' + (need ? ' need' : '') + '" style="width:' + pct.toFixed(1) + '%"></div></div>' +
-        '<div class="bar-val"><b>' + v.toFixed(1) + '</b>' + (need ? '<span class="bar-tag">용신</span>' : '') + '</div>' +
+        '<div class="bar-val"><b>' + v.toFixed(1) + '</b>' + (need ? '<span class="bar-tag">필요</span>' : '') + '</div>' +
       '</div>';
     }).join('');
     renderRoles(r);
@@ -1848,28 +1954,38 @@
     $('rolesBlock').innerHTML =
       '<div class="roles">' + cells.map(function (c) {
         return '<div class="role ' + c.cls + '" title="' + esc(c.why) + '">' +
-          '<b>' + esc(c.k) + '</b><span>' + esc(c.v) + '</span></div>';
+          '<b>' + esc(c.k) + '</b><span>' + esc(c.v) + '</span>' +
+          '<i>' + esc(E.plainTerm(c.v)) + '</i></div>';
       }).join('') + '</div>' +
       '<div class="roles-note">' + haveText +
         (pf ? '<br>' + esc(f.용신) + ' 기운은 <b>' + esc(pf.color) + '</b>, <b>' + esc(pf.dir) +
               '</b>, 숫자 <b>' + pf.nums.join('·') + '</b>에 붙습니다. ' + esc(pf.life) + '.' : '') +
         '<br>희신은 용신을 도와주고, 기신은 용신을 깨뜨리고, 구신은 그 기신을 도와줍니다.' +
-      '</div>';
+      '</div>' +
+      termBox('whyRoles', ['용신', '희신', '기신', '구신', '한신', f.용신, f.기신],
+        '네 자리를 명리 용어로는 이렇게 부릅니다.');
   }
 
   function renderLuck(r) {
     var L = r.luck;
-    $('luckSub').textContent =
-      L.direction + '으로 흐르고, 대운은 만 ' + L.startAge + '세부터 바뀝니다(대운수 ' + L.luckNumber + '). ' +
-      (r.currentLuck ? '지금은 ' + r.currentLuck.hanja + ' 대운입니다.' : '');
+    $('luckSub').innerHTML =
+      '10년마다 배경이 한 번씩 바뀝니다. 만 ' + L.startAge + '세부터 바뀌기 시작해요. ' +
+      (r.currentLuck ? '지금은 <b>' + GZ(r.currentLuck.stem + r.currentLuck.branch, r.currentLuck.hanja) +
+        '</b> 자리입니다.' : '');
     $('luckRow').innerHTML = L.list.map(function (l) {
       var now = r.currentLuck && r.currentLuck.order === l.order;
+      var gods = l.tenGod.split('/');
       return '<div class="luck-cell' + (now ? ' now' : '') + '">' +
         '<div class="age">' + Math.floor(l.ageFrom) + '~' + Math.floor(l.ageTo) + '세</div>' +
-        '<div class="gz">' + esc(l.hanja) + '</div>' +
-        '<div class="tg">' + esc(l.tenGod.replace('/', ' · ')) + '</div>' +
+        '<div class="gz">' + esc(l.stem + l.branch) + '</div>' +
+        '<div class="hj">' + esc(l.hanja) + '</div>' +
+        '<div class="tg">' + esc(E.plainTerm(gods[0])) + '<br>' + esc(E.plainTerm(gods[1])) + '</div>' +
       '</div>';
     }).join('');
+    var luckGods = [];
+    L.list.forEach(function (l) { l.tenGod.split('/').forEach(function (g) { luckGods.push(g); }); });
+    $('luckTerms').innerHTML = termBox('whyLuck', luckGods.concat(['대운', '세운']),
+      '칸마다 적힌 말은 그 10년 동안 나에게 무엇이 들어오는지를 뜻합니다.');
     renderStages(r);
   }
 
@@ -1883,7 +1999,7 @@
 
     var bars = ls.list.map(function (L) {
       return '<div class="stage-bar' + (L.current ? ' now' : '') + '">' +
-        '<span class="nm">' + esc(L.stage) + '</span>' +
+        '<span class="nm">' + esc(SHORT_STAGE[L.stage] || L.stage) + '</span>' +
         '<span class="fill" style="height:' + Math.round(L.power * 0.62) + 'px"></span>' +
         '</div>';
     }).join('');
@@ -1892,19 +2008,21 @@
     }).join('');
 
     var now = ls.current
-      ? '<div class="stage-now">지금은 <b>' + esc(ls.current.hanja) + ' 대운</b>, ' +
-        '열두 단계로는 <b>' + esc(ls.current.stage) + '</b>입니다 — ' + esc(ls.current.plain) + '.</div>'
+      ? '<div class="stage-now">지금은 <b>' + GZ(ls.current.stem + ls.current.branch, ls.current.hanja) +
+        '</b> 자리, 열두 단계로는 <b>' + esc(E.plainTerm(ls.current.stage)) + '</b>입니다 — ' +
+        esc(ls.current.plain) + '.</div>'
       : '';
     var peak = '';
     if (ls.peak && ls.trough && ls.peak.order !== ls.trough.order) {
       peak = '<div class="stage-peak">' +
         '<div>앞으로 20년 중 기운이 가장 높은 때는 <b>' + ls.peak.yearFrom + '~' + ls.peak.yearTo +
-          '년</b>(' + esc(ls.peak.hanja) + ' · ' + esc(ls.peak.stage) + ')입니다.</div>' +
+          '년</b> — ' + esc(E.plainTerm(ls.peak.stage)) + '입니다.</div>' +
         '<div>가장 낮은 때는 <b>' + ls.trough.yearFrom + '~' + ls.trough.yearTo +
-          '년</b>(' + esc(ls.trough.hanja) + ' · ' + esc(ls.trough.stage) + ')입니다. ' +
+          '년</b> — ' + esc(E.plainTerm(ls.trough.stage)) + '입니다. ' +
           '나쁜 일이 정해졌다는 뜻이 아니라, 벌이기보다 지킬 때라는 뜻이에요.</div>' +
         '</div>';
     }
+    var stageTerms = ls.list.map(function (L) { return L.stage; });
 
     $('stageBlock').innerHTML =
       '<div class="stage-wrap">' +
@@ -1914,6 +2032,8 @@
         '<div class="stage-bars">' + bars + '</div>' +
         '<div class="stage-axis">' + axis + '</div>' +
         now + peak +
+        termBox('whyStage', stageTerms,
+          '막대 위에 적힌 열두 단계를 명리에서는 12운성이라고 부릅니다.') +
       '</div>';
   }
 
@@ -2241,18 +2361,6 @@
   }
 
   // ── 해석 스트리밍 ─────────────────────────────────────────────────────
-  var lastPayload = null;
-
-  function markdownToHtml(md) {
-    return md.split(/\n{2,}/).map(function (block) {
-      var b = block.trim();
-      if (!b) return '';
-      if (/^##\s+/.test(b)) return '<h3>' + esc(b.replace(/^##\s+/, '')) + '</h3>';
-      var html = esc(b).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
-      return '<p>' + html + '</p>';
-    }).join('');
-  }
-
   // 계산은 원가가 들지 않지만 풀이 한 번은 실제 요금이 나간다. 그래서 결과가
   // 나오자마자 자동으로 부르지 않고, 사용자가 원할 때만 부른다. 결제를 붙일 때는
   // 아래 start 핸들러 앞에 확인만 끼우면 되고, 계산 결과는 그대로 무료로 남는다.
@@ -2293,13 +2401,52 @@
     });
   });
 
+  // 풀이는 표와 목록을 함께 씁니다. 문단만 그리면 파이프(|)와 하이픈이 글자
+  // 그대로 화면에 나와 읽을 수가 없다.
+  function inline(t) {
+    return esc(t)
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
+  }
   function markdownToHtml(md) {
     return md.split(/\n{2,}/).map(function (block) {
       var b2 = block.trim();
       if (!b2) return '';
-      if (/^##\s+/.test(b2)) return '<h3>' + esc(b2.replace(/^##\s+/, '')) + '</h3>';
-      var html = esc(b2).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
-      return '<p>' + html + '</p>';
+      if (/^#{1,4}\s+/.test(b2)) {
+        return '<h3>' + inline(b2.replace(/^#{1,4}\s+/, '')) + '</h3>';
+      }
+      var lines = b2.split('\n');
+
+      // 표 — 둘째 줄이 |---|---| 꼴이면 표로 본다.
+      if (lines.length >= 2 && /^\s*\|/.test(lines[0]) && /^[\s|:-]+$/.test(lines[1])) {
+        var cells = function (line) {
+          return line.replace(/^\s*\|/, '').replace(/\|\s*$/, '')
+                     .split('|').map(function (c) { return inline(c.trim()); });
+        };
+        var head = cells(lines[0]);
+        var body = lines.slice(2).filter(function (l) { return /\|/.test(l); }).map(cells);
+        return '<div class="md-table-wrap"><table class="md-table"><thead><tr>' +
+          head.map(function (c) { return '<th>' + c + '</th>'; }).join('') +
+          '</tr></thead><tbody>' +
+          body.map(function (row) {
+            return '<tr>' + row.map(function (c) { return '<td>' + c + '</td>'; }).join('') + '</tr>';
+          }).join('') + '</tbody></table></div>';
+      }
+
+      // 목록 — 모든 줄이 -, *, 또는 1. 로 시작하면
+      var bullet = lines.every(function (l) { return /^\s*[-*]\s+/.test(l); });
+      var numbered = lines.every(function (l) { return /^\s*\d+[.)]\s+/.test(l); });
+      if (bullet || numbered) {
+        var tag = numbered ? 'ol' : 'ul';
+        return '<' + tag + ' class="md-list">' + lines.map(function (l) {
+          return '<li>' + inline(l.replace(/^\s*(?:[-*]|\d+[.)])\s+/, '')) + '</li>';
+        }).join('') + '</' + tag + '>';
+      }
+
+      // 구분선
+      if (/^(-{3,}|\*{3,}|_{3,})$/.test(b2)) return '<hr class="md-hr">';
+
+      return '<p>' + inline(b2).replace(/\n/g, '<br>') + '</p>';
     }).join('');
   }
 
@@ -2464,13 +2611,27 @@
   function drawRelation() {
     var rel = relState.data;
     if (!rel) { $('relBlock').innerHTML = ''; return; }
-    var t = rel.types[relState.type];
 
-    var chips = E.REL_TYPES.map(function (k) {
-      return '<button type="button" class="chip" data-rel="' + k + '" aria-pressed="' +
-        (k === relState.type) + '">' + esc(E.REL_TYPE_LABEL[k]) + '</button>';
+    // 여섯 관계를 한눈에. 잘 맞는 순서로 세우고, 등급(말)과 점수를 같이 보여
+    // 준다. 점수는 무작위로 만난 100쌍 가운데 몇 번째냐는 뜻이지 100점 만점의
+    // 점수가 아니다 — 그 말을 아래에 붙여 둔다.
+    var ranked = E.REL_TYPES.slice().sort(function (a, b) {
+      return rel.types[b].score - rel.types[a].score;
+    });
+    var cards = ranked.map(function (k) {
+      var x = rel.types[k];
+      var tone = x.score >= 66 ? 'great' : x.score >= 50 ? 'good'
+               : x.score >= 34 ? 'mid' : x.score >= 20 ? 'care' : 'bad';
+      return '<button type="button" class="rel-tile' + (k === relState.type ? ' on' : '') +
+        '" data-rel="' + k + '" aria-pressed="' + (k === relState.type) + '">' +
+        '<span class="rt-name">' + esc(x.label) + '</span>' +
+        '<span class="rt-score tone-' + tone + '">' + x.score + '</span>' +
+        '<span class="rt-grade">' + esc(x.grade) + '</span>' +
+        '<span class="rt-bar"><i style="width:' + Math.max(3, x.score) + '%"></i></span>' +
+        '</button>';
     }).join('');
 
+    var t = rel.types[relState.type];
     var notes =
       t.good.map(function (x) { return '<div class="g">' + esc(x) + '</div>'; }).join('') +
       t.bad.map(function (x) { return '<div class="b">' + esc(x) + '</div>'; }).join('');
@@ -2488,12 +2649,17 @@
     $('relBlock').innerHTML =
       '<div class="rel-wrap">' +
         '<div class="rel-head">어떤 사이로 볼까요</div>' +
-        '<div class="chips rel-chips" id="relChips">' + chips + '</div>' +
+        '<div class="rel-grid" id="relChips">' + cards + '</div>' +
+        '<div class="rel-note-num">숫자는 <b>무작위로 만난 100쌍 가운데 몇 번째</b>인지를 뜻합니다. ' +
+          '100점 만점의 점수가 아니고, 사람을 매기는 값도 아닙니다. ' +
+          '눌러서 그 사이의 좋은 점과 걸리는 점을 보세요.</div>' +
         '<div class="rel-card">' +
           '<div class="rel-grade">' + esc(E.REL_TYPE_LABEL[t.key]) +
             (hasBatchim(E.REL_TYPE_LABEL[t.key]) ? '으로는 ' : '로는 ') + esc(t.grade) + '</div>' +
           '<div class="rel-note">' + notes + '</div>' +
           say +
+          termBox('whyRel', [rel.godBtoA, rel.actRelation],
+            '이 조언이 어디서 나왔는지, 명리 용어로는 이렇게 부릅니다.') +
         '</div>' +
       '</div>';
 
@@ -2516,24 +2682,51 @@
     $('compatScore').parentNode.style.borderColor =
       band.tone === 'good' ? 'var(--accent-2)' : band.tone === 'bad' ? 'var(--danger)' : 'var(--accent)';
 
+    // 첫 문단이 이 화면에서 가장 먼저 읽히는 곳이다. "일지 자형"처럼 써 두면
+    // 사주를 모르는 사람은 아무것도 알 수 없다. 쉬운 말로 쓰고 원래 용어는
+    // 아래 상자에 모은다.
     var top = c.strengths[0], bad = c.frictions[0];
+    var stemLine = d.dayStemRelation === '천간합' ? '서로 손을 잡는 사이'
+                 : d.dayStemRelation === '천간충' ? '정면으로 부딪히는 사이'
+                 : d.dayStemRelation === '같은 오행' ? '결이 똑같은 사이'
+                 : d.dayStemRelation === '상생' ? '한쪽이 다른 쪽을 살려 주는 사이'
+                 : d.dayStemRelation === '상극' ? '한쪽이 다른 쪽을 누르는 사이'
+                 : '특별히 엮이지 않는 사이';
+    // 문장 끝에 그대로 놓아도 어색하지 않게 맺음말을 붙인다.
+    var seatLine = d.dayBranchRelations.length
+      ? d.dayBranchRelations.map(function (x) { return E.plainTerm(x); }).join(', ') + ' 사이'
+      : '특별히 엮이는 것이 없는 사이';
+    var usedTerms = [d.dayStemRelation].concat(d.dayBranchRelations)
+      .concat(d.zodiacRelations).concat([d.godBtoA, d.godAtoB, '일간', '일지']);
+
     $('compatDesc').innerHTML =
-      '<b>' + esc(band.label) + '.</b> 일간은 ' + esc(d.dayStems.join(' · ')) + ' 로 ' + esc(d.dayStemRelation) + ' 관계이고, ' +
-      '배우자 자리인 일지는 ' + (d.dayBranchRelations.length ? esc(d.dayBranchRelations.join('·')) : '특별한 관계 없음') + '입니다. ' +
-      '띠로는 ' + esc(d.zodiac.join('·')) + (d.zodiacRelations.length ? ' ' + esc(d.zodiacRelations.join('·')) : ' 무관') + '. ' +
-      (top ? '가장 크게 받쳐 주는 것은 <b>' + esc(top.label) + '</b>' : '') +
-      (bad ? ', 가장 걸리는 것은 <b>' + esc(bad.label) + '</b>입니다.' : '입니다.');
+      '<span class="cd-prose">' +
+        '<b>' + esc(band.label) + '.</b> ' +
+        '두 사람을 뜻하는 글자끼리는 <b>' + esc(stemLine) + '</b>이고, ' +
+        '가장 가까운 자리(배우자 자리)끼리는 <b>' + esc(seatLine) + '</b>입니다. ' +
+        '띠로는 ' + esc(d.zodiac.join('·')) + '띠' +
+        (d.zodiacRelations.length
+          ? '라 ' + esc(d.zodiacRelations.map(function (x) { return E.plainTerm(x); }).join('·')) + '입니다. '
+          : '이고 서로 엮이는 것은 없습니다. ') +
+        (top ? '가장 크게 받쳐 주는 것은 — ' + esc(top.plain || top.label) : '') +
+        (bad ? '. 가장 걸리는 것은 — ' + esc(bad.plain || bad.label) + '.' : '.') +
+      '</span>' +
+      termBox('whyCompat', usedTerms,
+        '위 문장에 쓴 말을 명리 용어로는 이렇게 부릅니다.');
 
     function card(who, r, name) {
       return '<div class="pair-card"><div class="who">' + esc(who) + '</div>' +
-        '<div class="gz">' + esc(r.pillars.day.hanja) + ' <span style="font-size:13px;color:var(--text-dim)">' + esc(r.pillars.day.korean) + '일주</span></div>' +
-        '<div class="meta">' + esc(name) + ' · ' + esc(r.pillars.year.animal) + '띠 · 일간 ' + esc(r.analysis.dayMaster.stem) + '(' + esc(r.analysis.dayMaster.elem) + ')<br>' +
-        esc(r.analysis.strength) + ' · 용신 ' + esc(r.analysis.yongsin[0]) + '</div></div>';
+        '<div class="gz">' + GZ(r.pillars.day.korean, r.pillars.day.hanja) + '</div>' +
+        '<div class="meta">' + esc(name) + ' · ' + esc(r.pillars.year.animal) + '띠<br>' +
+        '나를 뜻하는 글자 ' + esc(r.analysis.dayMaster.stem) +
+          '(' + esc(E.plainTerm(r.analysis.dayMaster.elem)) + ')<br>' +
+        esc(E.plainTerm(r.analysis.strength)) + ' · 필요한 기운 ' +
+          esc(E.plainTerm(r.analysis.yongsin[0])) + '</div></div>';
     }
     $('pairRow').innerHTML =
       card('나', A, nameA) +
-      '<div class="pair-link">' + esc(d.dayStemRelation) + '<br>↔<br>' +
-        esc(d.godBtoA) + ' / ' + esc(d.godAtoB) + '</div>' +
+      '<div class="pair-link">' + esc(E.plainTerm(d.dayStemRelation)) + '<br>↔<br>' +
+        '상대는 나에게<br>' + esc(E.plainTerm(d.godBtoA)) + '</div>' +
       card('상대', B, nameB);
 
     $('axes').innerHTML = E.COMPAT_AXES.map(function (k) {
@@ -2548,7 +2741,8 @@
     function items(list, empty) {
       if (!list.length) return '<div class="sf-item" style="color:var(--text-mute)">' + empty + '</div>';
       return list.map(function (i) {
-        return '<div class="sf-item"><span class="ax">[' + esc(i.axis) + ']</span> ' + esc(i.label) + '</div>';
+        return '<div class="sf-item"><span class="ax">[' + esc(i.axis) + ']</span> ' +
+          esc(i.plain || i.label) + '</div>';
       }).join('');
     }
     $('compatStrengths').innerHTML = items(c.strengths, '두드러지게 받쳐 주는 자리는 없습니다.');
@@ -2598,7 +2792,7 @@
       var pool = c.strengths.length ? c.strengths : c.frictions;
       var picked = pool.filter(function (s) { return specific.test(s.label); })
                        .concat(pool.filter(function (s) { return !specific.test(s.label); }))
-                       .slice(0, 2).map(function (s) { return s.label; });
+                       .slice(0, 2).map(function (s) { return s.plain || s.label; });
       var why = picked.length ? picked.join(' · ') : '—';
       // 상위 세 줄이라도 점수가 낮으면 강조하지 않는다 — 15점을 초록으로
       // 칠해 두면 잘 맞는 사람처럼 읽힌다.
@@ -2861,19 +3055,25 @@
     $('yearTitle').textContent = Y + '년은 어떤 해인가';
     $('yearSub').innerHTML =
       (luck
-        ? '지금은 <b>' + esc(luck.hanja) + ' 대운</b>(만 ' + luck.ageFrom + '~' + luck.ageTo +
-          '세) 한가운데예요. 10년쯤 이어지는 배경 같은 흐름입니다.<br>'
+        ? '지금은 <b>' + GZ(luck.stem + luck.branch, luck.hanja) + '</b> 자리(만 ' +
+          luck.ageFrom + '~' + luck.ageTo + '세) 한가운데예요. 10년쯤 이어지는 배경입니다.<br>'
         : '') +
-      '올해 드는 기운(<b>세운</b>)은 <b>' + esc(seun.hanja) + '</b>, 나에게는 <b>' +
-      esc(seunGod) + '</b>에 해당합니다. 아래는 <b>절기 기준</b>으로 나눈 열두 달이라, ' +
-      '달력의 1일이 아니라 절기가 드는 날에 달이 바뀝니다.';
+      '올해 드는 기운은 <b>' + GZ(seun.stem + seun.branch, seun.hanja) + '</b>, ' +
+      '나에게는 <b>' + esc(E.plainTerm(seunGod)) + '</b>에 해당합니다.' +
+      termBox('whyYear', [seunGod, '대운', '세운'],
+        '한 해와 10년 단위의 흐름을 명리에서는 이렇게 부릅니다.');
 
+    // 아홉 영역의 "좋은 때"는 절기로 나눈 달이라 달력의 1일에 시작하지 않는다.
+    // 날짜를 그대로 적어 두면 어긋남이 눈에 보인다.
+    $('yearDomsNote').textContent =
+      '아래 기간은 달력이 아니라 절기로 나눈 달입니다. 그래서 1일이 아니라 ' +
+      '절기가 드는 날에 바뀝니다.';
     $('yearDoms').innerHTML = E.DOMAIN9.map(function (k) {
       var d = ym.domains[k];
       return '<div class="year-dom">' +
         '<span class="yd-name">' + esc(d.label) + '</span>' +
-        '<span class="yd-cell"><b>가장 좋은 달</b>' + esc(monthName(d.best)) + '</span>' +
-        '<span class="yd-cell"><b>가장 조심할 달</b>' + esc(monthName(d.worst)) + '</span>' +
+        '<span class="yd-cell"><b>가장 좋은 때</b>' + esc(monthName(d.best)) + '</span>' +
+        '<span class="yd-cell"><b>가장 조심할 때</b>' + esc(monthName(d.worst)) + '</span>' +
         '</div>';
     }).join('');
 
@@ -2889,102 +3089,103 @@
       };
     });
 
-    $('monthChips').innerHTML = ym.months.map(function (m, i) {
-      return '<button type="button" class="chip" data-m="' + i + '" aria-pressed="false">' +
-        esc(monthChipLabel(m)) + '</button>';
-    }).join('');
+    // 달력은 달력답게 1월부터 12월까지 차례로 둔다. 절기로 나눈 달을 그대로
+    // 늘어놓으면 2월부터 시작해 마지막이 "1월(내년)"이 되어, 달력을 찾는
+    // 사람에게는 읽히지 않는다. 운세 계산은 그대로 절기로 하고, 보여 주는
+    // 틀만 달력에 맞춘다.
+    $('monthChips').innerHTML = [];
+    var chips = '';
+    for (var mi = 1; mi <= 12; mi++) {
+      chips += '<button type="button" class="chip" data-m="' + mi + '" aria-pressed="false">' +
+        mi + '월</button>';
+    }
+    $('monthChips').innerHTML = chips;
     Array.prototype.forEach.call($('monthChips').children, function (b) {
       b.onclick = function () { pickMonth(parseInt(this.dataset.m, 10)); };
     });
 
     // 이번 달을 미리 열어 둔다. 한 번 더 누르게 하면 대부분은 안 누른다.
-    // 절기 달은 달력의 달과 어긋나므로, 오늘이 어느 구간 안에 드는지로 찾는다.
     var now = new Date();
-    var todayNum = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
-    var cur = 0;
-    ym.months.forEach(function (m, i) {
-      var a = m.fromDate.y * 10000 + m.fromDate.m * 100 + m.fromDate.d;
-      var b = m.toDate.y * 10000 + m.toDate.m * 100 + m.toDate.d;
-      if (todayNum >= a && todayNum < b) cur = i;
-    });
-    pickMonth(cur);
+    pickMonth(now.getFullYear() === Y ? now.getMonth() + 1 : 1);
   }
 
   // 절기로 나눈 열두 달은 입춘에서 시작해 이듬해 입춘 전날에 끝난다. 그래서
   // 마지막 한 달(소한 달)은 다음 해 1월에 놓인다 — 그걸 밝히지 않으면 "1월"이
   // 지나간 달인지 다가올 달인지 알 수 없다.
+  // 절기로 나눈 한 달은 달력 두 달에 걸친다(예: 6월 6일 ~ 7월 7일). 달력 달
+  // 하나로 부르되, 실제 구간도 함께 적어 어긋남이 보이게 한다.
   function monthName(m) {
     var next = yearState.months && m.fromDate.y > yearState.months.year;
-    return (next ? '내년 ' : '') + m.fromDate.m + '월 ' + m.fromDate.d + '일부터';
-  }
-  function monthChipLabel(m) {
-    var next = yearState.months && m.fromDate.y > yearState.months.year;
-    return m.civilMonth + '월' + (next ? '(내년)' : '');
+    return (next ? '내년 ' : '') + m.fromDate.m + '월 ' + m.fromDate.d + '일 ~ ' +
+      m.toDate.m + '월 ' + (m.toDate.d - 1) + '일';
   }
 
-  function pickMonth(i) {
-    var ym = yearState.months;
-    if (!ym || !ym.months[i]) return;
-    yearState.month = i;
+  function pickMonth(m) {
+    if (!yearState.months || m < 1 || m > 12) return;
+    yearState.month = m;
     yearState.pickedDay = null;
-    drawActivity();
     Array.prototype.forEach.call($('monthChips').children, function (b) {
-      b.setAttribute('aria-pressed', String(parseInt(b.dataset.m, 10) === i));
+      b.setAttribute('aria-pressed', String(parseInt(b.dataset.m, 10) === m));
     });
     renderMonthView();
+    drawActivity();
   }
 
-  // 절기로 나눈 한 달은 달력의 한 달과 어긋난다(예: 4월 5일 ~ 5월 5일). 그래서
-  // 달력 칸은 그 구간에 든 날짜만 채우고, 나머지는 비워 둔다.
+  // 달력 한 달을 1일부터 말일까지 요일에 맞춰 그린다. 운세 점수는 날마다 제
+  // 절기에 따라 매겨진 값을 그대로 쓴다 — 보여 주는 틀만 달력일 뿐, 계산이
+  // 달력 기준으로 바뀌는 것이 아니다.
   function renderMonthView() {
-    var ym = yearState.months, mi = yearState.month;
-    if (!ym || mi === null) { $('monthView').innerHTML = ''; return; }
-    var m = ym.months[mi];
+    var ym = yearState.months, M = yearState.month;
+    if (!ym || !M) { $('monthView').innerHTML = ''; return; }
     var Y = ym.year;
 
-    // 절기 달은 해를 넘어갈 수 있으므로(소한 달은 12월 말 ~ 1월 초) 걸친 해를
-    // 모두 불러 하나의 표로 합친다.
     var byDate = {};
     try {
-      var years = [m.fromDate.y];
-      if (m.toDate.y !== m.fromDate.y) years.push(m.toDate.y);
-      years.forEach(function (yy) {
-        E.yearDays(myReading, yy).forEach(function (x) {
-          byDate[x.year * 10000 + x.month * 100 + x.day] = x;
-        });
+      E.yearDays(myReading, Y).forEach(function (x) {
+        byDate[x.year * 10000 + x.month * 100 + x.day] = x;
       });
     } catch (err) { $('monthView').innerHTML = ''; return; }
 
-    // 구간의 첫날부터 마지막 날까지
-    var from = new Date(Date.UTC(m.fromDate.y, m.fromDate.m - 1, m.fromDate.d));
-    var to = new Date(Date.UTC(m.toDate.y, m.toDate.m - 1, m.toDate.d));
-    var cells = [];
-    for (var t = from.getTime(); t < to.getTime(); t += 86400000) {
-      var dt = new Date(t);
-      var y2 = dt.getUTCFullYear(), m2 = dt.getUTCMonth() + 1, d2 = dt.getUTCDate();
-      cells.push({ y: y2, m: m2, d: d2, dow: dt.getUTCDay(),
-                   rec: byDate[y2 * 10000 + m2 * 100 + d2] || null });
-    }
-    if (!cells.length) { $('monthView').innerHTML = ''; return; }
+    var last = new Date(Date.UTC(Y, M, 0)).getUTCDate();
+    var firstDow = new Date(Date.UTC(Y, M - 1, 1)).getUTCDay();
 
-    var pad = cells[0].dow;
+    // 이 달 안에서 절기가 드는 날 — 그날 월운이 바뀐다.
+    var termDays = {};
+    ym.months.forEach(function (m) {
+      if (m.fromDate.y === Y && m.fromDate.m === M) termDays[m.fromDate.d] = m.termName;
+    });
+
+    var cells = [];
+    for (var d = 1; d <= last; d++) {
+      cells.push({ y: Y, m: M, d: d, rec: byDate[Y * 10000 + M * 100 + d] || null,
+                   term: termDays[d] || null });
+    }
+
     var grid = ['일', '월', '화', '수', '목', '금', '토']
       .map(function (w) { return '<div class="cal-dow">' + w + '</div>'; }).join('');
-    for (var k = 0; k < pad; k++) grid += '<div class="cal-day pad"></div>';
+    for (var k = 0; k < firstDow; k++) grid += '<div class="cal-day pad"></div>';
     cells.forEach(function (c, idx) {
-      if (!c.rec) { grid += '<div class="cal-day pad"></div>'; return; }
+      if (!c.rec) {
+        grid += '<div class="cal-day"><span class="d">' + c.d + '</span></div>';
+        return;
+      }
       var g = E.gradeOf(c.rec.overall);
-      grid += '<button type="button" class="cal-day" data-i="' + idx + '" aria-pressed="' +
-        (yearState.pickedDay === idx) + '">' +
+      grid += '<button type="button" class="cal-day' + (c.term ? ' term' : '') +
+        '" data-i="' + idx + '" aria-pressed="' + (yearState.pickedDay === idx) + '">' +
         '<span class="d">' + c.d + '</span>' +
         '<span class="m tone-' + g.tone + '">' + esc(shortGrade(g.word)) + '</span></button>';
     });
 
     var picked = yearState.pickedDay !== null ? cells[yearState.pickedDay] : null;
+    var termNote = Object.keys(termDays).length
+      ? ' 테두리가 있는 날(' + Object.keys(termDays).map(function (d2) { return d2 + '일'; }).join(', ') +
+        ')은 <b>절기가 드는 날</b>이라 그날부터 달의 기운이 바뀝니다.'
+      : '';
+
     $('monthView').innerHTML =
       '<div class="cal">' +
-        '<div class="cal-sub">' + esc(m.label) + ' — <b>' + esc(m.ganji.hanja) + '</b> 달입니다. ' +
-          '날짜를 누르면 그날의 아홉 가지를 볼 수 있어요.</div>' +
+        '<div class="cal-sub">' + Y + '년 ' + M + '월입니다. 날짜를 누르면 그날의 아홉 가지를 볼 수 있어요.' +
+          termNote + '</div>' +
         '<div class="cal-grid">' + grid + '</div>' +
         (picked ? dayCard(picked) : '') +
       '</div>';
@@ -3009,37 +3210,40 @@
     if (!yearState.act || !myReading || yearState.months === null || yearState.month === null) {
       box.innerHTML = ''; return;
     }
-    var m = yearState.months.months[yearState.month];
+    var Y = yearState.months.year, M = yearState.month;
     var picked;
     try {
-      // 위 달력과 같은 구간(절기로 나눈 달)을 본다.
-      picked = E.pickDays(myReading, m.fromDate.y, m.fromDate.m, yearState.act, 3,
-        { range: { from: m.fromDate, to: m.toDate } });
+      // 위 달력과 같은 구간 — 달력 한 달(1일 ~ 말일)을 본다.
+      picked = E.pickDays(myReading, Y, M, yearState.act, 3);
     } catch (err) { box.innerHTML = ''; return; }
-    if (!picked) { box.innerHTML = ''; return; }
+    if (!picked || !picked.good.length) { box.innerHTML = ''; return; }
 
     var row = function (d, cls) {
+      // 엔진이 쉬운 말을 따로 내준다. 용어 문장을 정규식으로 갈아 끼우면
+      // "부딪힘하는 날" 같은 말이 되므로 그러지 않는다.
       var reason = cls === 'good'
-        ? (d.why.length ? d.why.join(', ') : '무난한 날')
-        : (d.warn.length ? d.warn.join(', ') : '특별히 받쳐 주는 것이 없는 날');
+        ? (d.whyPlain.length ? esc(d.whyPlain.join(', ')) : '무난한 날')
+        : (d.warnPlain.length ? esc(d.warnPlain.join(', ')) : '특별히 받쳐 주는 것이 없는 날');
       var hours = cls === 'good' && d.hours.length
         ? '<br>좋은 시간 <b>' + d.hours.map(function (h) { return esc(h.label); }).join('</b> 또는 <b>') + '</b>'
         : '';
       return '<div class="act-day ' + cls + '">' +
         '<span class="ad-date">' + d.month + '/' + d.day + '</span>' +
-        '<span class="ad-body"><b>' + esc(d.ganji.hanja) + '</b> ' + esc(d.ganji.kor) + '날 — ' +
-          esc(reason) + hours + '</span></div>';
+        '<span class="ad-body"><b>' + GZ(d.ganji.kor + '날', d.ganji.hanja) + '</b> — ' +
+          reason + hours + '</span></div>';
     };
 
     box.innerHTML =
       '<div class="act-box">' +
-        '<div class="act-why">' + esc(picked.why) + '. ' +
+        '<div class="act-why">' + Y + '년 ' + M + '월 기준입니다. ' + esc(picked.why) + '. ' +
           '<b>그날 자체가 좋은 날이라는 뜻이 아니라</b>, 내 사주에 견주어 본 것입니다 — ' +
           '다른 사람에게는 다른 날이 나옵니다.</div>' +
         '<div class="act-head">이 달에 좋은 날</div>' +
         '<div class="act-list">' + picked.good.map(function (d) { return row(d, 'good'); }).join('') + '</div>' +
         '<div class="act-head">피하면 좋은 날</div>' +
         '<div class="act-list">' + picked.bad.map(function (d) { return row(d, 'bad'); }).join('') + '</div>' +
+        termBox('whyAct', E.ACTIVITIES[yearState.act].gods.concat(['일진', '일간', '일지', '충']),
+          '날을 고를 때 본 기운을 명리 용어로는 이렇게 부릅니다.') +
       '</div>';
   }
 
@@ -3060,11 +3264,60 @@
       '<div class="cp-head">' +
         '<span class="cp-date">' + c.m + '월 ' + c.d + '일 — <span class="tone-' + g0.tone + '">' +
           esc(g0.word) + '</span></span>' +
-        '<span class="cp-ganji">' + esc(rec.ganji.hanja) + ' ' + esc(rec.ganji.kor) + '날' +
-          (rec.gongmang ? ' · 공망' : '') + '</span>' +
+        '<span class="cp-ganji">' + GZ(rec.ganji.kor + '날', rec.ganji.hanja) +
+          (rec.gongmang ? ' · 기운이 비는 날' : '') + '</span>' +
       '</div>' +
       '<div class="cp-rows">' + rows + '</div>' +
       '</div>';
+  }
+
+  // 막대 위 칸은 좁다. 열두 단계 이름을 짧게 줄여 쓴다.
+  var SHORT_STAGE = { 장생: '갓 남', 목욕: '흔들림', 관대: '차림', 건록: '제몫', 제왕: '꼭대기',
+                      쇠: '꺾임', 병: '처짐', 사: '멎음', 묘: '묻힘', 절: '끊김',
+                      태: '잉태', 양: '자람' };
+
+  // 사주표의 네 칸 이름. "연주·월주"는 사주를 아는 사람의 말이다.
+  var POS_NAME = { 년: '태어난 해', 월: '태어난 달', 일: '태어난 날', 시: '태어난 시각' };
+
+  // ── 쉬운 말로 바꾸기 ───────────────────────────────────────────────────
+  //
+  // 화면에는 쉬운 말이 먼저 나온다. 원래 용어는 괄호 안에 작게 붙이거나,
+  // 절 끝의 "원래 용어로는 어떻게 부르나요" 상자 안에 넣는다. 사주를 모르는
+  // 사람이 "일지 자형"을 보면 아무것도 알 수 없다.
+  function T(term) { return esc(E.plainTerm(term)); }
+  // 쉬운 말 + 작은 글씨 원래 용어
+  function TW(term) {
+    var easy = E.plainTerm(term);
+    if (easy === term) return esc(term);
+    return esc(easy) + '<span class="term-src">' + esc(term) + '</span>';
+  }
+  // 한자는 한글 뒤 괄호로. 庚午 → 경오(庚午)
+  function GZ(kor, hanja) {
+    if (!hanja) return esc(kor || '');
+    if (!kor) return esc(hanja);
+    return esc(kor) + '<span class="hanja-src">(' + esc(hanja) + ')</span>';
+  }
+  // 이 화면에서 쓴 용어들을 모아 접이식 상자로 만든다. 같은 용어가 여러 번
+  // 나와도 한 번만 싣는다.
+  function termBox(id, terms, intro) {
+    var seen = {}, rows = [];
+    terms.forEach(function (t) {
+      if (!t || seen[t]) return;
+      seen[t] = 1;
+      var what = E.termWhat(t);
+      var easy = E.plainTerm(t);
+      if (easy === t && !what) return;
+      rows.push('<div class="term-row"><b>' + esc(t) + '</b>' +
+        '<span>' + esc(easy) + (what ? ' — ' + esc(what) : '') + '</span></div>');
+    });
+    if (!rows.length) return '';
+    return '<div class="why-box">' +
+      '<button type="button" class="why-head" data-why="' + id + '">' +
+        '<span>원래 용어로는 어떻게 부르나요</span><span>＋</span></button>' +
+      '<div class="why-body" id="' + id + '" hidden>' +
+        (intro ? '<p class="term-intro">' + esc(intro) + '</p>' : '') +
+        rows.join('') +
+      '</div></div>';
   }
 
   // 받침이 있으면 "민으로 / 물병자리이에요", 없으면 "서로 / 황소자리예요".
@@ -3112,12 +3365,12 @@
       '<div class="today">' +
         '<div class="today-head">' +
           '<span class="today-date">' + d.month + '월 ' + d.day + '일 오늘의 운세</span>' +
-          '<span class="today-ganji">' + esc(f.ganji.hanja) + ' ' + esc(f.ganji.kor) + '날</span>' +
+          '<span class="today-ganji">' + GZ(f.ganji.kor + '날', f.ganji.hanja) + '</span>' +
         '</div>' +
         '<div class="today-grade tone-' + f.grade.tone + '">' + esc(f.grade.word) + '</div>' +
         '<div class="today-sub">오늘 특히 괜찮은 쪽은 <b>' + esc(f.best[0].label) + '</b>, ' +
           '한 번 더 살필 쪽은 <b>' + esc(f.worst[0].label) + '</b>이에요.' +
-          (f.gongmang ? ' 오늘은 <b>공망</b>이 든 날이라, 무엇이든 손에 잘 안 잡힐 수 있어요.' : '') +
+          (f.gongmang ? ' 오늘은 <b>기운이 비는 날</b>이라, 무엇이든 손에 잘 안 잡힐 수 있어요.' : '') +
         '</div>' +
         '<div class="today-doms">' + top3 + '</div>' +
         (f.advice ?
@@ -3130,6 +3383,8 @@
         '<div class="today-all' + (todayOpen ? ' on' : '') + '" id="todayAll">' + rows +
           '<div class="hj-note">등급은 올해 365일 가운데 오늘이 어디쯤인지로 매깁니다. ' +
           '"보통이에요"가 가장 흔하고, 좋은 날과 조심할 날은 그만큼 드뭅니다.</div>' +
+          termBox('whyToday', [f.tenGod.stem, f.tenGod.branch, '일진', '공망'],
+            '오늘 드는 기운을 명리 용어로는 이렇게 부릅니다.') +
         '</div>' +
       '</div>';
 
