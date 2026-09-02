@@ -701,6 +701,38 @@ const SYSTEM = `당신은 한국 명리학(사주)과 성명학을 함께 보는
 표와 목록을 뺀 전체 3000~4000자. 길게 늘여 쓰면 끝까지 못 나갑니다.
 다만 이 사람이 특히 궁금해하는 것에 해당하는 절 하나만 두 배로 씁니다.`;
 
+// Anthropic 이 돌려주는 오류를 방문자가 읽을 수 있는 말로 옮긴다.
+// 원문은 서버 로그에만 남기고 화면에는 내보내지 않는다.
+function explainApiError(e) {
+  const raw = String((e && e.message) || '');
+  const status = (e && (e.status || e.statusCode)) || 0;
+  const owner = ' 사이트 주인이 확인해야 하는 문제라, 잠시 뒤 다시 열어 봐 주세요.';
+
+  // 잔액 부족·결제 문제. 방문자가 할 수 있는 일이 없으므로 자세히 말하지 않는다.
+  if (/credit balance|billing|quota|payment/i.test(raw)) {
+    return { status: 503, reason: '잔액/결제',
+      message: '풀이 기능이 잠시 멈춰 있습니다.' + owner +
+        ' 사주표·오행·대운·시기·이름·궁합·택일 계산은 지금도 그대로 보실 수 있습니다.' };
+  }
+  // 키가 틀렸거나 권한이 없음.
+  if (status === 401 || status === 403 || /authentication|api key|permission/i.test(raw)) {
+    return { status: 503, reason: '인증',
+      message: '풀이 기능 설정에 문제가 있습니다.' + owner +
+        ' 아래 계산 결과는 그대로 보실 수 있습니다.' };
+  }
+  // 몰려서 밀린 경우. 이건 기다리면 풀린다.
+  if (status === 429 || status === 529 || /rate limit|overloaded/i.test(raw)) {
+    return { status: 503, reason: '혼잡',
+      message: '지금 요청이 몰려 잠시 밀렸습니다. 1~2분 뒤에 다시 눌러 주세요.' };
+  }
+  if (/timeout|ETIMEDOUT|ECONNRESET|socket hang up/i.test(raw)) {
+    return { status: 504, reason: '시간초과',
+      message: '풀이를 받아 오다 연결이 끊겼습니다. 다시 눌러 주세요.' };
+  }
+  return { status: 502, reason: '알수없음',
+    message: '풀이를 만들지 못했습니다. 잠시 뒤 다시 눌러 주세요.' };
+}
+
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return fail(res, 405, 'POST 로 요청해 주세요.');
   // 키가 없다는 말만 하면 무엇을 해야 하는지 알 수 없다. 할 일을 그대로 적는다.
@@ -812,8 +844,17 @@ ${describe(reading, input)}
     }
     res.end();
   } catch (e) {
-    const msg = '\n\n[오류] 해석을 생성하지 못했습니다: ' + (e && e.message ? e.message : '알 수 없는 오류');
-    if (res.headersSent) { res.write(msg); res.end(); }
-    else fail(res, 502, msg.trim());
+    // 방문자에게 API 응답을 그대로 보여 주면 안 된다. request_id 같은 내부 값이
+    // 그대로 노출되고, 읽는 사람은 무엇을 해야 할지도 알 수 없다. 사이트 주인이
+    // 손볼 일과 잠시 뒤 다시 하면 되는 일을 갈라서 말한다.
+    const friendly = explainApiError(e);
+    console.error('[saju] 풀이 실패:', friendly.reason, '—',
+      (e && e.message ? String(e.message) : '알 수 없는 오류').slice(0, 300));
+    if (res.headersSent) {
+      res.write('\n\n---\n\n*' + friendly.message + '*');
+      res.end();
+    } else {
+      fail(res, friendly.status, friendly.message);
+    }
   }
 };

@@ -2482,8 +2482,9 @@
       return pump();
     }).catch(function (err) {
       box.classList.remove('typing');
-      // 429(사용량)와 503(아직 안 켜짐)은 고장이 아니다. 빨간 글씨로 띄우면
-      // 사이트가 망가진 줄 안다.
+      // 429(사용량)와 503(아직 안 켜짐·잠시 멈춤)은 고장이 아니다. 빨간 글씨로
+      // 띄우면 사이트가 망가진 줄 안다. 504(시간 초과)는 다시 누르면 되는 일이라
+      // 버튼을 남긴다.
       var quota = err.status === 429;
       var notReady = err.status === 503;
       status.innerHTML = '<span style="color:' +

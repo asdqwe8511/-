@@ -121,6 +121,31 @@ const ok=(l,c,x)=>{ c?pass++:fail++; console.log((c?'  ✓ ':'  ✗ ')+l+(c?'':'
   ok('503 으로 안내', blankRes.status_ === 503, blankRes.status_);
   process.env.ANTHROPIC_API_KEY = 'sk-ant-fake';
 
+  console.log('\nAPI 오류를 방문자 말로 옮기는가');
+  // API 응답을 그대로 보여 주면 request_id 같은 내부 값이 노출되고, 읽는 사람은
+  // 무엇을 해야 할지도 알 수 없다.
+  const CASES = [
+    ['잔액 부족', 400, 'Your credit balance is too low to access the Anthropic API.',
+     /잠시 멈춰 있습니다/, 503],
+    ['키 오류', 401, 'invalid x-api-key', /설정에 문제가 있습니다/, 503],
+    ['혼잡', 529, 'Overloaded', /요청이 몰려/, 503],
+    ['시간 초과', 0, 'socket hang up', /연결이 끊겼습니다/, 504]
+  ];
+  for (const [label, st, raw, want, wantStatus] of CASES) {
+    class Boom { constructor(){ this.messages = { stream: () => {
+      const err = new Error(raw); err.status = st; throw err; } }; } }
+    require.cache[sdkPath].exports = { default: Boom };
+    delete require.cache[require.resolve(HANDLER)];
+    const boomH = require(HANDLER);
+    const boomRes = mkRes();
+    await boomH({ method:'POST', headers:{'x-forwarded-for':'13.13.13.13'}, body: me }, boomRes);
+    ok(label + ' — 알맞은 상태(' + wantStatus + ')', boomRes.status_ === wantStatus, boomRes.status_);
+    ok(label + ' — 쉬운 말로 바꿔 줌', want.test(boomRes.body), boomRes.body.slice(0, 60));
+    ok(label + ' — 원문을 노출하지 않음',
+       !/request_id|invalid_request_error|x-api-key|credit balance/i.test(boomRes.body),
+       boomRes.body.slice(0, 60));
+  }
+
   console.log('\n오래 걸리는 풀이는 스스로 멈추는가');
   // 플랫폼이 끊기 전에 우리가 먼저 멈춰야 한다. 그냥 두면 문장 한가운데서
   // 연결이 끊겨, 읽는 사람은 글이 원래 그렇게 끝난 줄 안다.

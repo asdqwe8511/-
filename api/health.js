@@ -32,7 +32,19 @@ async function pingAnthropic() {
     const list = await withTimeout(client.models.list({ limit: 1 }), TIMEOUT_MS, 'Anthropic');
     return { configured: true, working: true, sampleModel: list.data && list.data[0] && list.data[0].id };
   } catch (e) {
-    return { configured: true, working: false, error: e.message };
+    const raw = String(e.message || '');
+    // 키는 맞는데 잔액이 없는 경우가 가장 흔하다. "키가 틀렸다"고 하면 엉뚱한
+    // 곳을 뒤지게 되므로 갈라서 말한다.
+    let cause = null;
+    if (/credit balance|billing|payment/i.test(raw)) {
+      cause = '키는 맞습니다. Anthropic 계정에 잔액이 없습니다 — ' +
+        'console.anthropic.com → Plans & Billing 에서 크레딧을 채우세요.';
+    } else if (/authentication|api key|invalid x-api-key/i.test(raw)) {
+      cause = '키가 틀렸거나 만료됐습니다. console.anthropic.com 에서 새로 발급해 넣으세요.';
+    } else if (/rate limit|overloaded/i.test(raw)) {
+      cause = '지금 요청이 몰려 있습니다. 잠시 뒤 다시 확인해 보세요.';
+    }
+    return { configured: true, working: false, error: raw, cause: cause };
   }
 }
 
@@ -130,7 +142,7 @@ module.exports = async (req, res) => {
       '사주·오행·대운·시기·이름·궁합 계산': '동작 — 브라우저에서 계산하므로 키가 필요 없습니다',
       '풀이 문장(Claude)': state(anthropic,
         'Vercel 환경변수에 ANTHROPIC_API_KEY 를 넣고 Redeploy 하세요',
-        '키가 틀렸거나 만료됐을 수 있습니다'),
+        anthropic.cause || '키가 틀렸거나 만료됐을 수 있습니다'),
       '인기영상 대시보드': has('YOUTUBE_API_KEY')
         ? '동작' : '꺼짐 — YOUTUBE_API_KEY 를 넣고 Redeploy 하세요',
       '사용량 제한': state(redis,
