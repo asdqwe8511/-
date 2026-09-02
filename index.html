@@ -190,6 +190,44 @@
   .luck-cell.now .age{color:var(--accent-2);}
 
   .mode-tabs{margin:14px 0 18px;}
+
+  /* 나와 상대를 나란히 둔다. 궁합을 보러 온 사람이 탭을 눌러 찾아 들어가지
+     않아도 두 칸이 처음부터 보이도록. 상대는 비워 두면 그냥 내 사주만 나온다. */
+  .pair-forms{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
+  .pair-forms.single{grid-template-columns:1fr;}
+  .person-card[hidden]{display:none;}   /* display 지정이 [hidden] 을 덮지 않도록 */
+  .person-card{
+    background:var(--panel-2); border:1px solid var(--border);
+    border-radius:14px; padding:16px 16px 18px;
+  }
+  .person-card.optional{border-style:dashed;}
+  .person-card.filled{border-style:solid; border-color:rgba(45,212,191,.45);}
+  .person-head{display:flex; align-items:center; gap:9px; margin-bottom:14px; flex-wrap:wrap;}
+  .person-badge{
+    font-size:13px; font-weight:800; padding:4px 12px; border-radius:8px;
+  }
+  .person-badge.me{background:rgba(124,92,255,.18); color:#c9bcff; border:1px solid rgba(124,92,255,.45);}
+  .person-badge.them{background:rgba(45,212,191,.14); color:#8ee8d8; border:1px solid rgba(45,212,191,.4);}
+  .person-note{font-size:11.5px; color:var(--text-mute);}
+  .person-foot{font-size:11.5px; color:var(--text-mute); line-height:1.75; margin-top:14px;}
+  .person-foot b{color:var(--text-dim);}
+  .person-clear{margin-left:auto; padding:4px 10px; font-size:11.5px;}
+  .person-card .form-grid{grid-template-columns:repeat(6,1fr); gap:12px;}
+  .person-card .f-name{grid-column:span 3;}
+  .person-card .f-half{grid-column:span 3;}
+  .person-card .f-third{grid-column:span 2;}
+  .person-card .f-wide{grid-column:span 6;}
+  .person-card .chips{gap:6px;}
+  .person-card .chip{padding:7px 13px; font-size:12.5px;}
+  .common-row{margin-top:16px;}
+  .common-row .form-grid{grid-template-columns:repeat(12,1fr);}
+  @media(max-width:860px){
+    .pair-forms{grid-template-columns:1fr;}
+  }
+  @media(max-width:520px){
+    .person-card .form-grid{grid-template-columns:repeat(6,1fr); gap:10px;}
+    .person-card .f-third{grid-column:span 2;}
+  }
   .sub-block{
     margin-top:18px; padding:16px; border-radius:13px;
     background:var(--panel-2); border:1px solid var(--border);
@@ -472,156 +510,170 @@
 
 <div class="hero">
   <h1>사주와 <span class="accent">이름</span>을 함께 읽습니다</h1>
-  <p>절기·진태양시까지 반영해 만세력을 직접 계산하고, 이름의 발음오행과 획수를 사주에 겹쳐 봅니다.</p>
+  <p>내 사주만 볼 수도, <span class="accent">두 사람 궁합</span>까지 볼 수도 있습니다.
+    절기와 진태양시를 반영해 만세력을 직접 계산합니다.</p>
 </div>
 
 <div class="container">
 
   <!-- ── 입력 ── -->
   <section class="panel">
-    <h2>어떤 사주를 볼까요</h2>
-    <p class="sub">이름은 비워도 사주만 볼 수 있습니다. 입력한 정보는 저장되지 않습니다.</p>
+    <h2>사주 보기 · 궁합 보기</h2>
+    <p class="sub">내 생년월일만 넣으면 <b>내 사주</b>를, 상대까지 넣으면 <b>궁합</b>까지 함께 봅니다.
+      이름은 비워도 됩니다. 입력한 정보는 저장되지 않습니다.</p>
 
     <div class="chips mode-tabs" id="mode">
-      <button type="button" class="chip" data-v="solo" aria-pressed="true">혼자 보기</button>
-      <button type="button" class="chip" data-v="compat" aria-pressed="false">둘이 보기 — 궁합</button>
+      <button type="button" class="chip" data-v="pair" aria-pressed="true">사주 · 궁합</button>
       <button type="button" class="chip" data-v="batch" aria-pressed="false">여러 명과 비교</button>
     </div>
 
-    <!-- novalidate: 브라우저 기본 검사는 숨어 있는 칸(모드에 따라 접히는 상대방 폼)에서
-         "invalid form control is not focusable" 로 제출을 조용히 막아 버린다.
-         검사는 우리가 직접 하고, 안내도 한국어로 우리가 띄운다. -->
     <form id="form" autocomplete="off" novalidate>
-      <div class="form-grid">
-        <div class="field f-name">
-          <label for="surname">성</label>
-          <input type="text" id="surname" placeholder="김" maxlength="5">
-        </div>
-        <div class="field f-name">
-          <label for="given">이름</label>
-          <input type="text" id="given" placeholder="서연" maxlength="5">
-        </div>
-        <div class="field f-wide">
-          <label for="hanja">한자 표기 <span class="hint">(선택)</span></label>
-          <input type="text" id="hanja" placeholder="金瑞衍" maxlength="5">
-        </div>
-        <div class="field f-wide">
-          <label>성별 <span class="hint">— 대운 방향이 달라집니다</span></label>
-          <div class="chips" id="gender">
-            <button type="button" class="chip" data-v="남" aria-pressed="true">남</button>
-            <button type="button" class="chip" data-v="여" aria-pressed="false">여</button>
+      <div class="pair-forms" id="pairForms">
+
+        <!-- 나 -->
+        <div class="person-card">
+          <div class="person-head">
+            <span class="person-badge me">나</span>
+            <span class="person-note">생년월일은 필수입니다</span>
+          </div>
+          <div class="form-grid">
+            <div class="field f-name">
+              <label for="surname">성</label>
+              <input type="text" id="surname" placeholder="김" maxlength="5">
+            </div>
+            <div class="field f-name">
+              <label for="given">이름</label>
+              <input type="text" id="given" placeholder="민준" maxlength="5">
+            </div>
+            <div class="field f-wide">
+              <label for="hanja">한자 표기 <span class="hint">(선택)</span></label>
+              <input type="text" id="hanja" placeholder="金珉俊" maxlength="5">
+            </div>
+            <div class="field f-half">
+              <label>성별 <span class="hint">— 대운 방향</span></label>
+              <div class="chips" id="gender">
+                <button type="button" class="chip" data-v="남" aria-pressed="true">남</button>
+                <button type="button" class="chip" data-v="여" aria-pressed="false">여</button>
+              </div>
+            </div>
+            <div class="field f-half">
+              <label>양력 / 음력</label>
+              <div class="chips" id="calendar">
+                <button type="button" class="chip" data-v="양력" aria-pressed="true">양력</button>
+                <button type="button" class="chip" data-v="음력" aria-pressed="false">음력</button>
+              </div>
+            </div>
+            <div class="field f-third">
+              <label for="year">태어난 해</label>
+              <input type="number" id="year" min="1900" max="2100" placeholder="1990">
+            </div>
+            <div class="field f-third">
+              <label for="month">월</label>
+              <select id="month"></select>
+            </div>
+            <div class="field f-third">
+              <label for="day">일</label>
+              <select id="day"></select>
+            </div>
+            <div class="field f-wide" id="leapWrap" hidden>
+              <label class="check"><input type="checkbox" id="leapMonth"> 윤달입니다</label>
+            </div>
+            <div class="field f-third">
+              <label for="hour">태어난 시</label>
+              <select id="hour"></select>
+            </div>
+            <div class="field f-third">
+              <label for="minute">분</label>
+              <input type="number" id="minute" min="0" max="59" value="0">
+            </div>
+            <div class="field f-third">
+              <label>&nbsp;</label>
+              <label class="check"><input type="checkbox" id="noHour"> 시각 모름</label>
+            </div>
           </div>
         </div>
 
-        <div class="field f-wide">
-          <label>양력 / 음력</label>
-          <div class="chips" id="calendar">
-            <button type="button" class="chip" data-v="양력" aria-pressed="true">양력</button>
-            <button type="button" class="chip" data-v="음력" aria-pressed="false">음력</button>
+        <!-- 상대 -->
+        <div class="person-card optional" id="partnerBlock">
+          <div class="person-head">
+            <span class="person-badge them">상대</span>
+            <span class="person-note">비워 두면 내 사주만 봅니다</span>
+            <button type="button" class="btn-sm person-clear" id="clearPartner" hidden>지우기</button>
           </div>
-        </div>
-        <div class="field f-wide">
-          <label for="year">태어난 해</label>
-          <input type="number" id="year" min="1900" max="2100" placeholder="1990">
-        </div>
-        <div class="field f-num">
-          <label for="month">월</label>
-          <select id="month"></select>
-        </div>
-        <div class="field f-num">
-          <label for="day">일</label>
-          <select id="day"></select>
-        </div>
-        <div class="field f-leap" id="leapWrap" hidden>
-          <label>윤달</label>
-          <label class="check"><input type="checkbox" id="leapMonth"> 윤달입니다</label>
-        </div>
-
-        <div class="field f-num">
-          <label for="hour">태어난 시</label>
-          <select id="hour"></select>
-        </div>
-        <div class="field f-num">
-          <label for="minute">분</label>
-          <input type="number" id="minute" min="0" max="59" value="0">
-        </div>
-        <div class="field f-wide">
-          <label>시간을 모른다면</label>
-          <label class="check"><input type="checkbox" id="noHour"> 태어난 시각 모름</label>
-        </div>
-        <div class="field f-city">
-          <label for="city">태어난 곳 <span class="hint">— 진태양시 보정에 씁니다</span></label>
-          <select id="city"></select>
-        </div>
-
-        <div class="field f-full">
-          <label>특히 궁금한 것</label>
-          <div class="chips" id="focus">
-            <button type="button" class="chip" data-v="총운" aria-pressed="true">총운</button>
-            <button type="button" class="chip" data-v="성격" aria-pressed="false">성격</button>
-            <button type="button" class="chip" data-v="직업·적성" aria-pressed="false">직업·적성</button>
-            <button type="button" class="chip" data-v="재물" aria-pressed="false">재물</button>
-            <button type="button" class="chip" data-v="건강" aria-pressed="false">건강</button>
-            <button type="button" class="chip" data-v="인간관계" aria-pressed="false">인간관계</button>
+          <div class="form-grid">
+            <div class="field f-name">
+              <label for="p_surname">성</label>
+              <input type="text" id="p_surname" placeholder="이" maxlength="5">
+            </div>
+            <div class="field f-name">
+              <label for="p_given">이름</label>
+              <input type="text" id="p_given" placeholder="서연" maxlength="5">
+            </div>
+            <div class="field f-half">
+              <label>성별</label>
+              <div class="chips" id="p_gender">
+                <button type="button" class="chip" data-v="여" aria-pressed="true">여</button>
+                <button type="button" class="chip" data-v="남" aria-pressed="false">남</button>
+              </div>
+            </div>
+            <div class="field f-half">
+              <label>양력 / 음력</label>
+              <div class="chips" id="p_calendar">
+                <button type="button" class="chip" data-v="양력" aria-pressed="true">양력</button>
+                <button type="button" class="chip" data-v="음력" aria-pressed="false">음력</button>
+              </div>
+            </div>
+            <div class="field f-third">
+              <label for="p_year">태어난 해</label>
+              <input type="number" id="p_year" min="1900" max="2100" placeholder="1993">
+            </div>
+            <div class="field f-third">
+              <label for="p_month">월</label>
+              <select id="p_month"></select>
+            </div>
+            <div class="field f-third">
+              <label for="p_day">일</label>
+              <select id="p_day"></select>
+            </div>
+            <div class="field f-wide" id="p_leapWrap" hidden>
+              <label class="check"><input type="checkbox" id="p_leapMonth"> 윤달입니다</label>
+            </div>
+            <div class="field f-third">
+              <label for="p_hour">태어난 시</label>
+              <select id="p_hour"></select>
+            </div>
+            <div class="field f-third">
+              <label for="p_minute">분</label>
+              <input type="number" id="p_minute" min="0" max="59" value="0">
+            </div>
+            <div class="field f-third">
+              <label>&nbsp;</label>
+              <label class="check"><input type="checkbox" id="p_noHour"> 시각 모름</label>
+            </div>
           </div>
+          <p class="person-foot">상대의 태어난 시각을 모르면 <b>시각 모름</b>을 켜 두세요.
+            시주 없이도 궁합은 나오고, 그만큼만 거칠어집니다.
+            출생지와 계산 방식은 아래에서 고른 것을 두 사람 모두에게 씁니다.</p>
         </div>
       </div>
 
-      <!-- 상대방 (궁합) -->
-      <div class="sub-block" id="partnerBlock" hidden>
-        <div class="sub-block-head">상대방</div>
-        <p class="sub-block-note">출생지와 계산 방식은 위에서 고른 것을 그대로 씁니다.
-          상대의 태어난 시각을 모르면 비워 두세요 — 시주 없이도 궁합은 나옵니다.</p>
+      <!-- 두 사람에게 함께 적용되는 것 -->
+      <div class="common-row" id="commonRow">
         <div class="form-grid">
-          <div class="field f-name">
-            <label for="p_surname">성</label>
-            <input type="text" id="p_surname" placeholder="이" maxlength="5">
+          <div class="field f-city">
+            <label for="city">태어난 곳 <span class="hint">— 진태양시 보정에 씁니다</span></label>
+            <select id="city"></select>
           </div>
-          <div class="field f-name">
-            <label for="p_given">이름</label>
-            <input type="text" id="p_given" placeholder="도현" maxlength="5">
-          </div>
-          <div class="field f-wide">
-            <label>성별</label>
-            <div class="chips" id="p_gender">
-              <button type="button" class="chip" data-v="여" aria-pressed="true">여</button>
-              <button type="button" class="chip" data-v="남" aria-pressed="false">남</button>
+          <div class="field f-full" id="focusWrap">
+            <label>혼자 볼 때 특히 궁금한 것</label>
+            <div class="chips" id="focus">
+              <button type="button" class="chip" data-v="총운" aria-pressed="true">총운</button>
+              <button type="button" class="chip" data-v="성격" aria-pressed="false">성격</button>
+              <button type="button" class="chip" data-v="직업·적성" aria-pressed="false">직업·적성</button>
+              <button type="button" class="chip" data-v="재물" aria-pressed="false">재물</button>
+              <button type="button" class="chip" data-v="건강" aria-pressed="false">건강</button>
+              <button type="button" class="chip" data-v="인간관계" aria-pressed="false">인간관계</button>
             </div>
-          </div>
-          <div class="field f-wide">
-            <label>양력 / 음력</label>
-            <div class="chips" id="p_calendar">
-              <button type="button" class="chip" data-v="양력" aria-pressed="true">양력</button>
-              <button type="button" class="chip" data-v="음력" aria-pressed="false">음력</button>
-            </div>
-          </div>
-          <div class="field f-wide">
-            <label for="p_year">태어난 해</label>
-            <input type="number" id="p_year" min="1900" max="2100" placeholder="1992">
-          </div>
-          <div class="field f-num">
-            <label for="p_month">월</label>
-            <select id="p_month"></select>
-          </div>
-          <div class="field f-num">
-            <label for="p_day">일</label>
-            <select id="p_day"></select>
-          </div>
-          <div class="field f-leap" id="p_leapWrap" hidden>
-            <label>윤달</label>
-            <label class="check"><input type="checkbox" id="p_leapMonth"> 윤달입니다</label>
-          </div>
-          <div class="field f-num">
-            <label for="p_hour">태어난 시</label>
-            <select id="p_hour"></select>
-          </div>
-          <div class="field f-num">
-            <label for="p_minute">분</label>
-            <input type="number" id="p_minute" min="0" max="59" value="0">
-          </div>
-          <div class="field f-wide">
-            <label>시각을 모른다면</label>
-            <label class="check"><input type="checkbox" id="p_noHour"> 태어난 시각 모름</label>
           </div>
         </div>
       </div>
@@ -925,34 +977,79 @@
   });
 
   // ── 모드 ────────────────────────────────────────────────────────────
-  var MODES = {
-    solo:   { label: '사주 뽑고 풀이 받기', panels: ['chartPanel', 'elemPanel', 'luckPanel', 'fortunePanel', 'namePanel', 'sharePanel', 'readingPanel'] },
-    compat: { label: '궁합 보고 풀이 받기', panels: ['chartPanel', 'compatPanel', 'sharePanel', 'readingPanel'] },
-    batch:  { label: '전부 비교하기',       panels: ['chartPanel', 'batchPanel'] }
+  // 화면 모드는 둘뿐이다: 사주·궁합(pair) / 여러 명과 비교(batch).
+  // pair 안에서 혼자 볼지 궁합을 볼지는 탭이 아니라 "상대 칸을 채웠는가"로 갈린다.
+  var PANELS = {
+    solo:   ['chartPanel', 'elemPanel', 'luckPanel', 'fortunePanel', 'namePanel', 'sharePanel', 'readingPanel'],
+    compat: ['chartPanel', 'compatPanel', 'sharePanel', 'readingPanel'],
+    batch:  ['chartPanel', 'batchPanel']
   };
-  var mode = 'solo';
   var ALL_PANELS = ['chartPanel', 'compatPanel', 'batchPanel', 'elemPanel', 'luckPanel',
                     'fortunePanel', 'namePanel', 'sharePanel', 'readingPanel'];
+  var tab = 'pair';
 
-  function applyMode(next) {
-    mode = next;
-    $('partnerBlock').hidden = (mode !== 'compat');
-    $('batchBlock').hidden = (mode !== 'batch');
-    $('submitBtn').textContent = MODES[mode].label;
-    // 결과가 이미 떠 있으면 모드에 맞게 접었다 편다.
-    var show = MODES[mode].panels;
+  function partnerFilled() {
+    var y = parseInt($('p_year').value, 10);
+    return !!(y && y >= 1900 && y <= 2100);
+  }
+  function effectiveMode() {
+    if (tab === 'batch') return 'batch';
+    return partnerFilled() ? 'compat' : 'solo';
+  }
+
+  // 상대 칸 상태에 따라 버튼 문구와 카드 테두리를 바꿔, 무엇이 나올지 미리 알린다.
+  function refreshPairState() {
+    var filled = partnerFilled();
+    $('partnerBlock').classList.toggle('filled', filled);
+    $('clearPartner').hidden = !filled;
+    $('focusWrap').style.opacity = filled ? .45 : 1;
+    if (tab === 'pair') {
+      $('submitBtn').textContent = filled ? '두 사람 궁합 보기' : '내 사주 보기';
+    }
+  }
+
+  function showPanels(mode) {
+    var show = PANELS[mode] || [];
     ALL_PANELS.forEach(function (id) {
       var el = $(id);
       if (el) el.hidden = show.indexOf(id) < 0;
     });
   }
+
+  function applyTab(next) {
+    tab = next;
+    // 여러 명과 비교할 때도 기준이 되는 내 사주는 있어야 한다 — 상대 칸만 접는다.
+    var batch = (tab === 'batch');
+    $('partnerBlock').hidden = batch;
+    $('pairForms').classList.toggle('single', batch);
+    $('batchBlock').hidden = !batch;
+    $('focusWrap').hidden = batch;
+    if (batch) $('submitBtn').textContent = '전부 비교하기';
+    else refreshPairState();
+    showPanels(effectiveMode());
+  }
+
   $('mode').addEventListener('click', function (e) {
     var btn = e.target.closest('.chip');
     if (!btn) return;
     Array.prototype.forEach.call(this.querySelectorAll('.chip'), function (c) {
       c.setAttribute('aria-pressed', String(c === btn));
     });
-    applyMode(btn.dataset.v);
+    applyTab(btn.dataset.v);
+  });
+
+  ['p_year', 'p_month', 'p_day'].forEach(function (id) {
+    $(id).addEventListener('input', refreshPairState);
+    $(id).addEventListener('change', refreshPairState);
+  });
+  $('clearPartner').addEventListener('click', function () {
+    ['p_surname', 'p_given', 'p_year'].forEach(function (id) { $(id).value = ''; });
+    $('p_month').value = '1'; $('p_day').value = '1';
+    $('p_hour').value = '12'; $('p_minute').value = '0';
+    $('p_leapMonth').checked = false;
+    $('p_noHour').checked = false;
+    $('p_noHour').dispatchEvent(new Event('change'));
+    refreshPairState();
   });
 
   // ── 연락처 읽기 ──────────────────────────────────────────────────────
@@ -1616,9 +1713,9 @@
     $('p_noHour').checked = true;
     $('p_noHour').dispatchEvent(new Event('change'));
     Array.prototype.forEach.call($('mode').querySelectorAll('.chip'), function (c) {
-      c.setAttribute('aria-pressed', String(c.dataset.v === 'compat'));
+      c.setAttribute('aria-pressed', String(c.dataset.v === 'pair'));
     });
-    applyMode('compat');
+    applyTab('pair');
     $('form').dispatchEvent(new Event('submit', { cancelable: true }));
   });
 
@@ -1753,9 +1850,9 @@
     $('p_leapWrap').hidden = (person.calendar !== '음력');
 
     Array.prototype.forEach.call($('mode').querySelectorAll('.chip'), function (c) {
-      c.setAttribute('aria-pressed', String(c.dataset.v === 'compat'));
+      c.setAttribute('aria-pressed', String(c.dataset.v === 'pair'));
     });
-    applyMode('compat');
+    applyTab('pair');
 
     var who = person.surname ? esc(person.surname + person.given) + '님' : '';
     $('inviteNotice').innerHTML =
@@ -1800,9 +1897,10 @@
     ev.preventDefault();
     showError('');
 
+    var mode = effectiveMode();
     var noHour = $('noHour').checked;
     var payload = {
-      mode: mode,
+      mode: mode === 'batch' ? 'solo' : mode,   // 서버는 solo/compat 만 안다
       calendar: getCalendar(),
       year: parseInt($('year').value, 10),
       month: parseInt($('month').value, 10),
@@ -1863,7 +1961,7 @@
     }
 
     $('result').classList.add('show');
-    applyMode(mode);   // 모드에 맞는 패널만 펴 둔다
+    showPanels(mode);   // 무엇을 채웠는지에 따라 필요한 패널만 펴 둔다
 
     // 차트는 결과 영역이 화면에 붙은 뒤에 그린다 — 숨어 있는 동안에는 폭이 0이라
     // viewBox 를 컨테이너에 맞출 수가 없다.
@@ -1881,7 +1979,7 @@
 
   // 기본값
   $('year').value = 1990;
-  applyMode('solo');
+  applyTab('pair');
   consumeInvite();
 })();
 </script>
