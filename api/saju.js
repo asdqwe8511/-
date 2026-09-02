@@ -613,6 +613,12 @@ ${describe(reading, input)}
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Accel-Buffering', 'no'); // 프록시가 스트림을 모아두지 않도록
 
+  // 플랫폼이 함수를 끊기 전에 우리가 먼저 멈춘다. 그냥 두면 문장 한가운데서
+  // 연결이 끊겨, 읽는 사람은 글이 원래 그렇게 끝난 줄 안다. vercel.json 의
+  // maxDuration 과 맞춰 두고, 여유를 조금 남긴다.
+  const BUDGET_MS = (Number(process.env.SAJU_MAX_SECONDS) || 60) * 1000 - 4000;
+  const startedAt = Date.now();
+
   const client = new Anthropic();
   try {
     const stream = client.messages.stream({
@@ -624,10 +630,24 @@ ${describe(reading, input)}
       messages: [{ role: 'user', content: userMessage }]
     });
 
+    let cutShort = false;
     for await (const event of stream) {
       if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
         res.write(event.delta.text);
       }
+      if (Date.now() - startedAt > BUDGET_MS) {
+        cutShort = true;
+        // 끊는 데 실패해도 우리 쪽 응답은 정상으로 마무리해야 한다.
+        try { if (typeof stream.abort === 'function') stream.abort(); } catch (e2) { /* 무시 */ }
+        break;
+      }
+    }
+    if (cutShort) {
+      res.write('\n\n---\n\n*풀이가 길어져 여기서 멈췄습니다. 위 내용까지는 그대로 쓰셔도 됩니다. ' +
+        '나머지가 필요하시면 「특히 궁금한 것」을 하나로 좁혀서 다시 받아 보세요 — ' +
+        '그 대목을 더 깊게 써 드립니다. 사주표·오행·대운·시기 계산은 아래에 전부 있습니다.*');
+      res.end();
+      return;
     }
     const final = await stream.finalMessage();
     if (final.stop_reason === 'refusal') {
