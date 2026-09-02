@@ -2,9 +2,13 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- 미니앱은 100% 모바일이다. 사용자가 확대·축소로 레이아웃을 고치게 두는 대신
+     처음부터 손가락 크기에 맞춰 놓고, viewport-fit 으로 노치 아래까지 그린다. -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e0f13">
+<meta name="format-detection" content="telephone=no,date=no,address=no,email=no">
 <title>사주·이름 풀이</title>
-<meta name="description" content="생년월일시로 사주팔자를 뽑고, 이름의 발음오행과 획수까지 함께 읽어 주는 풀이. 만세력은 천문 계산으로 직접 구합니다.">
+<meta name="description" content="생년월일시로 사주팔자를 뽑고, 이름·궁합·좋은 시기까지 한자리에서. 절기와 진태양시를 반영한 만세력 계산.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="사주·이름 풀이">
 <meta property="og:locale" content="ko_KR">
@@ -22,7 +26,6 @@
 <meta name="twitter:image" content="https://delta-ten-68.vercel.app/og-saju.png?v=1">
 <link rel="canonical" href="https://delta-ten-68.vercel.app/">
 <link rel="icon" type="image/png" href="/favicon.png">
-
 <style>
   :root{
     --bg:#0e0f13; --panel:#16181f; --panel-2:#1c1f28; --panel-3:#232733;
@@ -38,14 +41,19 @@
     background:var(--bg); color:var(--text);
     font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
     line-height:1.55; overflow-x:hidden;
+    -webkit-text-size-adjust:100%;              /* 가로로 눕혀도 글자 크기가 튀지 않게 */
+    -webkit-tap-highlight-color:rgba(124,92,255,.18);
+    overscroll-behavior-y:contain;              /* 웹뷰에서 당겨서 새로고침이 걸리지 않게 */
   }
   a{color:inherit; text-decoration:none;}
   button{font-family:inherit;}
 
   header.topbar{
     display:flex; align-items:center; justify-content:space-between;
-    padding:14px 28px; border-bottom:1px solid var(--border);
-    background:var(--panel); position:sticky; top:0; z-index:20;
+    padding:calc(12px + env(safe-area-inset-top)) 16px 12px;
+    border-bottom:1px solid var(--border);
+    background:rgba(22,24,31,.92); backdrop-filter:blur(10px);
+    position:sticky; top:0; z-index:20;
   }
   .brand{display:flex; align-items:center; gap:10px; font-weight:700; font-size:18px;}
   .brand-badge{
@@ -60,18 +68,40 @@
   .top-link:hover{border-color:var(--accent); color:var(--text);}
 
   .hero{
-    text-align:center; padding:52px 20px 28px;
-    background:radial-gradient(circle at 50% 0%, rgba(124,92,255,.16), transparent 60%);
+    text-align:center; padding:30px 20px 20px;
+    background:radial-gradient(circle at 50% 0%, rgba(124,92,255,.18), transparent 62%);
   }
-  .hero h1{font-size:34px; font-weight:800; margin-bottom:10px;}
-  .hero p{color:var(--text-dim); font-size:14.5px;}
+  .hero h1{font-size:25px; font-weight:800; margin-bottom:8px; line-height:1.35;}
+  .hero p{color:var(--text-dim); font-size:13.5px; line-height:1.7;}
   .hero .accent{color:var(--accent-2);}
 
-  .container{max-width:1080px; margin:0 auto; padding:0 20px 80px;}
-  .panel{background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:22px;}
-  .panel + .panel{margin-top:18px;}
+  /* 미니앱은 한 손에 들어오는 폭이 기준이다. 넓은 화면에서도 같은 폭을 가운데
+     두어 어디서 열든 같은 앱으로 보이게 한다. */
+  .container{
+    max-width:520px; margin:0 auto; padding:0 16px calc(96px + env(safe-area-inset-bottom));
+    /* 첫 단계는 내용이 짧다. 이만큼은 채워 둬야 하단 고정 버튼 바로 위에
+       푸터의 긴 고지문이 올라붙지 않는다. */
+    min-height:calc(100vh - 250px);
+    min-height:calc(100dvh - 250px);
+  }
+
+  /* 하단 고정 실행 버튼. 손가락이 닿는 자리에 항상 있어야 한다. */
+  .cta-bar{
+    position:fixed; left:0; right:0; bottom:0; z-index:30;
+    padding:12px 16px calc(12px + env(safe-area-inset-bottom));
+    background:linear-gradient(180deg, rgba(14,15,19,0), var(--bg) 32%);
+    pointer-events:none;
+  }
+  .cta-bar .inner{max-width:520px; margin:0 auto; pointer-events:auto;}
+  .cta-bar .submit{box-shadow:0 8px 26px rgba(0,0,0,.45);}
+  .cta-hint{
+    text-align:center; font-size:11.5px; color:var(--text-mute);
+    margin-top:7px; line-height:1.5;
+  }
+  .panel{background:var(--panel); border:1px solid var(--border); border-radius:18px; padding:18px 16px;}
+  .panel + .panel{margin-top:14px;}
   .panel h2{font-size:17px; margin-bottom:4px;}
-  .panel .sub{font-size:13px; color:var(--text-dim); margin-bottom:16px;}
+  .panel .sub{font-size:12.5px; color:var(--text-dim); margin-bottom:14px; line-height:1.7;}
 
   /* ── 입력 폼 ── */
   .form-grid{display:grid; grid-template-columns:repeat(12,1fr); gap:14px;}
@@ -79,28 +109,37 @@
   .field[hidden]{display:none;}   /* display:flex 가 [hidden] 을 덮어쓰지 않도록 */
   .field label{font-size:12.5px; color:var(--text-dim);}
   .field .hint{font-size:11.5px; color:var(--text-mute);}
+  /* iOS 는 16px 미만 입력에 자동으로 확대를 건다. 화면이 튀지 않게 16px 로 둔다. */
   input[type=text], input[type=number], select{
     background:var(--panel-2); border:1px solid var(--border); color:var(--text);
-    border-radius:9px; padding:10px 12px; font-size:14px; width:100%;
-    font-family:inherit;
+    border-radius:11px; padding:13px 14px; font-size:16px; width:100%;
+    font-family:inherit; min-height:48px; -webkit-appearance:none; appearance:none;
+  }
+  select{
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8'><path d='M1 1l5 5 5-5' stroke='%239298a8' stroke-width='1.6' fill='none' stroke-linecap='round'/></svg>");
+    background-repeat:no-repeat; background-position:right 14px center; padding-right:34px;
   }
   input:focus, select:focus{outline:none; border-color:var(--accent);}
   input::placeholder{color:var(--text-mute);}
   .chips{display:flex; gap:8px; flex-wrap:wrap;}
   .chip{
-    padding:9px 15px; border-radius:20px; border:1px solid var(--border);
-    background:var(--panel-2); color:var(--text-dim); font-size:13px; cursor:pointer;
-    transition:.15s;
+    padding:11px 18px; border-radius:22px; border:1px solid var(--border);
+    background:var(--panel-2); color:var(--text-dim); font-size:14px; cursor:pointer;
+    transition:.15s; min-height:44px;
   }
   .chip:hover{border-color:var(--accent);}
   .chip[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:#fff;}
-  .check{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-dim); cursor:pointer;}
-  .check input{width:16px; height:16px; accent-color:var(--accent);}
+  .check{
+    display:flex; align-items:center; gap:9px; font-size:14px; color:var(--text-dim);
+    cursor:pointer; min-height:48px; padding:0 2px;
+  }
+  .check input{width:20px; height:20px; accent-color:var(--accent); flex:0 0 auto;}
   .submit{
     background:linear-gradient(135deg,var(--accent),#5b3fd6); border:none; color:#fff;
-    padding:14px 26px; border-radius:11px; font-size:15px; font-weight:700; cursor:pointer;
-    width:100%;
+    padding:17px 24px; border-radius:14px; font-size:16.5px; font-weight:700; cursor:pointer;
+    width:100%; min-height:56px;
   }
+  .submit:active{transform:scale(.985);}
   .submit:hover{filter:brightness(1.08);}
   .submit:disabled{opacity:.55; cursor:not-allowed;}
   .adv-toggle{
@@ -119,7 +158,7 @@
   /* ── 결과 ── */
   #result{display:none; margin-top:22px;}
   #result.show{display:block;}
-  .summary-row{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px;}
+  .summary-row{display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-bottom:16px;}
   .stat{background:var(--panel); border:1px solid var(--border); border-radius:13px; padding:15px 17px;}
   .stat .label{font-size:12px; color:var(--text-dim); margin-bottom:5px;}
   .stat .value{font-size:20px; font-weight:800;}
@@ -189,12 +228,46 @@
   .luck-cell .tg{font-size:10.5px; color:var(--text-mute); line-height:1.3;}
   .luck-cell.now .age{color:var(--accent-2);}
 
-  .mode-tabs{margin:14px 0 18px;}
+  .mode-tabs{margin:12px 0 16px;}
+
+  /* ── 단계 진행 ──────────────────────────────────────────────────────
+     한 화면에 한 가지만 묻는다. 모바일에서 열두 칸짜리 폼을 한 번에 보여
+     주면 어디부터 채워야 할지 알 수 없고, 키보드가 올라오면 절반이 가린다. */
+  .steps-dots{display:flex; gap:6px; margin-bottom:16px;}
+  .steps-dots i{
+    height:3px; flex:1; border-radius:2px; background:var(--border); transition:.25s;
+  }
+  .steps-dots i.done{background:var(--accent);}
+  .step{display:none;}
+  .step.on{display:block; animation:stepIn .22s ease;}
+  @keyframes stepIn{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:none;}}
+  .step-title{font-size:19px; font-weight:800; margin-bottom:6px;}
+  .step-help{font-size:12.5px; color:var(--text-mute); line-height:1.7; margin-bottom:16px;}
+  .step-nav{display:flex; gap:9px; margin-top:16px;}
+  .step-back{
+    background:var(--panel-2); border:1px solid var(--border); color:var(--text-dim);
+    border-radius:14px; padding:15px 20px; font-size:15px; cursor:pointer;
+    font-family:inherit; min-height:52px; flex:0 0 auto;
+  }
+  .step-back:hover{border-color:var(--accent);}
+  /* 생년월일은 세 칸을 한 줄에 — 스크롤 없이 한눈에 */
+  .ymd{display:grid; grid-template-columns:1.3fr 1fr 1fr; gap:8px;}
+  .hm{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .big-check{
+    display:flex; align-items:center; gap:11px; padding:15px 16px; margin-top:10px;
+    background:var(--panel-2); border:1px solid var(--border); border-radius:13px;
+    font-size:14.5px; color:var(--text-dim); cursor:pointer; min-height:56px;
+  }
+  .big-check input{width:20px; height:20px; accent-color:var(--accent); flex:0 0 auto;}
+  .big-check.on{border-color:var(--accent-2); color:var(--text);}
+  .step-skip{
+    background:none; border:none; color:var(--text-mute); font-size:13px;
+    text-decoration:underline dotted; cursor:pointer; padding:10px 0; font-family:inherit;
+  }
 
   /* 나와 상대를 나란히 둔다. 궁합을 보러 온 사람이 탭을 눌러 찾아 들어가지
      않아도 두 칸이 처음부터 보이도록. 상대는 비워 두면 그냥 내 사주만 나온다. */
-  .pair-forms{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
-  .pair-forms.single{grid-template-columns:1fr;}
+  .pair-forms{display:grid; grid-template-columns:1fr; gap:14px;}
   .person-card[hidden]{display:none;}   /* display 지정이 [hidden] 을 덮지 않도록 */
   .person-card{
     background:var(--panel-2); border:1px solid var(--border);
@@ -221,9 +294,6 @@
   .person-card .chip{padding:7px 13px; font-size:12.5px;}
   .common-row{margin-top:16px;}
   .common-row .form-grid{grid-template-columns:repeat(12,1fr);}
-  @media(max-width:860px){
-    .pair-forms{grid-template-columns:1fr;}
-  }
   @media(max-width:520px){
     .person-card .form-grid{grid-template-columns:repeat(6,1fr); gap:10px;}
     .person-card .f-third{grid-column:span 2;}
@@ -258,15 +328,15 @@
   /* 궁합 */
   .compat-head{display:flex; align-items:center; gap:20px; flex-wrap:wrap; margin-bottom:18px;}
   .compat-score{
-    width:104px; height:104px; border-radius:50%; flex:0 0 auto;
+    width:100%; border-radius:16px; flex:0 0 auto; padding:18px 16px;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
-    background:var(--panel-2); border:2px solid var(--accent);
+    background:var(--panel-2); border:2px solid var(--accent); text-align:center;
   }
-  .compat-score .n{font-size:32px; font-weight:800; line-height:1;}
+  .compat-score .n{font-size:22px; font-weight:800; line-height:1.35;}
   .compat-score .u{font-size:11px; color:var(--text-mute); margin-top:3px;}
   .compat-head .desc{flex:1; min-width:220px; font-size:13.5px; color:var(--text-dim); line-height:1.8;}
   .compat-head .desc b{color:var(--text);}
-  .pair-row{display:grid; grid-template-columns:1fr auto 1fr; gap:12px; align-items:center; margin-bottom:18px;}
+  .pair-row{display:grid; grid-template-columns:1fr; gap:10px; align-items:center; margin-bottom:16px;}
   .pair-card{background:var(--panel-2); border:1px solid var(--border); border-radius:12px; padding:13px 15px;}
   .pair-card .who{font-size:12px; color:var(--text-mute); margin-bottom:4px;}
   .pair-card .gz{font-size:20px; font-weight:800;}
@@ -277,7 +347,7 @@
   .axis-track{height:14px; background:var(--panel-2); border-radius:7px;}
   .axis-fill{height:14px; border-radius:4px; background:var(--bar); min-width:3px; transition:width .5s ease;}
   .axis-val{font-size:12.5px; color:var(--text-dim); text-align:right;}
-  .sf-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:20px;}
+  .sf-grid{display:grid; grid-template-columns:1fr; gap:8px; margin-top:18px;}
   .sf-title{font-size:12.5px; margin-bottom:8px; display:flex; align-items:center; gap:5px;}
   .sf-title.good{color:var(--accent-2);}
   .sf-title.bad{color:#ffb3c1;}
@@ -351,7 +421,7 @@
   .readout .r-item{display:flex; align-items:center; gap:6px;}
   .readout .r-item b{color:var(--text);}
 
-  .domain-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:20px;}
+  .domain-grid{display:grid; grid-template-columns:1fr; gap:12px; margin-top:18px;}
   .domain-card{background:var(--panel-2); border:1px solid var(--border); border-radius:14px; padding:16px;}
   .domain-card h3{font-size:14.5px; display:flex; align-items:center; gap:7px; margin-bottom:2px;}
   .domain-card .card-sub{font-size:11.5px; color:var(--text-mute); margin-bottom:12px;}
@@ -387,7 +457,7 @@
   table.scores tr.now td{background:rgba(124,92,255,.12);}
 
   /* 이름 */
-  .name-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
+  .name-grid{display:grid; grid-template-columns:1fr; gap:16px;}
   .syls{display:flex; gap:10px; flex-wrap:wrap;}
   .syl{
     background:var(--panel-2); border:1px solid var(--border); border-radius:12px;
@@ -410,6 +480,27 @@
   .grade.길{color:#9fe8c9; border-color:rgba(159,232,201,.35);}
   .grade.중길{color:#f5cd70; border-color:rgba(240,180,41,.35);}
   .grade.흉{color:#ffb3c1; border-color:rgba(255,84,112,.4);}
+
+  /* 풀이 잠금 카드 — 무료 계산과 유료 풀이의 경계를 눈으로 보이게 */
+  .gate-card{
+    position:relative; border:1px solid var(--border); border-radius:14px;
+    background:var(--panel-2); overflow:hidden;
+  }
+  .gate-lines{padding:18px 18px 0; opacity:.28;}
+  .gate-lines i{
+    display:block; height:9px; border-radius:5px; background:var(--border); margin-bottom:9px;
+  }
+  .gate-lines i:nth-child(1){width:92%;}
+  .gate-lines i:nth-child(2){width:100%;}
+  .gate-lines i:nth-child(3){width:78%;}
+  .gate-lines i:nth-child(4){width:88%;}
+  .gate-body{
+    padding:16px 18px 20px; margin-top:-26px; position:relative;
+    background:linear-gradient(180deg, rgba(28,31,40,0) 0%, var(--panel-2) 34%);
+  }
+  .gate-title{font-size:15.5px; font-weight:700; margin-bottom:7px; padding-top:22px;}
+  .gate-desc{font-size:12.5px; color:var(--text-dim); line-height:1.75; margin-bottom:16px;}
+  .gate-note{font-size:11.5px; color:var(--text-mute); text-align:center; margin-top:9px;}
 
   /* 해석 */
   #reading{font-size:14.5px; line-height:1.95; color:#e6e8ec;}
@@ -450,10 +541,11 @@
 
   .site-footer{
     border-top:1px solid var(--border); background:var(--panel);
-    padding:34px 20px 26px; margin-top:20px;
+    padding:28px 16px calc(110px + env(safe-area-inset-bottom));  /* 하단 고정 버튼에 가리지 않게 */
+    margin-top:20px;
   }
   .footer-inner{
-    max-width:1080px; margin:0 auto; display:grid; grid-template-columns:1fr 1fr; gap:34px;
+    max-width:520px; margin:0 auto; display:grid; grid-template-columns:1fr; gap:22px;
   }
   .footer-col{font-size:12.5px; color:var(--text-mute); line-height:1.85;}
   .footer-col p{margin-bottom:9px;}
@@ -464,16 +556,12 @@
   }
   .footer-head{font-size:13px; font-weight:700; color:var(--text); margin-bottom:10px;}
   .footer-bottom{
-    max-width:1080px; margin:26px auto 0; padding-top:18px; border-top:1px solid var(--border);
+    max-width:520px; margin:22px auto 0; padding-top:16px; border-top:1px solid var(--border);
     display:flex; gap:18px; flex-wrap:wrap; font-size:12.5px; color:var(--text-mute);
   }
   .footer-bottom a{color:var(--text-dim);}
   .footer-bottom a:hover{color:var(--accent-2);}
   @media(max-width:760px){ .footer-inner{grid-template-columns:1fr; gap:22px;} }
-
-  @media(max-width:900px){
-    .domain-grid{grid-template-columns:1fr;}
-  }
 
   @media(max-width:820px){
     .form-grid{grid-template-columns:repeat(6,1fr);}
@@ -505,231 +593,206 @@
 
 <header class="topbar">
   <div class="brand"><div class="brand-badge">命</div> 사주·이름 풀이</div>
-  <a class="top-link" href="/youtube">인기영상 대시보드 →</a>
+  <a class="top-link" href="/youtube">인기영상 →</a>
 </header>
 
 <div class="hero">
   <h1>사주와 <span class="accent">이름</span>을 함께 읽습니다</h1>
-  <p>내 사주만 볼 수도, <span class="accent">두 사람 궁합</span>까지 볼 수도 있습니다.
+  <p>내 사주만 볼 수도, 두 사람 궁합까지 볼 수도 있습니다.<br>
     절기와 진태양시를 반영해 만세력을 직접 계산합니다.</p>
 </div>
 
 <div class="container">
 
-  <!-- ── 입력 ── -->
-  <section class="panel">
-    <h2>사주 보기 · 궁합 보기</h2>
-    <p class="sub">내 생년월일만 넣으면 <b>내 사주</b>를, 상대까지 넣으면 <b>궁합</b>까지 함께 봅니다.
-      이름은 비워도 됩니다. 입력한 정보는 저장되지 않습니다.</p>
+  <div id="inviteNotice"></div>
 
-    <div class="chips mode-tabs" id="mode">
-      <button type="button" class="chip" data-v="pair" aria-pressed="true">사주 · 궁합</button>
-      <button type="button" class="chip" data-v="batch" aria-pressed="false">여러 명과 비교</button>
-    </div>
+  <!-- ── 입력: 한 화면에 한 단계 ── -->
+  <section class="panel" id="formPanel">
+    <div class="steps-dots" id="stepDots"><i></i><i></i><i></i><i></i></div>
 
     <form id="form" autocomplete="off" novalidate>
-      <div class="pair-forms" id="pairForms">
 
-        <!-- 나 -->
-        <div class="person-card">
-          <div class="person-head">
-            <span class="person-badge me">나</span>
-            <span class="person-note">생년월일은 필수입니다</span>
-          </div>
-          <div class="form-grid">
-            <div class="field f-name">
-              <label for="surname">성</label>
-              <input type="text" id="surname" placeholder="김" maxlength="5">
-            </div>
-            <div class="field f-name">
-              <label for="given">이름</label>
-              <input type="text" id="given" placeholder="민준" maxlength="5">
-            </div>
-            <div class="field f-wide">
-              <label for="hanja">한자 표기 <span class="hint">(선택)</span></label>
-              <input type="text" id="hanja" placeholder="金珉俊" maxlength="5">
-            </div>
-            <div class="field f-half">
-              <label>성별 <span class="hint">— 대운 방향</span></label>
-              <div class="chips" id="gender">
-                <button type="button" class="chip" data-v="남" aria-pressed="true">남</button>
-                <button type="button" class="chip" data-v="여" aria-pressed="false">여</button>
-              </div>
-            </div>
-            <div class="field f-half">
-              <label>양력 / 음력</label>
-              <div class="chips" id="calendar">
-                <button type="button" class="chip" data-v="양력" aria-pressed="true">양력</button>
-                <button type="button" class="chip" data-v="음력" aria-pressed="false">음력</button>
-              </div>
-            </div>
-            <div class="field f-third">
-              <label for="year">태어난 해</label>
-              <input type="number" id="year" min="1900" max="2100" placeholder="1990">
-            </div>
-            <div class="field f-third">
-              <label for="month">월</label>
-              <select id="month"></select>
-            </div>
-            <div class="field f-third">
-              <label for="day">일</label>
-              <select id="day"></select>
-            </div>
-            <div class="field f-wide" id="leapWrap" hidden>
-              <label class="check"><input type="checkbox" id="leapMonth"> 윤달입니다</label>
-            </div>
-            <div class="field f-third">
-              <label for="hour">태어난 시</label>
-              <select id="hour"></select>
-            </div>
-            <div class="field f-third">
-              <label for="minute">분</label>
-              <input type="number" id="minute" min="0" max="59" value="0">
-            </div>
-            <div class="field f-third">
-              <label>&nbsp;</label>
-              <label class="check"><input type="checkbox" id="noHour"> 시각 모름</label>
-            </div>
+      <!-- 1. 생년월일 -->
+      <div class="step on" data-step="0">
+        <div class="step-title">언제 태어나셨나요</div>
+        <div class="step-help">양력·음력을 먼저 고르고 생년월일을 넣어 주세요.
+          연주는 1월 1일이 아니라 입춘을 기준으로 넘어갑니다.</div>
+
+        <div class="field">
+          <label>양력 / 음력</label>
+          <div class="chips" id="calendar">
+            <button type="button" class="chip" data-v="양력" aria-pressed="true">양력</button>
+            <button type="button" class="chip" data-v="음력" aria-pressed="false">음력</button>
           </div>
         </div>
 
-        <!-- 상대 -->
-        <div class="person-card optional" id="partnerBlock">
-          <div class="person-head">
-            <span class="person-badge them">상대</span>
-            <span class="person-note">비워 두면 내 사주만 봅니다</span>
-            <button type="button" class="btn-sm person-clear" id="clearPartner" hidden>지우기</button>
+        <div class="field" style="margin-top:14px">
+          <label>생년월일</label>
+          <div class="ymd">
+            <input type="number" id="year" min="1900" max="2100" placeholder="1990" inputmode="numeric">
+            <select id="month"></select>
+            <select id="day"></select>
           </div>
-          <div class="form-grid">
-            <div class="field f-name">
-              <label for="p_surname">성</label>
-              <input type="text" id="p_surname" placeholder="이" maxlength="5">
-            </div>
-            <div class="field f-name">
-              <label for="p_given">이름</label>
-              <input type="text" id="p_given" placeholder="서연" maxlength="5">
-            </div>
-            <div class="field f-half">
-              <label>성별</label>
-              <div class="chips" id="p_gender">
-                <button type="button" class="chip" data-v="여" aria-pressed="true">여</button>
-                <button type="button" class="chip" data-v="남" aria-pressed="false">남</button>
-              </div>
-            </div>
-            <div class="field f-half">
-              <label>양력 / 음력</label>
-              <div class="chips" id="p_calendar">
-                <button type="button" class="chip" data-v="양력" aria-pressed="true">양력</button>
-                <button type="button" class="chip" data-v="음력" aria-pressed="false">음력</button>
-              </div>
-            </div>
-            <div class="field f-third">
-              <label for="p_year">태어난 해</label>
-              <input type="number" id="p_year" min="1900" max="2100" placeholder="1993">
-            </div>
-            <div class="field f-third">
-              <label for="p_month">월</label>
-              <select id="p_month"></select>
-            </div>
-            <div class="field f-third">
-              <label for="p_day">일</label>
-              <select id="p_day"></select>
-            </div>
-            <div class="field f-wide" id="p_leapWrap" hidden>
-              <label class="check"><input type="checkbox" id="p_leapMonth"> 윤달입니다</label>
-            </div>
-            <div class="field f-third">
-              <label for="p_hour">태어난 시</label>
-              <select id="p_hour"></select>
-            </div>
-            <div class="field f-third">
-              <label for="p_minute">분</label>
-              <input type="number" id="p_minute" min="0" max="59" value="0">
-            </div>
-            <div class="field f-third">
-              <label>&nbsp;</label>
-              <label class="check"><input type="checkbox" id="p_noHour"> 시각 모름</label>
-            </div>
-          </div>
-          <p class="person-foot">상대의 태어난 시각을 모르면 <b>시각 모름</b>을 켜 두세요.
-            시주 없이도 궁합은 나오고, 그만큼만 거칠어집니다.
-            출생지와 계산 방식은 아래에서 고른 것을 두 사람 모두에게 씁니다.</p>
+        </div>
+
+        <div class="field" id="leapWrap" hidden style="margin-top:6px">
+          <label class="big-check" id="leapCheckBox">
+            <input type="checkbox" id="leapMonth"> 윤달입니다
+          </label>
         </div>
       </div>
 
-      <!-- 두 사람에게 함께 적용되는 것 -->
-      <div class="common-row" id="commonRow">
-        <div class="form-grid">
-          <div class="field f-city">
-            <label for="city">태어난 곳 <span class="hint">— 진태양시 보정에 씁니다</span></label>
-            <select id="city"></select>
-          </div>
-          <div class="field f-full" id="focusWrap">
-            <label>혼자 볼 때 특히 궁금한 것</label>
-            <div class="chips" id="focus">
-              <button type="button" class="chip" data-v="총운" aria-pressed="true">총운</button>
-              <button type="button" class="chip" data-v="성격" aria-pressed="false">성격</button>
-              <button type="button" class="chip" data-v="직업·적성" aria-pressed="false">직업·적성</button>
-              <button type="button" class="chip" data-v="재물" aria-pressed="false">재물</button>
-              <button type="button" class="chip" data-v="건강" aria-pressed="false">건강</button>
-              <button type="button" class="chip" data-v="인간관계" aria-pressed="false">인간관계</button>
-            </div>
+      <!-- 2. 태어난 시각 -->
+      <div class="step" data-step="1">
+        <div class="step-title">몇 시에 태어나셨나요</div>
+        <div class="step-help">시주는 사주 여덟 글자 중 둘을 차지합니다.
+          모르셔도 괜찮습니다 — 나머지 여섯 글자로 봅니다.</div>
+
+        <div class="field">
+          <label>태어난 시각</label>
+          <div class="hm">
+            <select id="hour"></select>
+            <input type="number" id="minute" min="0" max="59" value="0" inputmode="numeric" placeholder="분">
           </div>
         </div>
-      </div>
 
-      <!-- 연락처 (여러 명과 비교) -->
-      <div class="sub-block" id="batchBlock" hidden>
-        <div class="sub-block-head">비교할 사람들</div>
-        <p class="sub-block-note">
-          <b>카카오톡은 친구 생일을 내보내는 기능이 없습니다</b>(공개 API도 없습니다).
-          대신 휴대폰이나 구글 연락처에서 내보낸 파일을 쓰세요.
-          <b>파일은 이 브라우저 안에서만 열리고 어디로도 전송되지 않습니다.</b>
-          내보내는 법: 아이폰 <i>연락처 → 공유</i>, 안드로이드 <i>연락처 → 설정 → 가져오기/내보내기</i>,
-          구글 <i>contacts.google.com → 내보내기 → vCard 또는 CSV</i>.
-        </p>
-        <div class="form-grid">
-          <div class="field f-full">
-            <label for="contactFile">연락처 파일 (.vcf 또는 .csv)</label>
-            <input type="file" id="contactFile" accept=".vcf,.csv,.txt,text/vcard,text/csv,text/plain">
-          </div>
-          <div class="field f-full">
-            <label for="contactPaste">또는 직접 붙여넣기 <span class="hint">— 한 줄에 한 명, "이름 생년월일"</span></label>
-            <textarea id="contactPaste" rows="5" placeholder="홍길동 1990-05-15&#10;김서연, 930722&#10;박지우	1986.11.03"></textarea>
-          </div>
+        <label class="big-check" id="noHourBox">
+          <input type="checkbox" id="noHour"> 태어난 시각을 모릅니다
+        </label>
+
+        <div class="field" style="margin-top:16px">
+          <label for="city">태어난 곳 <span class="hint">— 진태양시 보정에 씁니다</span></label>
+          <select id="city"></select>
         </div>
-        <div class="parse-status" id="parseStatus"></div>
-      </div>
 
-      <div style="margin-top:14px">
-        <button type="button" class="adv-toggle" id="advToggle">계산 방식 자세히 설정</button>
-        <div class="adv" id="adv">
-          <div class="form-grid">
-            <div class="field f-adv">
+        <div style="margin-top:12px">
+          <button type="button" class="adv-toggle" id="advToggle">계산 방식 자세히 설정</button>
+          <div class="adv" id="adv">
+            <div class="field">
               <label class="check">
                 <input type="checkbox" id="useSolarTime" checked>
                 진태양시로 보정 <span class="hint">(경도차 + 균시차)</span>
               </label>
-              <span class="hint">한국 표준시는 동경 135° 기준이라, 서울은 실제 태양시보다 약 32분 빠릅니다. 끄면 시계 시각을 그대로 씁니다.</span>
+              <span class="hint">한국 표준시는 동경 135° 기준이라 서울은 실제 태양시보다 약 32분 빠릅니다.</span>
             </div>
-            <div class="field f-adv">
+            <div class="field" style="margin-top:12px">
               <label for="lateNight">밤 11시 이후 일주 기준</label>
               <select id="lateNight">
-                <option value="야자시">야자시 — 23시부터 다음 날 일주 (기본)</option>
-                <option value="자정">자정 — 00시부터 다음 날 일주</option>
+                <option value="야자시">야자시 — 23시부터 다음 날 (기본)</option>
+                <option value="자정">자정 — 00시부터 다음 날</option>
               </select>
-              <span class="hint">유파에 따라 다릅니다. 밤 11시~자정 사이 출생만 결과가 달라집니다.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. 성별과 이름 -->
+      <div class="step" data-step="2">
+        <div class="step-title">성별과 이름</div>
+        <div class="step-help">성별에 따라 대운이 흐르는 방향이 달라집니다.
+          이름을 넣으면 발음오행과 획수까지 함께 봅니다 — 비워도 됩니다.</div>
+
+        <div class="field">
+          <label>성별</label>
+          <div class="chips" id="gender">
+            <button type="button" class="chip" data-v="남" aria-pressed="true">남</button>
+            <button type="button" class="chip" data-v="여" aria-pressed="false">여</button>
+          </div>
+        </div>
+
+        <div class="field" style="margin-top:14px">
+          <label>이름 <span class="hint">(선택)</span></label>
+          <div class="hm">
+            <input type="text" id="surname" placeholder="성 (김)" maxlength="5">
+            <input type="text" id="given" placeholder="이름 (민준)" maxlength="5">
+          </div>
+        </div>
+
+        <div class="field" style="margin-top:12px">
+          <label for="hanja">한자 표기 <span class="hint">(선택)</span></label>
+          <input type="text" id="hanja" placeholder="金珉俊" maxlength="5">
+        </div>
+
+        <div class="field" style="margin-top:16px">
+          <label>특히 궁금한 것</label>
+          <div class="chips" id="focus">
+            <button type="button" class="chip" data-v="총운" aria-pressed="true">총운</button>
+            <button type="button" class="chip" data-v="성격" aria-pressed="false">성격</button>
+            <button type="button" class="chip" data-v="직업·적성" aria-pressed="false">직업·적성</button>
+            <button type="button" class="chip" data-v="재물" aria-pressed="false">재물</button>
+            <button type="button" class="chip" data-v="건강" aria-pressed="false">몸·리듬</button>
+            <button type="button" class="chip" data-v="인간관계" aria-pressed="false">인간관계</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. 궁합 상대 (선택) -->
+      <div class="step" data-step="3">
+        <div class="step-title">궁합도 볼까요</div>
+        <div class="step-help">상대의 생년월일을 넣으면 두 사람을 견줘 봅니다.
+          넘어가시면 내 사주만 봅니다.</div>
+
+        <label class="big-check" id="wantCompatBox">
+          <input type="checkbox" id="wantCompat"> 상대와의 궁합도 보겠습니다
+        </label>
+
+        <div id="partnerBlock" hidden style="margin-top:16px">
+          <div class="field">
+            <label>상대의 양력 / 음력</label>
+            <div class="chips" id="p_calendar">
+              <button type="button" class="chip" data-v="양력" aria-pressed="true">양력</button>
+              <button type="button" class="chip" data-v="음력" aria-pressed="false">음력</button>
+            </div>
+          </div>
+
+          <div class="field" style="margin-top:14px">
+            <label>상대의 생년월일</label>
+            <div class="ymd">
+              <input type="number" id="p_year" min="1900" max="2100" placeholder="1993" inputmode="numeric">
+              <select id="p_month"></select>
+              <select id="p_day"></select>
+            </div>
+          </div>
+
+          <div class="field" id="p_leapWrap" hidden style="margin-top:6px">
+            <label class="big-check"><input type="checkbox" id="p_leapMonth"> 윤달입니다</label>
+          </div>
+
+          <div class="field" style="margin-top:14px">
+            <label>상대의 태어난 시각</label>
+            <div class="hm">
+              <select id="p_hour"></select>
+              <input type="number" id="p_minute" min="0" max="59" value="0" inputmode="numeric" placeholder="분">
+            </div>
+          </div>
+          <label class="big-check" id="p_noHourBox">
+            <input type="checkbox" id="p_noHour"> 상대의 시각을 모릅니다
+          </label>
+
+          <div class="field" style="margin-top:14px">
+            <label>상대의 성별</label>
+            <div class="chips" id="p_gender">
+              <button type="button" class="chip" data-v="여" aria-pressed="true">여</button>
+              <button type="button" class="chip" data-v="남" aria-pressed="false">남</button>
+            </div>
+          </div>
+
+          <div class="field" style="margin-top:14px">
+            <label>상대의 이름 <span class="hint">(선택)</span></label>
+            <div class="hm">
+              <input type="text" id="p_surname" placeholder="성 (이)" maxlength="5">
+              <input type="text" id="p_given" placeholder="이름 (서연)" maxlength="5">
             </div>
           </div>
         </div>
       </div>
 
       <div class="form-error" id="formError"></div>
-      <div style="margin-top:18px"><button type="submit" class="submit" id="submitBtn">사주 뽑고 풀이 받기</button></div>
+      <div class="step-nav">
+        <button type="button" class="step-back" id="stepBack" hidden>이전</button>
+      </div>
     </form>
   </section>
-
-  <div id="inviteNotice"></div>
 
   <!-- ── 결과 ── -->
   <div id="result">
@@ -749,16 +812,16 @@
       <p class="sub" id="compatSub"></p>
 
       <div class="compat-head">
-        <div class="compat-score"><div class="n" id="compatScore">–</div><div class="u">궁합 점수</div></div>
+        <div class="compat-score"><div class="n" id="compatScore">–</div><div class="u">두 사주의 배치</div></div>
         <div class="desc" id="compatDesc"></div>
       </div>
 
       <div class="pair-row" id="pairRow"></div>
 
       <div id="axes"></div>
-      <p class="bar-legend">네 축은 각각 0~100입니다. 위의 궁합 점수는 이 네 축을 가중평균한 뒤,
-        무작위로 짝지은 48,180쌍의 분포에 견주어 환산한 값입니다 — 70이면 "무작위로 만난 상대
-        100명 중 상위 30번째"라는 뜻입니다.</p>
+      <p class="bar-legend">막대 길이는 그 축이 얼마나 받쳐 주는지를 나타냅니다.
+        위의 한 줄 평가는 네 축을 함께 본 뒤, 무작위로 짝지은 48,180쌍과 견주어 어디쯤인지를
+        말로 옮긴 것입니다. 사람을 점수로 매기는 값이 아니라 두 사주의 배치를 견준 결과입니다.</p>
 
       <div class="sf-grid">
         <div>
@@ -801,11 +864,38 @@
       </div>
     </section>
 
-    <section class="panel" id="batchPanel" hidden>
-      <h2>나와 잘 맞는 순서</h2>
-      <p class="sub" id="batchSub"></p>
-      <div class="batch-summary" id="batchSummary"></div>
-      <div class="rank-wrap"><table class="rank" id="rankTable"></table></div>
+    <section class="panel" id="batchPanel">
+      <h2>여러 명과 한 번에 비교</h2>
+      <p class="sub">연락처를 불러오면 저장된 생일과 내 사주를 하나씩 견줘 순서대로 보여 줍니다.</p>
+      <button type="button" class="adv-toggle" id="batchToggle">연락처 불러오기</button>
+      <div class="sub-block" id="batchBlock" hidden>
+        <div class="sub-block-head">비교할 사람들</div>
+        <p class="sub-block-note">
+          <b>카카오톡은 친구 생일을 내보내는 기능이 없습니다</b>(공개 API도 없습니다).
+          대신 휴대폰이나 구글 연락처에서 내보낸 파일을 쓰세요.
+          <b>파일은 이 브라우저 안에서만 열리고 어디로도 전송되지 않습니다.</b>
+          내보내는 법: 아이폰 <i>연락처 → 공유</i>, 안드로이드 <i>연락처 → 설정 → 가져오기/내보내기</i>,
+          구글 <i>contacts.google.com → 내보내기 → vCard 또는 CSV</i>.
+        </p>
+        <div class="form-grid">
+          <div class="field f-full">
+            <label for="contactFile">연락처 파일 (.vcf 또는 .csv)</label>
+            <input type="file" id="contactFile" accept=".vcf,.csv,.txt,text/vcard,text/csv,text/plain">
+          </div>
+          <div class="field f-full">
+            <label for="contactPaste">또는 직접 붙여넣기 <span class="hint">— 한 줄에 한 명, "이름 생년월일"</span></label>
+            <textarea id="contactPaste" rows="5" placeholder="홍길동 1990-05-15&#10;김서연, 930722&#10;박지우	1986.11.03"></textarea>
+          </div>
+        </div>
+        <div class="parse-status" id="parseStatus"></div>
+      </div>
+      <div id="batchRun" hidden style="margin-top:14px">
+        <button type="button" class="submit" id="batchBtn">전부 비교하기</button>
+      </div>
+      <div id="batchResult" hidden>
+        <div class="batch-summary" id="batchSummary"></div>
+        <div class="rank-wrap"><table class="rank" id="rankTable"></table></div>
+      </div>
     </section>
 
     <section class="panel" id="elemPanel">
@@ -868,8 +958,23 @@
     </section>
 
     <section class="panel" id="readingPanel">
-      <h2>풀이</h2>
-      <p class="sub">위 계산 결과를 바탕으로 Claude 가 사주와 이름을 이어서 읽습니다.</p>
+      <h2>글로 풀어 읽기</h2>
+      <p class="sub">위 계산은 여기까지 전부 무료입니다.
+        아래 풀이는 계산 결과를 이어 붙여 <b>글로 읽어 주는</b> 부분입니다.</p>
+
+      <div id="readingGate">
+        <div class="gate-card">
+          <div class="gate-lines"><i></i><i></i><i></i><i></i></div>
+          <div class="gate-body">
+            <div class="gate-title" id="gateTitle">사주와 이름을 이어서 읽어 드립니다</div>
+            <div class="gate-desc" id="gateDesc">일간과 월지가 만드는 기질, 오행의 균형,
+              이름이 사주에 하는 일, 대운의 흐름과 지금 자리까지 이어서 읽습니다.</div>
+            <button type="button" class="submit" id="startReading">풀이 받기</button>
+            <div class="gate-note" id="gateNote">약 30초 걸립니다.</div>
+          </div>
+        </div>
+      </div>
+
       <div id="reading"></div>
       <div class="reading-status" id="readingStatus"></div>
     </section>
@@ -883,6 +988,14 @@
       풀이는 재미와 자기 이해를 위한 참고 자료로 봐 주세요. 의료·법률·투자 판단의 근거로 쓰지 마시고,
       건강이 걱정된다면 의료기관을 찾아 주세요.
     </div>
+  </div>
+</div>
+</div>
+
+<div class="cta-bar" id="ctaBar">
+  <div class="inner">
+    <button type="submit" form="form" class="submit" id="submitBtn">다음</button>
+    <div class="cta-hint" id="ctaHint"></div>
   </div>
 </div>
 
@@ -977,36 +1090,25 @@
   });
 
   // ── 모드 ────────────────────────────────────────────────────────────
-  // 화면 모드는 둘뿐이다: 사주·궁합(pair) / 여러 명과 비교(batch).
-  // pair 안에서 혼자 볼지 궁합을 볼지는 탭이 아니라 "상대 칸을 채웠는가"로 갈린다.
+  // ── 단계 진행 ────────────────────────────────────────────────────────
+  //
+  // 한 화면에 한 가지만 묻는다. 모바일에서 열두 칸을 한 번에 펼치면 어디부터
+  // 채워야 할지 알 수 없고, 키보드가 올라오면 절반이 가려진다.
+  var STEPS = [
+    { title: '생년월일', hint: '' },
+    { title: '태어난 시각', hint: '' },
+    { title: '성별과 이름', hint: '' },
+    { title: '궁합', hint: '' }
+  ];
+  var stepIndex = 0;
+
   var PANELS = {
-    solo:   ['chartPanel', 'elemPanel', 'luckPanel', 'fortunePanel', 'namePanel', 'sharePanel', 'readingPanel'],
-    compat: ['chartPanel', 'compatPanel', 'sharePanel', 'readingPanel'],
-    batch:  ['chartPanel', 'batchPanel']
+    solo:   ['chartPanel', 'elemPanel', 'luckPanel', 'fortunePanel', 'namePanel',
+             'sharePanel', 'batchPanel', 'readingPanel'],
+    compat: ['chartPanel', 'compatPanel', 'sharePanel', 'readingPanel']
   };
   var ALL_PANELS = ['chartPanel', 'compatPanel', 'batchPanel', 'elemPanel', 'luckPanel',
                     'fortunePanel', 'namePanel', 'sharePanel', 'readingPanel'];
-  var tab = 'pair';
-
-  function partnerFilled() {
-    var y = parseInt($('p_year').value, 10);
-    return !!(y && y >= 1900 && y <= 2100);
-  }
-  function effectiveMode() {
-    if (tab === 'batch') return 'batch';
-    return partnerFilled() ? 'compat' : 'solo';
-  }
-
-  // 상대 칸 상태에 따라 버튼 문구와 카드 테두리를 바꿔, 무엇이 나올지 미리 알린다.
-  function refreshPairState() {
-    var filled = partnerFilled();
-    $('partnerBlock').classList.toggle('filled', filled);
-    $('clearPartner').hidden = !filled;
-    $('focusWrap').style.opacity = filled ? .45 : 1;
-    if (tab === 'pair') {
-      $('submitBtn').textContent = filled ? '두 사람 궁합 보기' : '내 사주 보기';
-    }
-  }
 
   function showPanels(mode) {
     var show = PANELS[mode] || [];
@@ -1016,40 +1118,81 @@
     });
   }
 
-  function applyTab(next) {
-    tab = next;
-    // 여러 명과 비교할 때도 기준이 되는 내 사주는 있어야 한다 — 상대 칸만 접는다.
-    var batch = (tab === 'batch');
-    $('partnerBlock').hidden = batch;
-    $('pairForms').classList.toggle('single', batch);
-    $('batchBlock').hidden = !batch;
-    $('focusWrap').hidden = batch;
-    if (batch) $('submitBtn').textContent = '전부 비교하기';
-    else refreshPairState();
-    showPanels(effectiveMode());
+  function wantsCompat() { return $('wantCompat').checked; }
+  function effectiveMode() { return wantsCompat() ? 'compat' : 'solo'; }
+
+  function stepEls() { return Array.prototype.slice.call(document.querySelectorAll('.step')); }
+
+  function renderStep() {
+    var els = stepEls();
+    els.forEach(function (el, i) { el.classList.toggle('on', i === stepIndex); });
+    Array.prototype.forEach.call($('stepDots').children, function (d, i) {
+      d.classList.toggle('done', i <= stepIndex);
+    });
+    $('stepBack').hidden = (stepIndex === 0);
+    var last = (stepIndex === els.length - 1);
+    $('submitBtn').textContent = last
+      ? (wantsCompat() ? '궁합 보기' : '내 사주 보기')
+      : '다음';
+    $('ctaHint').textContent = last
+      ? '계산은 이 휴대폰 안에서 끝납니다. 저장하지 않습니다.'
+      : (stepIndex + 1) + ' / ' + els.length;
+    // 다음 단계로 넘어갈 때 화면을 위로 올려 준다 — 아래쪽에 머물러 있으면
+    // 새 질문이 화면 밖에 있다.
+    if ($('formPanel').getBoundingClientRect().top < 0) {
+      $('formPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   }
 
-  $('mode').addEventListener('click', function (e) {
-    var btn = e.target.closest('.chip');
-    if (!btn) return;
-    Array.prototype.forEach.call(this.querySelectorAll('.chip'), function (c) {
-      c.setAttribute('aria-pressed', String(c === btn));
-    });
-    applyTab(btn.dataset.v);
+  // 각 단계를 넘어가기 전에 그 단계에서 물은 것만 확인한다.
+  function validateStep(i) {
+    if (i === 0) {
+      var y = parseInt($('year').value, 10);
+      if (!y || y < 1900 || y > 2100) return '태어난 해를 1900~2100 사이로 넣어 주세요.';
+      if (getCalendar() === '음력' && $('leapMonth').checked) {
+        var leaps = E.leapMonthsOf(y) || [];
+        if (leaps.indexOf(parseInt($('month').value, 10)) < 0) {
+          return y + '년에는 윤' + $('month').value + '월이 없습니다.';
+        }
+      }
+    }
+    if (i === 2) {
+      var s = $('surname').value.trim(), g = $('given').value.trim();
+      if ((s && !g) || (!s && g)) return '성과 이름을 함께 넣거나, 둘 다 비워 주세요.';
+      if (s && !/^[가-힣]{1,5}$/.test(s + g)) return '이름은 한글로만 넣어 주세요.';
+      var hj = $('hanja').value.trim();
+      if (hj && !/^[㐀-䶿一-鿿]{1,5}$/.test(hj)) return '한자 표기에는 한자만 넣어 주세요.';
+    }
+    if (i === 3 && wantsCompat()) {
+      var py = parseInt($('p_year').value, 10);
+      if (!py || py < 1900 || py > 2100) return '상대의 태어난 해를 1900~2100 사이로 넣어 주세요.';
+      var ps = $('p_surname').value.trim(), pg = $('p_given').value.trim();
+      if ((ps && !pg) || (!ps && pg)) return '상대의 성과 이름을 함께 넣거나, 둘 다 비워 주세요.';
+      if (ps && !/^[가-힣]{1,5}$/.test(ps + pg)) return '상대의 이름은 한글로만 넣어 주세요.';
+    }
+    return null;
+  }
+
+  function goStep(next) {
+    showError('');
+    stepIndex = Math.max(0, Math.min(stepEls().length - 1, next));
+    renderStep();
+  }
+
+  $('stepBack').addEventListener('click', function () { goStep(stepIndex - 1); });
+
+  $('wantCompat').addEventListener('change', function () {
+    $('partnerBlock').hidden = !this.checked;
+    $('wantCompatBox').classList.toggle('on', this.checked);
+    renderStep();
   });
 
-  ['p_year', 'p_month', 'p_day'].forEach(function (id) {
-    $(id).addEventListener('input', refreshPairState);
-    $(id).addEventListener('change', refreshPairState);
-  });
-  $('clearPartner').addEventListener('click', function () {
-    ['p_surname', 'p_given', 'p_year'].forEach(function (id) { $(id).value = ''; });
-    $('p_month').value = '1'; $('p_day').value = '1';
-    $('p_hour').value = '12'; $('p_minute').value = '0';
-    $('p_leapMonth').checked = false;
-    $('p_noHour').checked = false;
-    $('p_noHour').dispatchEvent(new Event('change'));
-    refreshPairState();
+  // 큰 체크 박스는 켜졌을 때 눈에 띄게
+  ['noHour', 'p_noHour', 'leapMonth'].forEach(function (id) {
+    var box = $(id + 'Box') || ($(id).closest ? $(id).closest('.big-check') : null);
+    $(id).addEventListener('change', function () {
+      if (box) box.classList.toggle('on', this.checked);
+    });
   });
 
   // ── 연락처 읽기 ──────────────────────────────────────────────────────
@@ -1108,7 +1251,9 @@
       ['일간 — 나를 뜻하는 글자', p.day.stem + '(' + p.day.hanja.charAt(0) + ')',
        a.dayMaster.elem + ' · ' + (a.dayMaster.yang ? '양' : '음')],
       ['기운의 세기', a.strength.replace(/\(.*\)/, ''),
-       '일간을 돕는 힘 ' + Math.round(a.strengthRatio * 100) + '%'],
+       a.strengthRatio >= 0.6 ? '뿌리가 단단한 편' :
+       a.strengthRatio >= 0.45 ? '받쳐 주는 힘이 있는 편' :
+       a.strengthRatio >= 0.35 ? '받쳐 주는 힘이 얕은 편' : '기대는 자리가 필요한 편'],
       ['필요한 기운(용신)', a.primaryYongsin + '(' + E.ELEM_H[a.primaryYongsin] + ')',
        a.yongsin.join(' → ')]
     ].map(function (s) {
@@ -1246,12 +1391,36 @@
     }).join('');
   }
 
+  // ── 점수를 말로 ──────────────────────────────────────────────────────
+  //
+  // 계산은 안에서 0~100 으로 하되 화면에는 숫자를 내지 않는다. 건강이나 사람
+  // 사이를 숫자로 매겨 보여 주면, 읽는 사람이 그것을 측정값으로 받아들이기
+  // 쉽다. 실제로는 유파 하나를 수치로 옮긴 해석일 뿐이다.
+  var FLOW_GRADES = [
+    [82, '아주 좋은 편'], [64, '좋은 편'], [42, '무난한 편'],
+    [24, '조금 눌리는 편'], [0, '많이 눌리는 편']
+  ];
+  var PAIR_GRADES = [
+    [85, '드물게 잘 맞는 편'], [70, '잘 맞는 편'], [55, '무난한 편'],
+    [40, '보통'], [25, '맞춰가야 하는 편'], [0, '많이 다른 편']
+  ];
+  var AXIS_GRADES = [
+    [78, '아주 강함'], [60, '강한 편'], [42, '보통'], [25, '약한 편'], [0, '많이 약함']
+  ];
+  function gradeBy(table, v) {
+    for (var i = 0; i < table.length; i++) if (v >= table[i][0]) return table[i][1];
+    return table[table.length - 1][1];
+  }
+  var flowGrade = function (v) { return gradeBy(FLOW_GRADES, v); };
+  var pairGrade = function (v) { return gradeBy(PAIR_GRADES, v); };
+  var axisGrade = function (v) { return gradeBy(AXIS_GRADES, v); };
+
   // ── 운세 시기 ────────────────────────────────────────────────────────
   // 세 계열은 색만으로 구분하지 않는다. 선 끝에 이름을 직접 달고 범례도 함께 두어,
   // 색을 구분하기 어려운 사람도 어느 선이 무엇인지 읽을 수 있게 한다.
   var SERIES = [
     { key: 'money',    label: '재물', color: '#3987e5' },
-    { key: 'health',   label: '건강', color: '#d95926' },
+    { key: 'health',   label: '몸·리듬', color: '#d95926' },
     { key: 'relation', label: '관계', color: '#199e70' }
   ];
   var DOMAIN_ICON = { money: '💰', health: '🌿', relation: '🤝' };
@@ -1296,9 +1465,10 @@
 
     var out = [];
     // 눈금은 뒤로 물러나 있어야 한다 — 데이터가 주인공이다.
-    [0, 50, 100].forEach(function (v) {
+    [[100, '높음'], [50, '보통'], [0, '낮음']].forEach(function (g) {
+      var v = g[0];
       out.push('<line class="chart-grid" x1="' + padL + '" y1="' + y(v) + '" x2="' + (W - padR) + '" y2="' + y(v) + '"/>');
-      out.push('<text class="chart-axis" x="' + (padL - 7) + '" y="' + (y(v) + 3.5) + '" text-anchor="end">' + v + '</text>');
+      out.push('<text class="chart-axis" x="' + (padL - 7) + '" y="' + (y(v) + 3.5) + '" text-anchor="end">' + g[1] + '</text>');
     });
     var step = Math.max(1, Math.round(n / 8));
     for (var i = 0; i < n; i += step) {
@@ -1351,7 +1521,7 @@
   function drawLegend() {
     $('legend').innerHTML = SERIES.map(function (s) {
       return '<span class="item"><span class="swatch" style="background:' + s.color + '"></span>' + s.label + '</span>';
-    }).join('') + '<span class="item legend-note">100에 가까울수록 이 사람의 일생 중 좋은 편</span>';
+    }).join('') + '<span class="item legend-note">위로 갈수록 이 사람의 일생 중 힘이 실리는 때</span>';
   }
 
   // 차트 아래 고정 판독 줄. 좁은 화면에서는 떠 있는 툴팁이 그래프를 통째로
@@ -1363,7 +1533,7 @@
       '<span>만 ' + row.age + '세 · ' + esc(row.seun) + (row.daeun ? ' · 대운 ' + esc(row.daeun) : '') + '</span>' +
       SERIES.map(function (s) {
         return '<span class="r-item"><span class="swatch" style="background:' + s.color + '"></span>' +
-               s.label + ' <b>' + row[s.key] + '</b></span>';
+               s.label + ' <b>' + esc(flowGrade(row[s.key])) + '</b></span>';
       }).join('');
   }
   function defaultReadoutRow() {
@@ -1396,7 +1566,7 @@
       (row.daeun ? ' <span style="color:var(--text-mute)">대운 ' + esc(row.daeun) + '</span>' : '') + '</div>' +
       SERIES.map(function (s) {
         return '<div class="tip-row"><span class="swatch" style="background:' + s.color + '"></span>' +
-               s.label + '<b>' + row[s.key] + '</b></div>';
+               s.label + '<b>' + esc(flowGrade(row[s.key])) + '</b></div>';
       }).join('');
     tip.classList.add('on');
     var wrap = $('chartWrap').getBoundingClientRect();
@@ -1432,7 +1602,7 @@
           (p.daeun ? ' · 대운 ' + esc(p.daeun) : '') + '</div>' +
         (p.reasons.length ? '<div class="why">' + esc(p.reasons.join(' · ')) + '</div>' : '') +
       '</span>' +
-      '<span class="pill">' + p.score + '</span>' +
+      '<span class="pill">' + esc(flowGrade(p.score)) + '</span>' +
     '</div>';
   }
 
@@ -1442,24 +1612,25 @@
       var goodList = d.best.map(function (p, i) { return periodHtml(p, 'good', i + 1); }).join('');
       var badList = d.worst.map(function (p, i) { return periodHtml(p, 'bad', i + 1); }).join('');
       var sub = s.key === 'money' ? '재성·식상이 어떻게 드는가'
-              : s.key === 'health' ? '일간의 균형이 흔들리는가'
+              : s.key === 'health' ? '일간의 균형이 흔들리는가 — 생활 리듬의 이야기입니다'
               : '관성·인성과 합충이 어떻게 드는가';
       return '<div class="domain-card">' +
         '<h3><span class="swatch" style="background:' + s.color + '"></span>' + DOMAIN_ICON[s.key] + ' ' + s.label + '</h3>' +
         '<div class="card-sub">' + sub + '</div>' +
-        '<div class="plist-title good">▲ 좋은 시기 TOP 3</div>' + goodList +
-        '<div class="plist-title bad">▼ 조심할 시기 TOP 3</div>' + badList +
+        '<div class="plist-title good">▲ 힘이 실리는 시기</div>' + goodList +
+        '<div class="plist-title bad">▼ 속도를 늦출 시기</div>' + badList +
       '</div>';
     }).join('');
   }
 
   function drawScoreTable() {
     var thisYear = new Date().getFullYear();
-    var head = '<tr><th>연도</th><th>만나이</th><th>세운</th><th>재물</th><th>건강</th><th>관계</th></tr>';
+    var head = '<tr><th>연도</th><th>만나이</th><th>세운</th><th>재물</th><th>몸·리듬</th><th>관계</th></tr>';
     var body = fortuneState.rows.map(function (r) {
       return '<tr' + (r.year === thisYear ? ' class="now"' : '') + '>' +
         '<td>' + r.year + '</td><td>' + r.age + '</td><td>' + esc(r.seun) + '</td>' +
-        '<td>' + r.money + '</td><td>' + r.health + '</td><td>' + r.relation + '</td></tr>';
+        '<td>' + esc(flowGrade(r.money)) + '</td><td>' + esc(flowGrade(r.health)) +
+        '</td><td>' + esc(flowGrade(r.relation)) + '</td></tr>';
     }).join('');
     $('scoreTable').innerHTML = '<table class="scores"><thead>' + head + '</thead><tbody>' + body + '</tbody></table>';
   }
@@ -1508,6 +1679,28 @@
       return '<p>' + html + '</p>';
     }).join('');
   }
+
+  // 계산은 원가가 들지 않지만 풀이 한 번은 실제 요금이 나간다. 그래서 결과가
+  // 나오자마자 자동으로 부르지 않고, 사용자가 원할 때만 부른다. 나중에 결제를
+  // 붙일 자리도 여기다 — startReading 앞에 결제 확인만 끼우면 된다.
+  function prepareReading(payload) {
+    $('reading').innerHTML = '';
+    $('readingStatus').innerHTML = '';
+    $('readingGate').hidden = false;
+    var compat = payload.mode === 'compat';
+    $('gateTitle').textContent = compat
+      ? '두 사람의 궁합을 글로 풀어 드립니다'
+      : '사주와 이름을 이어서 읽어 드립니다';
+    $('gateDesc').textContent = compat
+      ? '무엇이 서로를 당기고 어디서 부딪히는지, 이 관계를 오래 가져가려면 무엇을 조심해야 하는지 이어서 읽습니다.'
+      : '일간과 월지가 만드는 기질, 오행의 균형, 이름이 사주에 하는 일, 대운의 흐름과 지금 자리까지 이어서 읽습니다.';
+  }
+
+  $('startReading').addEventListener('click', function () {
+    if (!lastPayload) return;
+    $('readingGate').hidden = true;
+    streamReading(lastPayload);
+  });
 
   function streamReading(payload) {
     var box = $('reading'), status = $('readingStatus');
@@ -1564,12 +1757,12 @@
 
   // ── 궁합 ─────────────────────────────────────────────────────────────
   function scoreBand(n) {
-    if (n >= 85) return { label: '드물게 잘 맞는 조합', tone: 'good' };
+    if (n >= 85) return { label: '드물게 잘 맞는 편', tone: 'good' };
     if (n >= 70) return { label: '잘 맞는 편', tone: 'good' };
     if (n >= 55) return { label: '무난한 편', tone: 'mid' };
     if (n >= 40) return { label: '보통', tone: 'mid' };
-    if (n >= 25) return { label: '맞추려는 노력이 필요한 편', tone: 'bad' };
-    return { label: '부딪히기 쉬운 조합', tone: 'bad' };
+    if (n >= 25) return { label: '맞춰가야 하는 편', tone: 'bad' };
+    return { label: '많이 다른 편', tone: 'bad' };
   }
 
   function personLabel(r, fallback) {
@@ -1587,7 +1780,7 @@
       nameB + '(' + B.solar.year + '.' + B.solar.month + '.' + B.solar.day + ')의 원국을 견줍니다. ' +
       '대운·세운이 아니라 타고난 자리끼리의 비교라, 시기에 따라 체감은 달라집니다.';
 
-    $('compatScore').textContent = c.total;
+    $('compatScore').textContent = pairGrade(c.total);
     $('compatScore').parentNode.style.borderColor =
       band.tone === 'good' ? 'var(--accent-2)' : band.tone === 'bad' ? 'var(--danger)' : 'var(--accent)';
 
@@ -1617,7 +1810,7 @@
           return i.label + ' (' + (i.delta > 0 ? '+' : '') + i.delta + ')'; }).join(' / ')) + '">' +
         '<div class="axis-name">' + esc(ax.label) + '</div>' +
         '<div class="axis-track"><div class="axis-fill" style="width:' + Math.max(2, ax.score) + '%"></div></div>' +
-        '<div class="axis-val">' + ax.score + '</div></div>';
+        '<div class="axis-val">' + esc(axisGrade(ax.score)) + '</div></div>';
     }).join('');
 
     function items(list, empty) {
@@ -1654,21 +1847,17 @@
     out.sort(function (a, b) { return b.compat.total - a.compat.total; });
     batchRows = out;
 
-    $('batchSub').textContent =
-      '연락처의 생년월일과 내 원국을 하나씩 견줘 점수 순으로 세웠습니다. ' +
-      '태어난 시각과 이름이 없으므로 시주·성명 궁합은 빠져 있고, 그만큼 거친 비교입니다.';
     $('batchSummary').innerHTML =
       '<b>' + out.length + '명</b>과 비교했습니다.' +
       (contacts.skipped.length ? ' ' + contacts.skipped.length + '명은 생일을 읽지 못해 빠졌습니다.' : '') +
-      ' 점수는 무작위로 만난 상대와 견준 백분위입니다 — 50이 평범, 80이면 상위 20%.';
+      ' 순서는 무작위로 만난 상대와 견줘 어디쯤인지로 매겼습니다.';
 
     if (!out.length) {
       $('rankTable').innerHTML = '<tbody><tr><td style="color:var(--text-mute)">비교할 사람이 없습니다. 연락처 파일을 올리거나 목록을 붙여넣어 주세요.</td></tr></tbody>';
       return;
     }
-    var head = '<thead><tr><th class="num">#</th><th>이름</th><th>생일 · 띠</th><th>일주</th>' +
-      '<th class="num">궁합</th><th class="num">끌림</th><th class="num">안정</th><th class="num">소통</th><th class="num">지속</th>' +
-      '<th>주로 이런 이유</th><th></th></tr></thead>';
+    var head = '<thead><tr><th class="num">#</th><th>이름</th><th>생일 · 띠</th>' +
+      '<th>두 사주의 배치</th><th>주로 이런 이유</th><th></th></tr></thead>';
     var body = out.map(function (row, i) {
       var c = row.compat, r = row.reading;
       // 용신 보완은 어느 짝에나 잘 붙는 항목이라 그것만 두 줄 나오면 구별이 안 된다.
@@ -1686,12 +1875,8 @@
         '<td><span class="who">' + esc(row.person.name) + '</span></td>' +
         '<td class="sub2">' + row.person.year + '.' + row.person.month + '.' + row.person.day +
           ' · ' + esc(r.pillars.year.animal) + '띠</td>' +
-        '<td class="sub2">' + esc(r.pillars.day.hanja) + ' ' + esc(r.analysis.dayMaster.elem) + '</td>' +
-        '<td class="num"><span class="mini-bar"><i style="width:' + Math.max(3, c.total) + '%"></i></span><b>' + c.total + '</b></td>' +
-        '<td class="num sub2">' + c.axes.attraction.score + '</td>' +
-        '<td class="num sub2">' + c.axes.stability.score + '</td>' +
-        '<td class="num sub2">' + c.axes.communication.score + '</td>' +
-        '<td class="num sub2">' + c.axes.endurance.score + '</td>' +
+        '<td><span class="mini-bar"><i style="width:' + Math.max(3, c.total) + '%"></i></span>' +
+          '<b>' + esc(pairGrade(c.total)) + '</b></td>' +
         '<td class="rank-why">' + esc(why) + '</td>' +
         '<td><button type="button" class="btn-sm" style="padding:5px 10px;font-size:11.5px" data-i="' + i + '">자세히</button></td>' +
       '</tr>';
@@ -1712,11 +1897,9 @@
     $('p_day').value = String(p.day);
     $('p_noHour').checked = true;
     $('p_noHour').dispatchEvent(new Event('change'));
-    Array.prototype.forEach.call($('mode').querySelectorAll('.chip'), function (c) {
-      c.setAttribute('aria-pressed', String(c.dataset.v === 'pair'));
-    });
-    applyTab('pair');
-    $('form').dispatchEvent(new Event('submit', { cancelable: true }));
+    $('wantCompat').checked = true;
+    $('wantCompat').dispatchEvent(new Event('change'));
+    submitAll();
   });
 
   // ── 궁합 링크 ────────────────────────────────────────────────────────
@@ -1849,16 +2032,35 @@
     });
     $('p_leapWrap').hidden = (person.calendar !== '음력');
 
-    Array.prototype.forEach.call($('mode').querySelectorAll('.chip'), function (c) {
-      c.setAttribute('aria-pressed', String(c.dataset.v === 'pair'));
-    });
-    applyTab('pair');
+    $('wantCompat').checked = true;
+    $('wantCompat').dispatchEvent(new Event('change'));
 
     var who = person.surname ? esc(person.surname + person.given) + '님' : '';
     $('inviteNotice').innerHTML =
       '<div class="invite-banner">' + (who ? '<b>' + who + '</b>이 보낸 궁합 링크입니다. ' : '<b>궁합 링크</b>로 들어오셨습니다. ') +
       '상대 칸은 이미 채워 두었습니다 — <b>내 생년월일만 넣고</b> 아래 버튼을 눌러 주세요.</div>';
   }
+
+  // ── 여러 명과 비교 (결과 화면에서 따로 실행) ──────────────────────────
+  var myReading = null;
+
+  $('batchToggle').addEventListener('click', function () {
+    var b = $('batchBlock');
+    b.hidden = !b.hidden;
+    $('batchRun').hidden = b.hidden;
+    this.textContent = b.hidden ? '연락처 불러오기' : '접기';
+  });
+  $('batchBtn').addEventListener('click', function () {
+    if (!myReading) return;
+    if (!contacts.people.length) {
+      $('parseStatus').innerHTML =
+        '<span class="warn">비교할 사람이 없습니다. 연락처 파일을 올리거나 목록을 붙여넣어 주세요.</span>';
+      return;
+    }
+    runBatch(myReading);
+    $('batchResult').hidden = false;
+    $('batchResult').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
 
   // ── 제출 ─────────────────────────────────────────────────────────────
   function showError(msg) {
@@ -1896,7 +2098,15 @@
   $('form').addEventListener('submit', function (ev) {
     ev.preventDefault();
     showError('');
+    // 마지막 단계 전까지 이 버튼은 "다음" 이다.
+    var bad = validateStep(stepIndex);
+    if (bad) return showError(bad);
+    if (stepIndex < stepEls().length - 1) return goStep(stepIndex + 1);
+    submitAll();
+  });
 
+  function submitAll() {
+    showError('');
     var mode = effectiveMode();
     var noHour = $('noHour').checked;
     var payload = {
@@ -1918,11 +2128,8 @@
       focus: getFocus()
     };
 
-    var bad = checkPerson(payload, '나');
-    if (bad) return showError(bad);
-    if (payload.hanja && !/^[㐀-䶿一-鿿]{1,5}$/.test(payload.hanja)) {
-      return showError('한자 표기에는 한자만 입력해 주세요.');
-    }
+    var badMe = checkPerson(payload, '나');
+    if (badMe) return showError(badMe);
 
     var reading;
     try {
@@ -1956,30 +2163,23 @@
       payload.partner = partner;
     }
 
-    if (mode === 'batch' && !contacts.people.length) {
-      return showError('비교할 사람이 없습니다. 연락처 파일을 올리거나 목록을 붙여넣어 주세요.');
-    }
-
     $('result').classList.add('show');
     showPanels(mode);   // 무엇을 채웠는지에 따라 필요한 패널만 펴 둔다
 
     // 차트는 결과 영역이 화면에 붙은 뒤에 그린다 — 숨어 있는 동안에는 폭이 0이라
     // viewBox 를 컨테이너에 맞출 수가 없다.
     fortuneState.reading = reading;
+    myReading = reading;
     if (mode === 'solo') renderFortune();
-    if (mode === 'batch') runBatch(reading);
 
     $('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    lastPayload = payload;
+    prepareReading(payload);
+  }
 
-    if (mode !== 'batch') {
-      lastPayload = payload;
-      streamReading(payload);
-    }
-  });
-
-  // 기본값
-  $('year').value = 1990;
-  applyTab('pair');
+  // 생년은 비워 둔다. 미리 채워 두면 남의 생일이 들어간 채로 결과가 나오고,
+  // 첫 단계가 검증 없이 그냥 넘어간다.
+  renderStep();
   consumeInvite();
 })();
 </script>
