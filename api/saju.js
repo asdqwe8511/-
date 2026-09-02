@@ -11,7 +11,34 @@ const AnthropicModule = require('@anthropic-ai/sdk');
 const Anthropic = AnthropicModule.default || AnthropicModule;
 const SajuEngine = require('../saju-engine.js');
 
-const MODEL = 'claude-opus-5';
+// 어떤 모델로 풀이를 쓸지. SAJU_MODEL 환경변수로 바꿀 수 있게 둔다 — 값과
+// 품질을 견주어 보려면 코드를 고치지 않고 갈아 끼울 수 있어야 한다.
+//
+// 모델마다 요청 모양이 다르다. 이름만 바꾸고 나머지를 그대로 두면 400 이 난다.
+//   · Opus 5 / Sonnet 5 — 사고 과정은 adaptive, effort 로 깊이를 조절한다.
+//   · Haiku 4.5        — adaptive 를 안 받는다. budget_tokens 로 켜야 하고,
+//                        effort 를 보내면 오류가 난다. 문맥도 200K 로 좁다.
+const MODEL_TUNING = {
+  'claude-opus-5':    { thinking: { type: 'adaptive' }, effort: 'medium', label: 'Opus 5' },
+  'claude-sonnet-5':  { thinking: { type: 'adaptive' }, effort: 'medium', label: 'Sonnet 5' },
+  'claude-haiku-4-5': { thinking: { type: 'enabled', budget_tokens: 4000 }, effort: null,
+                        label: 'Haiku 4.5' }
+};
+const DEFAULT_MODEL = 'claude-opus-5';
+
+function pickModel() {
+  const want = String(process.env.SAJU_MODEL || '').trim();
+  if (!want) return DEFAULT_MODEL;
+  if (MODEL_TUNING[want]) return want;
+  // 모르는 이름이면 멈추지 말고 기본값으로 돈다. 오타 하나로 사이트가
+  // 통째로 안 되는 것보다는 낫고, 로그에 남으니 찾을 수 있다.
+  console.error('[saju] SAJU_MODEL 값을 모르겠습니다: ' + want +
+    ' — 쓸 수 있는 것: ' + Object.keys(MODEL_TUNING).join(', ') +
+    '. 기본값 ' + DEFAULT_MODEL + ' 으로 돕니다.');
+  return DEFAULT_MODEL;
+}
+const MODEL = pickModel();
+const TUNING = MODEL_TUNING[MODEL];
 
 // ── 사용량 제한 ────────────────────────────────────────────────────────────
 //
@@ -814,8 +841,9 @@ ${describe(reading, input)}
       model: MODEL,
       max_tokens: 12000,
       system: system,
-      thinking: { type: 'adaptive' },
-      output_config: { effort: 'medium' },
+      thinking: TUNING.thinking,
+      // effort 를 받지 않는 모델에 보내면 오류가 난다. 있을 때만 싣는다.
+      ...(TUNING.effort ? { output_config: { effort: TUNING.effort } } : {}),
       messages: [{ role: 'user', content: userMessage }]
     });
 
@@ -858,3 +886,8 @@ ${describe(reading, input)}
     }
   }
 };
+
+// /api/health 가 지금 어떤 모델로 도는지 보여 줄 수 있게 내보낸다.
+module.exports.MODEL = MODEL;
+module.exports.MODEL_LABEL = TUNING.label;
+module.exports.MODEL_CHOICES = Object.keys(MODEL_TUNING);

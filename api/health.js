@@ -9,6 +9,9 @@
 // 값 자체는 절대 내보내지 않는다. 들어 있는지 여부와, 비밀이 아닌 상한 숫자만 알린다.
 const AnthropicModule = require('@anthropic-ai/sdk');
 const Anthropic = AnthropicModule.default || AnthropicModule;
+// 지금 어떤 모델로 풀이를 쓰는지. 값을 바꿔 놓고 안 바뀐 줄 아는 일을 막는다.
+let sajuApi = {};
+try { sajuApi = require('./saju.js'); } catch (e) { /* 키가 없어도 여기는 떠야 한다 */ }
 
 const TIMEOUT_MS = 8000;
 
@@ -148,6 +151,16 @@ module.exports = async (req, res) => {
       '사용량 제한': state(redis,
         'Upstash Redis 를 붙이지 않아 인스턴스별 메모리 제한만 걸립니다(공개 사이트에는 약합니다)',
         'URL 또는 토큰이 틀렸을 수 있습니다')
+    },
+    풀이_모델: {
+      쓰는_중: sajuApi.MODEL_LABEL
+        ? sajuApi.MODEL_LABEL + ' (' + sajuApi.MODEL + ')'
+        : '(알 수 없음)',
+      바꾸려면: 'SAJU_MODEL 환경변수에 ' +
+        (sajuApi.MODEL_CHOICES || []).join(' / ') + ' 중 하나를 넣고 다시 배포하세요',
+      값이_다르면: process.env.SAJU_MODEL && process.env.SAJU_MODEL !== sajuApi.MODEL
+        ? 'SAJU_MODEL 에 "' + process.env.SAJU_MODEL + '" 이 들어 있는데 못 알아들어서 기본값으로 돕니다'
+        : undefined
     },
     상한: {
       하루_총_풀이_횟수: Number(process.env.SAJU_DAILY_LIMIT || 300),

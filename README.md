@@ -132,6 +132,25 @@ vercel --prod                            # 다시 배포
 | `UPSTASH_REDIS_REST_URL`·`_TOKEN` | 하루 총량 제한이 안 걸림 | Vercel → Storage → Upstash Redis |
 | `YOUTUBE_API_KEY` | `/youtube` 가 안 됨 | Google Cloud Console |
 | `SAJU_MAX_SECONDS` | 60초로 봄 | 요금제 상한에 맞춰 (Hobby 60 / Pro 300) |
+| `SAJU_MODEL` | Opus 5 로 씀 | 아래 표에서 골라 넣기 |
+
+### 풀이를 쓸 모델 고르기
+
+풀이 한 편의 값이 모델마다 크게 다릅니다. 12절짜리 풀이 한 번 기준 대략값이고,
+계산(사주표·오행·대운·달력·택일·궁합)은 브라우저에서 하므로 **어느 쪽을 고르든 0원**입니다.
+
+| `SAJU_MODEL` | 1회 | $5로 | 결 |
+|---|---|---|---|
+| `claude-opus-5` (기본) | $0.32 | 15번 | 12절을 지키고 한국어 결이 자연스럽습니다 |
+| `claude-sonnet-5` | $0.13 | 37번 | 절충안 |
+| `claude-haiku-4-5` | $0.07 | 75번 | 가장 쌉니다. 절 구성과 쉬운 말 규칙을 덜 지킵니다 |
+
+모델마다 요청 모양이 다릅니다 — Opus·Sonnet 은 적응형 사고와 `effort` 를 쓰고,
+Haiku 4.5 는 적응형을 받지 않고 `effort` 를 보내면 오류가 납니다. 코드가 알아서
+맞춰 보내므로 이름만 넣으면 됩니다. 모르는 이름을 넣으면 멈추지 않고 기본값으로
+돌면서 로그에 남깁니다.
+
+지금 무엇으로 도는지는 `/api/health` 의 `풀이_모델` 에서 확인합니다.
 
 **지출 한도를 먼저 거세요.** console.anthropic.com → Billing → Limits 입니다.
 코드의 사용량 제한은 그 앞단일 뿐이고, 마지막 방어선은 그쪽입니다.

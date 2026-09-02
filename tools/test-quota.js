@@ -95,6 +95,49 @@ const ok=(l,c,x)=>{ c?pass++:fail++; console.log((c?'  ✓ ':'  ✗ ')+l+(c?'':'
   ok('계산은 그대로 된다고 알려 준다', /계산은 지금도 그대로/.test(noKeyRes.body), true);
   process.env.ANTHROPIC_API_KEY = savedKey;
 
+  console.log('\n모델마다 맞는 모양으로 보내는가');
+  // 이름만 바꾸고 나머지를 그대로 두면 400 이 난다. Haiku 4.5 는 adaptive 사고를
+  // 안 받고, effort 를 보내면 오류가 난다.
+  let sentParams = null;
+  class Spy { constructor(){ this.messages = { stream: (p2) => { sentParams = p2; return {
+    abort(){},
+    async *[Symbol.asyncIterator](){ yield {type:'content_block_delta',delta:{type:'text_delta',text:'ok'}}; },
+    finalMessage: async () => ({ stop_reason:'end_turn' }) }; } }; } }
+  const MODEL_CASES = [
+    ['claude-opus-5',    'adaptive', true],
+    ['claude-sonnet-5',  'adaptive', true],
+    ['claude-haiku-4-5', 'enabled',  false]
+  ];
+  for (const [model, wantThinking, wantEffort] of MODEL_CASES) {
+    require.cache[sdkPath].exports = { default: Spy };
+    process.env.SAJU_MODEL = model;
+    delete require.cache[require.resolve(HANDLER)];
+    const mh = require(HANDLER);
+    sentParams = null;
+    const mres = mkRes();
+    await mh({ method:'POST', headers:{'x-forwarded-for':'14.14.14.14'}, body: me }, mres);
+    ok(model + ' — 그 모델로 보냄', sentParams && sentParams.model === model,
+       sentParams && sentParams.model);
+    ok(model + ' — 사고 방식 ' + wantThinking,
+       sentParams && sentParams.thinking && sentParams.thinking.type === wantThinking,
+       sentParams && JSON.stringify(sentParams.thinking));
+    ok(model + ' — effort ' + (wantEffort ? '보냄' : '안 보냄'),
+       Boolean(sentParams && sentParams.output_config) === wantEffort,
+       sentParams && JSON.stringify(sentParams.output_config));
+    if (wantThinking === 'enabled') {
+      ok(model + ' — 사고 예산이 max_tokens 보다 작음',
+         sentParams.thinking.budget_tokens >= 1024 &&
+         sentParams.thinking.budget_tokens < sentParams.max_tokens,
+         sentParams.thinking.budget_tokens + ' / ' + sentParams.max_tokens);
+    }
+  }
+  // 모르는 이름이면 멈추지 말고 기본값으로.
+  process.env.SAJU_MODEL = '없는모델';
+  delete require.cache[require.resolve(HANDLER)];
+  const fbH = require(HANDLER);
+  ok('모르는 이름은 기본값으로', fbH.MODEL === 'claude-opus-5', fbH.MODEL);
+  delete process.env.SAJU_MODEL;
+
   console.log('\n공백이 딸려 온 키도 통하는가');
   // 붙여넣다 보면 값 앞뒤에 공백이나 따옴표가 딸려 온다. 그대로 두면 인증이
   // 실패하는데 원인이 보이지 않으므로 다듬어 쓴다.
