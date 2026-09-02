@@ -238,6 +238,23 @@
   }
   .sf-item .ax{color:var(--text-mute); font-size:11px;}
 
+  /* 링크 공유 */
+  .share-row{display:flex; gap:9px; align-items:center; flex-wrap:wrap;}
+  .share-row input[type=text]{flex:1; min-width:200px; font-size:12.5px; color:var(--text-dim);}
+  .submit.share-make{width:auto; padding:11px 22px; font-size:14px;}
+  .share-note{
+    font-size:12px; color:var(--text-mute); line-height:1.8; margin-top:12px;
+    padding:12px 14px; border-radius:10px; background:var(--panel-2); border:1px solid var(--border);
+  }
+  .share-note b{color:var(--text-dim);}
+  .invite-banner{
+    max-width:1080px; margin:0 auto 4px; padding:14px 18px; border-radius:12px;
+    background:rgba(45,212,191,.1); border:1px solid rgba(45,212,191,.35);
+    color:#9fe8c9; font-size:13.5px; line-height:1.75;
+  }
+  .invite-banner b{color:#d9fff4;}
+  .invite-banner.bad{background:rgba(255,84,112,.1); border-color:rgba(255,84,112,.35); color:#ffb3c1;}
+
   /* 여러 명 비교 */
   .batch-summary{font-size:13px; color:var(--text-dim); margin-bottom:14px; line-height:1.8;}
   .rank-wrap{overflow-x:auto;}
@@ -621,6 +638,8 @@
     </form>
   </section>
 
+  <div id="inviteNotice"></div>
+
   <!-- ── 결과 ── -->
   <div id="result">
     <div id="boundaryNotice"></div>
@@ -658,6 +677,35 @@
         <div>
           <div class="sf-title bad">▼ 부딪히기 쉬운 지점</div>
           <div id="compatFrictions"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="sharePanel" hidden>
+      <h2>궁합 링크 보내기</h2>
+      <p class="sub">내 사주를 담은 링크를 만들어 상대에게 보내면, 상대가 자기 생년월일만 넣고
+        바로 궁합을 볼 수 있습니다. 카카오톡·문자 어디에 붙여넣어도 됩니다.</p>
+
+      <label class="check" style="margin-bottom:12px">
+        <input type="checkbox" id="shareIncludeName" checked> 이름도 함께 담기
+        <span class="hint" style="margin-left:4px">— 빼면 생년월일시만 담깁니다</span>
+      </label>
+
+      <div class="share-row">
+        <button type="button" class="submit share-make" id="makeLink">링크 만들기</button>
+      </div>
+
+      <div id="shareOut" hidden>
+        <div class="share-row" style="margin-top:12px">
+          <input type="text" id="shareUrl" readonly>
+          <button type="button" class="retry-btn" id="copyLink" style="margin:0">복사</button>
+          <button type="button" class="retry-btn" id="shareLink" style="margin:0" hidden>공유</button>
+        </div>
+        <div class="share-note">
+          <b>링크의 # 뒤 내용은 서버로 전송되지 않습니다.</b> 브라우저가 프래그먼트를 서버에 보내지 않기 때문에,
+          내 생년월일은 링크를 여는 사람의 브라우저 안에서만 풀립니다. 다만 <b>링크를 받은 사람은
+          내 생년월일과 이름을 볼 수 있고, 서버에 저장하지 않으므로 한 번 보낸 링크는 회수할 수 없습니다.</b>
+          아는 사람에게만 보내 주세요.
         </div>
       </div>
     </section>
@@ -806,13 +854,13 @@
 
   // ── 모드 ────────────────────────────────────────────────────────────
   var MODES = {
-    solo:   { label: '사주 뽑고 풀이 받기', panels: ['chartPanel', 'elemPanel', 'luckPanel', 'fortunePanel', 'namePanel', 'readingPanel'] },
-    compat: { label: '궁합 보고 풀이 받기', panels: ['chartPanel', 'compatPanel', 'readingPanel'] },
+    solo:   { label: '사주 뽑고 풀이 받기', panels: ['chartPanel', 'elemPanel', 'luckPanel', 'fortunePanel', 'namePanel', 'sharePanel', 'readingPanel'] },
+    compat: { label: '궁합 보고 풀이 받기', panels: ['chartPanel', 'compatPanel', 'sharePanel', 'readingPanel'] },
     batch:  { label: '전부 비교하기',       panels: ['chartPanel', 'batchPanel'] }
   };
   var mode = 'solo';
   var ALL_PANELS = ['chartPanel', 'compatPanel', 'batchPanel', 'elemPanel', 'luckPanel',
-                    'fortunePanel', 'namePanel', 'readingPanel'];
+                    'fortunePanel', 'namePanel', 'sharePanel', 'readingPanel'];
 
   function applyMode(next) {
     mode = next;
@@ -1490,6 +1538,147 @@
     $('form').dispatchEvent(new Event('submit', { cancelable: true }));
   });
 
+  // ── 궁합 링크 ────────────────────────────────────────────────────────
+  //
+  // 내 사주를 URL 의 프래그먼트(#)에 담는다. 브라우저는 # 뒤를 서버로 보내지
+  // 않으므로, 링크가 우리 서버를 지나가도 생년월일은 로그에 남지 않는다.
+  // 대신 링크를 가진 사람은 누구나 볼 수 있고, 서버에 저장하지 않으니 회수도
+  // 안 된다 — 화면에 그대로 적어 둔다.
+  function toBase64Url(str) {
+    var bytes = new TextEncoder().encode(str), bin = '';
+    for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function fromBase64Url(s) {
+    var b = s.replace(/-/g, '+').replace(/_/g, '/');
+    while (b.length % 4) b += '=';
+    var bin = atob(b), bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  }
+
+  // 짧게 담으려고 키를 줄인다. 링크가 카카오톡에서 잘리지 않도록.
+  function packPerson(p, withName) {
+    var o = { c: p.calendar === '음력' ? 1 : 0, y: p.year, m: p.month, d: p.day,
+              g: p.gender === '여' ? 1 : 0 };
+    if (p.leapMonth) o.l = 1;
+    if (p.hour !== null && p.hour !== undefined) { o.h = p.hour; if (p.minute) o.i = p.minute; }
+    if (withName && p.surname) { o.s = p.surname; o.n = p.given; }
+    if (p.longitude && Math.abs(p.longitude - 126.98) > 0.01) o.o = Math.round(p.longitude * 100) / 100;
+    if (p.lateNightRule === '자정') o.r = 1;
+    if (p.useSolarTime === false) o.t = 0;
+    return o;
+  }
+  function unpackPerson(o) {
+    if (!o || typeof o !== 'object') return null;
+    var p = {
+      calendar: o.c ? '음력' : '양력',
+      year: parseInt(o.y, 10), month: parseInt(o.m, 10), day: parseInt(o.d, 10),
+      leapMonth: !!o.l,
+      hour: (o.h === undefined || o.h === null) ? null : parseInt(o.h, 10),
+      minute: o.i ? parseInt(o.i, 10) : 0,
+      gender: o.g ? '여' : '남',
+      surname: typeof o.s === 'string' ? o.s : '',
+      given: typeof o.n === 'string' ? o.n : '',
+      longitude: typeof o.o === 'number' ? o.o : 126.98,
+      lateNightRule: o.r ? '자정' : '야자시',
+      useSolarTime: o.t !== 0
+    };
+    // 링크는 남이 만들어 보낸 값이다. 폼에 넣기 전에 형식을 확인한다.
+    if (!(p.year >= 1900 && p.year <= 2100)) return null;
+    if (!(p.month >= 1 && p.month <= 12) || !(p.day >= 1 && p.day <= 31)) return null;
+    if (p.hour !== null && !(p.hour >= 0 && p.hour <= 23)) return null;
+    if (!(p.minute >= 0 && p.minute <= 59)) p.minute = 0;
+    if (!(p.longitude >= 124 && p.longitude <= 132)) p.longitude = 126.98;
+    var nameOk = /^[가-힣]{1,5}$/;
+    if (p.surname && !(nameOk.test(p.surname) && nameOk.test(p.given))) { p.surname = ''; p.given = ''; }
+    return p;
+  }
+
+  function currentMeInput() {
+    var noHour = $('noHour').checked;
+    return {
+      calendar: getCalendar(),
+      year: parseInt($('year').value, 10),
+      month: parseInt($('month').value, 10),
+      day: parseInt($('day').value, 10),
+      leapMonth: $('leapMonth').checked && getCalendar() === '음력',
+      hour: noHour ? null : parseInt($('hour').value, 10),
+      minute: noHour ? null : (parseInt($('minute').value, 10) || 0),
+      gender: getGender(),
+      surname: $('surname').value.trim(),
+      given: $('given').value.trim(),
+      longitude: parseFloat($('city').value),
+      useSolarTime: $('useSolarTime').checked,
+      lateNightRule: $('lateNight').value
+    };
+  }
+
+  $('makeLink').addEventListener('click', function () {
+    var me = currentMeInput();
+    if (!me.year) return showError('먼저 내 생년월일을 채워 주세요.');
+    var packed = packPerson(me, $('shareIncludeName').checked);
+    var link = location.origin + location.pathname + '#invite=' + toBase64Url(JSON.stringify(packed));
+    $('shareUrl').value = link;
+    $('shareOut').hidden = false;
+    if (navigator.share) $('shareLink').hidden = false;
+    $('shareUrl').focus(); $('shareUrl').select();
+  });
+
+  $('copyLink').addEventListener('click', function () {
+    var input = $('shareUrl'), btn = this;
+    var done = function () { btn.textContent = '복사됨'; setTimeout(function () { btn.textContent = '복사'; }, 1600); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(input.value).then(done, function () { input.select(); document.execCommand('copy'); done(); });
+    } else {
+      input.select(); document.execCommand('copy'); done();
+    }
+  });
+  $('shareLink').addEventListener('click', function () {
+    if (!navigator.share) return;
+    navigator.share({ title: '궁합 보기', text: '우리 궁합 한번 볼래?', url: $('shareUrl').value })
+      .catch(function () { /* 사용자가 취소한 경우 */ });
+  });
+
+  // 초대 링크로 들어온 경우: 보낸 사람을 '상대' 칸에 채우고 궁합 모드로 연다.
+  function consumeInvite() {
+    var m = /[#&]invite=([A-Za-z0-9_-]+)/.exec(location.hash || '');
+    if (!m) return;
+    var person = null;
+    try { person = unpackPerson(JSON.parse(fromBase64Url(m[1]))); } catch (e) { person = null; }
+    if (!person) {
+      $('inviteNotice').innerHTML =
+        '<div class="invite-banner bad">궁합 링크를 읽지 못했습니다. 링크가 중간에 잘렸을 수 있습니다 — 보낸 사람에게 다시 받아 주세요.</div>';
+      return;
+    }
+    $('p_surname').value = person.surname;
+    $('p_given').value = person.given;
+    $('p_year').value = person.year;
+    $('p_month').value = String(person.month);
+    $('p_day').value = String(person.day);
+    $('p_leapMonth').checked = person.leapMonth;
+    $('p_noHour').checked = (person.hour === null);
+    $('p_noHour').dispatchEvent(new Event('change'));
+    if (person.hour !== null) { $('p_hour').value = String(person.hour); $('p_minute').value = String(person.minute); }
+    Array.prototype.forEach.call($('p_gender').querySelectorAll('.chip'), function (c) {
+      c.setAttribute('aria-pressed', String(c.dataset.v === person.gender));
+    });
+    Array.prototype.forEach.call($('p_calendar').querySelectorAll('.chip'), function (c) {
+      c.setAttribute('aria-pressed', String(c.dataset.v === person.calendar));
+    });
+    $('p_leapWrap').hidden = (person.calendar !== '음력');
+
+    Array.prototype.forEach.call($('mode').querySelectorAll('.chip'), function (c) {
+      c.setAttribute('aria-pressed', String(c.dataset.v === 'compat'));
+    });
+    applyMode('compat');
+
+    var who = person.surname ? esc(person.surname + person.given) + '님' : '';
+    $('inviteNotice').innerHTML =
+      '<div class="invite-banner">' + (who ? '<b>' + who + '</b>이 보낸 궁합 링크입니다. ' : '<b>궁합 링크</b>로 들어오셨습니다. ') +
+      '상대 칸은 이미 채워 두었습니다 — <b>내 생년월일만 넣고</b> 아래 버튼을 눌러 주세요.</div>';
+  }
+
   // ── 제출 ─────────────────────────────────────────────────────────────
   function showError(msg) {
     var box = $('formError');
@@ -1609,6 +1798,7 @@
   // 기본값
   $('year').value = 1990;
   applyMode('solo');
+  consumeInvite();
 })();
 </script>
 </body>
