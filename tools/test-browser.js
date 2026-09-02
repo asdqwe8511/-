@@ -1,0 +1,208 @@
+#!/usr/bin/env node
+/* 휴대폰 크기 브라우저에서 화면이 실제로 도는지 확인한다.
+ *
+ *   node tools/dev-server.js &            (기본 3000번, PORT 로 바꿀 수 있음)
+ *   node tools/test-browser.js [주소]
+ *
+ * playwright 는 이 저장소의 의존성이 아니다(배포에 들어가면 안 된다).
+ * 없으면 안내만 하고 건너뛴다:
+ *   npm i -D playwright
+ */
+'use strict';
+let chromium;
+try { ({ chromium } = require('playwright')); }
+catch (e) {
+  console.log('playwright 가 없어 브라우저 점검을 건너뜁니다.  npm i -D playwright');
+  process.exit(0);
+}
+
+const BASE = process.argv[2] || process.env.BASE || 'http://localhost:3000/';
+let pass = 0, fail = 0;
+const ok = (label, cond, got) => {
+  cond ? pass++ : fail++;
+  console.log((cond ? '  ✓ ' : '  ✗ ') + label + (cond ? '' : '  → ' + (got === undefined ? '' : got)));
+};
+const section = (t) => console.log('\n' + t);
+
+// 이 화면들은 사주가 저장된 뒤라야 열린다. 매번 같은 사람으로 채운다.
+async function fillMe(p) {
+  await p.fill('#year', '1990');
+  await p.selectOption('#month', '5');
+  await p.selectOption('#day', '15');
+  await p.click('#submitBtn'); await p.waitForTimeout(300);
+  await p.selectOption('#hour', '14'); await p.fill('#minute', '30');
+  await p.click('#submitBtn'); await p.waitForTimeout(300);
+  await p.fill('#surname', '김'); await p.fill('#given', '민준');
+  await p.click('#submitBtn'); await p.waitForTimeout(2200);
+}
+
+async function run() {
+  // 브라우저 위치를 환경변수로 일러 줄 수 있게 둔다. playwright 가 받아 둔
+  // 브라우저와 시스템에 깔린 크로미움이 다를 때 쓴다.
+  const exe = process.env.CHROMIUM_PATH || undefined;
+  const b = await chromium.launch(exe ? { executablePath: exe } : {});
+  const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const p = await ctx.newPage();
+  const errs = [];
+  p.on('pageerror', (e) => errs.push(e.message));
+  p.on('console', (m) => {
+    // 풀이 API 는 키가 없으면 500 을 낸다. 그건 이 점검의 대상이 아니다.
+    if (m.type() === 'error' && !/500 \(Internal/.test(m.text())) errs.push('console: ' + m.text());
+  });
+  await p.goto(BASE, { waitUntil: 'networkidle' });
+
+  section('앱 껍데기');
+  ok('밝은 배경', (await p.evaluate(() => getComputedStyle(document.body).backgroundColor)) === 'rgb(242, 243, 247)',
+     await p.evaluate(() => getComputedStyle(document.body).backgroundColor));
+  ok('하단 탭바 3개', (await p.$$('#tabbar button')).length === 3);
+  ok('내 사주 탭이 먼저', await p.evaluate(() => document.querySelector('#tabbar button').getAttribute('aria-selected') === 'true'));
+  ok('큰 제목', (await p.textContent('#tabMe .app-title')).trim() === '내 사주');
+
+  section('궁합 탭 — 내 사주가 없을 때');
+  await p.click('#tabbar button[data-tab="tabCompat"]'); await p.waitForTimeout(300);
+  ok('안내 화면', await p.isVisible('.empty-state'));
+  ok('상대 폼은 감춤', !(await p.isVisible('#p_year')));
+  await p.click('#goMe'); await p.waitForTimeout(300);
+  ok('내 사주 탭으로 데려감', await p.isVisible('#year'));
+
+  section('3단계 입력 — 한자 고르기');
+  await p.fill('#year', '1990'); await p.selectOption('#month', '5'); await p.selectOption('#day', '15');
+  await p.click('#submitBtn'); await p.waitForTimeout(300);
+  await p.selectOption('#hour', '14'); await p.fill('#minute', '30');
+  await p.click('#submitBtn'); await p.waitForTimeout(300);
+  ok('3단계가 마지막', (await p.textContent('#submitBtn')).trim() === '내 사주 보기');
+  ok('이름 전엔 한자 버튼 숨김', !(await p.isVisible('#hanjaToggle')));
+  await p.fill('#surname', '김'); await p.fill('#given', '민준'); await p.waitForTimeout(250);
+  ok('이름을 넣으면 나타남', await p.isVisible('#hanjaToggle'));
+  await p.click('#hanjaToggle'); await p.waitForTimeout(250);
+  ok('음절 3줄', (await p.$$('#hanjaPicker .hj-syl')).length === 3);
+  ok('김은 金 하나뿐', (await p.$$('#hanjaPicker .hj-syl:nth-child(1) .hj-btn')).length === 1);
+  ok('민은 여러 자', (await p.$$('#hanjaPicker .hj-syl:nth-child(2) .hj-btn')).length > 8);
+  ok('획수 표시', /\d+획/.test(await p.textContent('#hanjaPicker .hj-syl:nth-child(2)')));
+  for (let i = 0; i < 3; i++) {
+    const btns = await p.$$(`#hanjaPicker .hj-syl:nth-child(${i + 1}) .hj-btn`);
+    await btns[0].click(); await p.waitForTimeout(120);
+  }
+  ok('고른 한자가 칸에 들어감', /^[㐀-鿿]{3}$/.test(await p.inputValue('#hanja')), await p.inputValue('#hanja'));
+  await p.click('#submitBtn'); await p.waitForTimeout(2200);
+
+  section('결과 — 쉬운 말');
+  ok('사주표 4기둥', (await p.$$('#pillars .pillar')).length === 4);
+  const plain = await p.textContent('#plainSummary');
+  ok('비유로 먼저 말함', /당신은 .+ 같은 사람이에요/.test(plain), plain.slice(0, 40));
+  ok('띠', /띠\)은 말/.test(plain));
+  ok('별자리', /황소자리/.test(plain));
+  ok('별자리는 다른 체계라고 밝힘', /사주와 다른 체계/.test(plain));
+  ok('용어는 접어 둠', await p.isVisible('[data-why="whyMe"]'));
+  await p.click('[data-why="whyMe"]'); await p.waitForTimeout(200);
+  ok('펼치면 보임', await p.isVisible('#whyMe'));
+  ok('풀이는 잠겨 있음', await p.isVisible('#readingGate'));
+  ok('저장 카드', await p.isVisible('.saved-card'));
+  ok('입력 폼은 접힘', !(await p.isVisible('#year')));
+
+  section('오늘의 운세');
+  ok('카드', await p.isVisible('#todayCard .today'));
+  const grade = (await p.textContent('.today-grade')).trim();
+  ok('등급이 말', /좋아요|보통이에요|조심/.test(grade), grade);
+  ok('숫자 점수 없음', !/\d+점/.test(await p.textContent('#todayCard')));
+  ok('세 영역 요약', (await p.$$('.today-dom')).length === 3);
+  ok('하면 좋은 일', await p.isVisible('.today-advice .do'));
+  ok('미룰 일', await p.isVisible('.today-advice .dont'));
+  ok('아홉 가지는 접힘', !(await p.isVisible('#todayAll')));
+  await p.click('#todayMore'); await p.waitForTimeout(250);
+  ok('펼치면 아홉 줄', (await p.$$('#todayAll .today-row')).length === 9);
+  const all = await p.textContent('#todayAll');
+  ok('아홉 영역 이름', ['재물운', '건강운', '사업운', '재능운', '애정운', '배우자운', '자식운', '인복', '귀인운']
+     .every((x) => all.includes(x)));
+
+  section('올해 달력');
+  ok('패널', await p.isVisible('#yearPanel'));
+  ok('제목에 올해', /\d{4}년은 어떤 해인가/.test(await p.textContent('#yearTitle')));
+  const ysub = await p.textContent('#yearSub');
+  ok('대운·세운 설명', /대운/.test(ysub) && /세운/.test(ysub));
+  ok('절기 기준임을 밝힘', /절기 기준/.test(ysub));
+  ok('아홉 영역 줄', (await p.$$('#yearDoms .year-dom')).length === 9);
+  const yd = await p.textContent('#yearDoms');
+  ok('좋은 달·조심할 달', /가장 좋은 달/.test(yd) && /가장 조심할 달/.test(yd));
+  ok('숫자 점수 없음', !/\d+점/.test(yd));
+  ok('달 12개', (await p.$$('#monthChips .chip')).length === 12);
+  ok('한 달이 미리 열림', (await p.$$('#monthChips .chip[aria-pressed="true"]')).length === 1);
+  ok('달력 격자', await p.isVisible('.cal-grid'));
+  const dayBtns = await p.$$('.cal-day[data-i]');
+  ok('날짜 칸 28~32개', dayBtns.length >= 28 && dayBtns.length <= 32, dayBtns.length);
+  ok('요일 머리 7개', (await p.$$('.cal-dow')).length === 7);
+  ok('날짜 상세는 접힘', !(await p.isVisible('.cal-pick')));
+  await dayBtns[10].click(); await p.waitForTimeout(300);
+  ok('누르면 열림', await p.isVisible('.cal-pick'));
+  ok('아홉 줄', (await p.$$('.cal-pick .cp-row')).length === 9);
+  ok('일진 표시', /[가-힣]{2}날/.test(await p.textContent('.cal-pick')));
+  await p.click('#monthChips .chip[data-m="7"]'); await p.waitForTimeout(500);
+  ok('달을 바꾸면 상세는 닫힘', !(await p.isVisible('.cal-pick')));
+
+  section('저장 — 새로고침해도 남는가');
+  await p.reload({ waitUntil: 'networkidle' });
+  ok('저장 카드', await p.isVisible('.saved-card'));
+  ok('이름', /김민준/.test(await p.textContent('.saved-card')));
+  ok('오늘의 운세도 그대로', await p.isVisible('#todayCard .today'));
+
+  section('궁합');
+  await p.click('#tabbar button[data-tab="tabCompat"]'); await p.waitForTimeout(300);
+  ok('상대 폼', await p.isVisible('#p_year'));
+  ok('내 사주 미니 카드', await p.isVisible('#savedMeMini .saved-card'));
+  ok('버튼은 궁합 보기', (await p.textContent('#submitBtn')).trim() === '궁합 보기');
+  await p.fill('#p_year', '1993'); await p.selectOption('#p_month', '7'); await p.selectOption('#p_day', '22');
+  await p.selectOption('#p_hour', '5'); await p.fill('#p_minute', '40');
+  await p.fill('#p_surname', '이'); await p.fill('#p_given', '서연');
+  await p.click('#submitBtn'); await p.waitForTimeout(1800);
+  ok('쉬운 말', /님과 .+님은/.test(await p.textContent('#compatPlain')));
+  ok('궁합 패널', await p.isVisible('#compatPanel'));
+  ok('궁합도 말로', /편$|보통/.test((await p.textContent('#compatScore')).trim()),
+     (await p.textContent('#compatScore')).trim());
+  ok('풀이는 잠겨 있음', await p.isVisible('#creadingGate'));
+
+  section('관계별 궁합');
+  ok('블록', await p.isVisible('#relBlock .rel-wrap'));
+  const labels = await p.$$eval('#relChips .chip', (els) => els.map((e) => e.textContent.trim()));
+  ok('애인·직장·친구·가족', JSON.stringify(labels) === JSON.stringify(['애인', '직장', '친구', '가족']), labels.join(','));
+  const g1 = (await p.textContent('.rel-grade')).trim();
+  ok('등급이 말', /^애인으로는 /.test(g1) && !/\d/.test(g1), g1);
+  ok('좋은 점', (await p.$$('.rel-note .g')).length >= 1);
+  ok('걸리는 점', (await p.$$('.rel-note .b')).length >= 1);
+  const say = await p.textContent('.rel-say');
+  ok('할 말·피할 말', /하면 좋은 말/.test(say) && /피할 말/.test(say));
+  ok('할 행동·피할 행동', /하면 좋은 행동/.test(say) && /피할 행동/.test(say));
+  await p.click('#relChips .chip[data-rel="friend"]'); await p.waitForTimeout(250);
+  ok('친구로 바꾸면 조사도 바뀜', /^친구로는 /.test((await p.textContent('.rel-grade')).trim()));
+
+  section('더보기');
+  await p.click('#tabbar button[data-tab="tabMore"]'); await p.waitForTimeout(300);
+  ok('실행 버튼 숨김', !(await p.isVisible('#submitBtn')));
+  ok('목록 3행', (await p.$$('#tabMore .list-row[data-go]')).length === 3);
+  await p.click('[data-go="batch"]'); await p.waitForTimeout(400);
+  await p.click('#batchToggle'); await p.waitForTimeout(300);
+  await p.fill('#contactPaste', '홍길동 1990-05-15\n이도현 1988/02/17\n최민준 20010309');
+  await p.waitForTimeout(300);
+  await p.click('#batchBtn'); await p.waitForTimeout(900);
+  ok('순위 3행', (await p.$$('#rankTable tbody tr')).length === 3);
+  await p.click('[data-go="share"]'); await p.waitForTimeout(300);
+  await p.click('#makeLink'); await p.waitForTimeout(300);
+  ok('링크는 # 뒤에 담긴다', (await p.inputValue('#shareUrl')).includes('#invite='));
+
+  section('저장 지우기');
+  p.once('dialog', (d) => d.accept());
+  await p.click('[data-go="reset"]'); await p.waitForTimeout(500);
+  ok('오늘의 운세 사라짐', !(await p.isVisible('#todayCard .today')));
+  ok('입력 폼 복귀', await p.isVisible('#year'));
+
+  section('가로 스크롤');
+  ok('없음', (await p.evaluate(() => document.documentElement.scrollWidth)) === 390,
+     await p.evaluate(() => document.documentElement.scrollWidth));
+
+  console.log('\nJS 오류: ' + (errs.length ? errs.join(' | ') : '없음'));
+  if (errs.length) fail += errs.length;
+  console.log(`\n${pass} 통과, ${fail} 실패`);
+  await b.close();
+  process.exit(fail ? 1 : 0);
+}
+
+run().catch((e) => { console.error(e); process.exit(1); });

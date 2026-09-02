@@ -1481,7 +1481,10 @@
    */
   // 하루 운세를 물을 때마다 365일을 다시 세우면 같은 답을 열 번 계산하게 된다.
   // 사람과 해가 그대로면 결과도 그대로이므로 마지막 한 벌만 들고 있는다.
-  var DAYS_CACHE = { key: null, days: null };
+  // 절기로 나눈 달은 해를 넘나든다(소한 달은 12월 말 ~ 1월 초). 그래서 두 해를
+  // 번갈아 묻는 일이 생기고, 한 벌만 들고 있으면 캐시가 매번 헛돈다.
+  var DAYS_CACHE = {};
+  var DAYS_CACHE_KEYS = [];
   function readingKey(reading) {
     var p = reading.chart.pillars;
     return [p.year.stem, p.year.branch, p.month.stem, p.month.branch,
@@ -1492,7 +1495,7 @@
 
   function yearDays(reading, year) {
     var ck = readingKey(reading) + '@' + year;
-    if (DAYS_CACHE.key === ck) return DAYS_CACHE.days;
+    if (DAYS_CACHE[ck]) return DAYS_CACHE[ck];
     var out = [];
     for (var m = 1; m <= 12; m++) {
       var dim = daysInMonth(year, m);
@@ -1518,7 +1521,9 @@
       DOMAIN9.forEach(function (dom) { x.score[dom] = pct[dom](x.raw[dom]); });
       x.overall = pctAll(total[i].raw.all);
     });
-    DAYS_CACHE.key = ck; DAYS_CACHE.days = out;
+    DAYS_CACHE[ck] = out;
+    DAYS_CACHE_KEYS.push(ck);
+    while (DAYS_CACHE_KEYS.length > 3) delete DAYS_CACHE[DAYS_CACHE_KEYS.shift()];
     return out;
   }
 
@@ -1882,6 +1887,210 @@
     };
   }
 
+  // ── 관계별 궁합 ─────────────────────────────────────────────────────────
+  //
+  // 같은 두 사람이라도 애인으로 볼 때와 같이 일할 때 중요한 것이 다르다. 애인은
+  // 끌림이 먼저지만 직장은 소통과 지속이 먼저다. 그래서 네 축(끌림·안정·소통·
+  // 지속)을 관계마다 다르게 저울질한다. 축 점수 자체는 하나만 계산하고, 무게만
+  // 바꾼다 — 관계마다 다른 계산을 하면 어느 쪽이 진짜인지 알 수 없어진다.
+  var REL_TYPES = ['lover', 'work', 'friend', 'family'];
+  var REL_TYPE_LABEL = { lover: '애인', work: '직장', friend: '친구', family: '가족' };
+  var REL_TYPE_WEIGHT = {
+    lover:  { attraction: 0.38, stability: 0.22, communication: 0.18, endurance: 0.22 },
+    work:   { attraction: 0.08, stability: 0.28, communication: 0.34, endurance: 0.30 },
+    friend: { attraction: 0.22, stability: 0.20, communication: 0.34, endurance: 0.24 },
+    family: { attraction: 0.10, stability: 0.32, communication: 0.24, endurance: 0.34 }
+  };
+
+  // 축마다 관계별로 무엇이 좋고 무엇이 걸리는지. 같은 "소통 낮음"이라도 애인
+  // 사이에서 걸리는 지점과 직장에서 걸리는 지점이 다르다.
+  var REL_NOTE = {
+    lover: {
+      attraction: ['처음부터 서로 끌리는 자리가 있습니다. 만나면 시간이 빨리 갑니다.',
+                   '불꽃이 튀는 쪽은 아닙니다. 천천히 데워야 하는 사이예요.'],
+      stability:  ['같이 있으면 편해지는 조합입니다. 서로 모자란 자리를 채워 줍니다.',
+                   '오래 붙어 있으면 한쪽이 지칩니다. 각자의 시간이 꼭 필요해요.'],
+      communication: ['말이 잘 통합니다. 설명을 길게 안 해도 알아듣는 사이예요.',
+                      '같은 말을 다르게 알아듣기 쉽습니다. 확인하고 넘어가세요.'],
+      endurance:  ['다투어도 다시 돌아오는 힘이 있습니다.',
+                   '오래 두면 같은 문제로 되풀이해 부딪힙니다. 규칙을 정해 두세요.']
+    },
+    work: {
+      attraction: ['서로에게 관심이 있어 일이 붙습니다.',
+                   '사적으로 가까워지진 않습니다. 일로만 만나면 오히려 낫습니다.'],
+      stability:  ['역할이 자연스럽게 갈립니다. 서로 맡을 자리가 다릅니다.',
+                   '주도권이 겹칩니다. 누가 무엇을 정하는지 처음에 못 박으세요.'],
+      communication: ['전달이 정확합니다. 짧게 말해도 일이 굴러갑니다.',
+                      '말이 자주 어긋납니다. 중요한 건 글로 남기세요.'],
+      endurance:  ['길게 함께 갈 수 있는 조합입니다.',
+                   '한 프로젝트는 되지만 몇 년은 어렵습니다. 기한을 정해 두세요.']
+    },
+    friend: {
+      attraction: ['같이 있으면 재미있습니다. 먼저 연락하게 되는 사이예요.',
+                   '깊이 친해지기까지 시간이 걸립니다. 서두르지 마세요.'],
+      stability:  ['서로 기대도 무너지지 않는 사이입니다.',
+                   '한쪽이 늘 더 주게 됩니다. 그 균형을 가끔 확인하세요.'],
+      communication: ['농담과 진담의 선이 서로 맞습니다.',
+                      '말투 때문에 오해가 생기기 쉽습니다. 문자보다 통화가 낫습니다.'],
+      endurance:  ['오래 볼 사이입니다. 뜸해도 다시 이어집니다.',
+                   '한 번 크게 어긋나면 회복이 더딥니다. 돈과 험담을 조심하세요.']
+    },
+    family: {
+      attraction: ['정이 오가는 자리가 있습니다.',
+                   '살가운 사이는 아닙니다. 그게 나쁜 뜻은 아니에요.'],
+      stability:  ['서로에게 기댈 곳이 됩니다. 힘들 때 먼저 떠오르는 사람이에요.',
+                   '같은 공간에 오래 있으면 부딪힙니다. 각자의 자리를 두세요.'],
+      communication: ['말하지 않아도 통하는 부분이 있습니다.',
+                      '가까운 사이라 말이 더 날카롭게 갑니다. 한 박자 쉬고 말하세요.'],
+      endurance:  ['세월이 지나도 흔들리지 않는 자리입니다.',
+                   '묵은 일이 되풀이됩니다. 옛일을 꺼내는 자리를 줄이세요.']
+    }
+  };
+
+  // 상대가 나에게 어떤 십신인가에 따른 말과 행동. 사주 용어를 몰라도 그대로
+  // 따라 할 수 있는 문장이어야 한다.
+  var REL_TALK = {
+    정관: { good: '약속한 것과 정한 순서를 지켜 말하면 신뢰가 빨리 쌓입니다.',
+            bad:  '"대충 해도 되지 않아?" 같은 말이 이 사람에게는 가장 크게 걸립니다.' },
+    편관: { good: '할 일을 미리 정해 두고 짧게 말하면 잘 맞습니다.',
+            bad:  '몰아붙이거나 최후통첩처럼 말하면 관계가 단번에 상합니다.' },
+    정인: { good: '모르는 것을 묻고 배우려는 태도가 이 사람을 움직입니다.',
+            bad:  '받기만 하고 고맙다는 말을 건너뛰면 금세 지칩니다.' },
+    편인: { good: '생각할 시간을 주고 결론을 재촉하지 않으면 좋습니다.',
+            bad:  '"왜 그렇게 생각해?"를 캐묻듯 되풀이하면 입을 닫습니다.' },
+    비견: { good: '같은 편이라는 걸 자주 확인시켜 주면 든든해합니다.',
+            bad:  '몫과 돈 이야기를 두루뭉술하게 넘기면 반드시 탈이 납니다.' },
+    겁재: { good: '각자 할 몫을 처음에 글로 정해 두면 잡음이 줄어듭니다.',
+            bad:  '돈을 빌려주거나 계산을 미루는 일은 만들지 마세요.' },
+    식신: { good: '같이 먹고 같이 만드는 시간이 이 관계를 가장 잘 붙입니다.',
+            bad:  '재촉하고 다그치면 흥이 꺼지고 그대로 멀어집니다.' },
+    상관: { good: '이 사람의 말과 생각을 먼저 들어 주면 크게 풀립니다.',
+            bad:  '사람들 앞에서 지적하거나 말을 자르는 건 피하세요.' },
+    정재: { good: '작은 약속과 작은 돈을 정확히 지키면 오래갑니다.',
+            bad:  '"나중에 갚을게"를 되풀이하면 신뢰가 조용히 무너집니다.' },
+    편재: { good: '새로운 곳에 함께 가 보는 일이 이 관계를 살립니다.',
+            bad:  '틀에 가두고 계획대로만 하자고 하면 답답해합니다.' }
+  };
+
+  // 일지(가장 가까운 자리)가 맺는 관계에 따른 행동. 십신이 "말"이라면 이쪽은
+  // 거리를 어떻게 두느냐의 문제다.
+  var REL_ACT = {
+    육합: { good: '자주 만나고 자주 연락할수록 좋아지는 사이입니다.',
+            bad:  '너무 붙어 있어 각자 할 일을 놓치지 않게만 하세요.' },
+    삼합: { good: '셋 이상 함께하는 자리에서 특히 잘 풀립니다.',
+            bad:  '둘만 남으면 할 말이 줄어들 수 있습니다.' },
+    방합: { good: '같은 목표를 정해 두면 손발이 맞습니다.',
+            bad:  '목표가 없으면 그냥 아는 사이로 흐릅니다.' },
+    충:   { good: '만나는 자리와 간격을 미리 정해 두면 오히려 편해집니다.',
+            bad:  '한집에서 오래 붙어 있거나 갑자기 찾아가는 일은 피하세요.' },
+    형:   { good: '해야 할 일을 나누어 각자 맡으면 잡음이 줄어듭니다.',
+            bad:  '한쪽이 다른 쪽 일에 손대기 시작하면 반드시 부딪힙니다.' },
+    원진: { good: '이유 없이 거슬리는 날이 있습니다. 그날은 그냥 미루세요.',
+            bad:  '"왜 그러는 거야"를 캐묻는 자리는 만들지 마세요.' },
+    해:   { good: '용건을 먼저 말하고 시작하면 매끄럽습니다.',
+            bad:  '기대만 하고 말하지 않으면 서운함이 쌓입니다.' },
+    파:   { good: '계획을 짧게 끊어 잡으면 어긋남이 덜합니다.',
+            bad:  '길게 잡은 약속은 자꾸 틀어집니다.' },
+    자형: { good: '각자 혼자 있는 시간을 존중해 주세요.',
+            bad:  '상대의 방식을 고치려 들면 서로 지칩니다.' },
+    // 일지가 아무 관계도 맺지 않는 짝이 가장 흔하다. 이때는 "아무 일도 없다"가
+    // 답이 아니라, 저절로 가까워지지도 멀어지지도 않는다는 뜻이다.
+    무관: { good: '크게 부딪히는 자리가 없습니다. 먼저 다가가는 쪽이 관계를 만듭니다.',
+            bad:  '그냥 두면 자연히 멀어집니다. 연락은 마음먹고 해야 이어집니다.' }
+  };
+
+  // 관계마다 원점수가 몰리는 구간이 다르다(직장은 소통·지속을 크게 보므로
+  // 애인과 분포가 다르다). 무작위로 짝지은 20,000쌍의 원점수를 5% 간격
+  // 분위값으로 뽑아 백분위로 환산한다. tools/calibrate-compat.js 로 다시 낼 수
+  // 있다. 환산값 70은 "무작위로 만난 상대 100명 중 상위 30번째"라는 뜻이지
+  // 100점 만점에 70점이라는 뜻이 아니다.
+  var REL_BASELINE = {
+    lover:  [27, 42, 46, 48, 50, 51, 53, 54, 54, 55, 56, 57, 58, 59, 60, 61, 63, 64, 66, 68, 83],
+    work:   [30, 45, 47, 49, 51, 52, 53, 54, 55, 56, 57, 57, 58, 59, 60, 61, 62, 63, 64, 66, 74],
+    friend: [29, 44, 47, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 60, 62, 63, 64, 66, 77],
+    family: [28, 44, 47, 49, 51, 52, 53, 54, 55, 56, 57, 58, 58, 59, 60, 61, 62, 63, 65, 67, 76]
+  };
+  function percentileFrom(table, raw) {
+    if (raw <= table[0]) return 0;
+    for (var i = 0; i < table.length - 1; i++) {
+      var lo = table[i], hi = table[i + 1];
+      if (raw <= hi) {
+        var t = hi === lo ? 0 : (raw - lo) / (hi - lo);
+        return Math.max(0, Math.min(100, Math.round((i + t) * 5)));
+      }
+    }
+    return 100;
+  }
+
+  var REL_GRADES = [
+    { min: 78, word: '아주 잘 맞아요' },
+    { min: 60, word: '잘 맞는 편이에요' },
+    { min: 40, word: '보통이에요' },
+    { min: 22, word: '맞추려면 애써야 해요' },
+    { min: 0,  word: '많이 다른 사이예요' }
+  ];
+  function relGrade(score) {
+    for (var i = 0; i < REL_GRADES.length; i++) if (score >= REL_GRADES[i].min) return REL_GRADES[i].word;
+    return REL_GRADES[REL_GRADES.length - 1].word;
+  }
+
+  /**
+   * 네 가지 관계(애인·직장·친구·가족)로 나누어 본 궁합.
+   * @param {object} A  나의 fullReading()
+   * @param {object} B  상대의 fullReading()
+   * @param {object} c  compatibility(A, B) 결과 — 없으면 새로 구한다
+   */
+  function relationCompat(A, B, c) {
+    c = c || compatibility(A, B);
+    var godBtoA = c.detail.godBtoA;
+    var dayRels = c.detail.dayBranchRelations;
+    // 행동 조언은 일지 관계에서 고른다. 여러 개면 가장 크게 걸리는 것 하나.
+    var actKey = null;
+    ['충', '원진', '형', '육합', '삼합', '해', '파', '자형', '방합'].forEach(function (k) {
+      if (!actKey && dayRels.indexOf(k) >= 0) actKey = k;
+    });
+    if (!actKey) actKey = '무관';
+
+    var out = {};
+    REL_TYPES.forEach(function (t) {
+      var w = REL_TYPE_WEIGHT[t];
+      var raw = 0;
+      COMPAT_AXES.forEach(function (k) { raw += c.axes[k].score * w[k]; });
+      raw = Math.round(raw);
+      var score = percentileFrom(REL_BASELINE[t], raw);
+
+      // 좋은 점·걸리는 점은 축 점수에서 고른다. 50이 가운데다.
+      var notes = REL_NOTE[t];
+      var ranked = COMPAT_AXES.slice().sort(function (x, y) {
+        return (c.axes[y].score - 50) * w[y] - (c.axes[x].score - 50) * w[x];
+      });
+      var good = [], bad = [];
+      ranked.forEach(function (k) {
+        if (c.axes[k].score >= 52 && good.length < 2) good.push(notes[k][0]);
+      });
+      ranked.slice().reverse().forEach(function (k) {
+        if (c.axes[k].score <= 48 && bad.length < 2) bad.push(notes[k][1]);
+      });
+      // 한쪽으로만 쏠려 아무것도 못 고르는 일이 없게 채운다.
+      if (!good.length) good.push(notes[ranked[0]][0]);
+      if (!bad.length) bad.push(notes[ranked[ranked.length - 1]][1]);
+
+      out[t] = {
+        key: t, label: REL_TYPE_LABEL[t], raw: raw, score: score, grade: relGrade(score),
+        good: good, bad: bad,
+        axisOrder: ranked
+      };
+    });
+
+    return {
+      types: out,
+      talk: REL_TALK[godBtoA] || null,
+      act: actKey ? REL_ACT[actKey] : null,
+      actRelation: actKey,
+      godBtoA: godBtoA
+    };
+  }
+
   // ── 연락처 읽기 ─────────────────────────────────────────────────────────
   //
   // 카카오톡은 친구 생일을 내보내는 방법이 없다(공개 API도, 내보내기 메뉴도 없다).
@@ -2123,6 +2332,7 @@
     zodiacOf: zodiacOf, ZODIAC: ZODIAC,
     monthDays: monthDays, domainScores: domainScores,
     compatibility: compatibility, COMPAT_AXES: COMPAT_AXES, COMPAT_LABEL: COMPAT_LABEL,
+    relationCompat: relationCompat, REL_TYPES: REL_TYPES, REL_TYPE_LABEL: REL_TYPE_LABEL,
     parseContacts: parseContacts, parseBirthday: parseBirthday,
     fullReading: fullReading
   };

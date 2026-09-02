@@ -288,5 +288,47 @@ ok('획수가 붙는다', H.candidates('민').find((c) => c.ch === '民').stroke
 ok('획수를 모르면 null', H.candidates('민').find((c) => c.ch === '旻').strokes, null);
 ok('없는 음', H.candidates('뷁').length, 0);
 
+section('관계별 궁합');
+const mk = (y, m, d, h, g, sn, gn) => E.fullReading(
+  { year: y, month: m, day: d, hour: h, minute: 0, gender: g, surname: sn, given: gn, skipFortune: true });
+const PA = mk(1990, 5, 15, 14, '남', '김', '민준');
+const PB = mk(1993, 7, 22, 5, '여', '이', '서연');
+const relc = E.relationCompat(PA, PB);
+ok('네 가지 관계', Object.keys(relc.types).length, 4);
+ok('등급이 말', typeof relc.types.lover.grade === 'string' && !/\d/.test(relc.types.lover.grade), true);
+ok('좋은 점 있음', relc.types.work.good.length >= 1, true);
+ok('걸리는 점 있음', relc.types.work.bad.length >= 1, true);
+ok('할 말이 있다', !!(relc.talk && relc.talk.good && relc.talk.bad), true);
+ok('할 행동이 있다', !!(relc.act && relc.act.good && relc.act.bad), true);
+// 관계마다 무게가 다르니 점수도 갈려야 한다. 넷이 늘 같으면 나눈 뜻이 없다.
+let differ = 0;
+for (let i = 0; i < 60; i++) {
+  const a = mk(1950 + i, 1 + (i % 12), 1 + (i % 28), i % 24, i % 2 ? '남' : '여', '', '');
+  const b = mk(1980 + (i % 30), 1 + ((i * 7) % 12), 1 + ((i * 5) % 28), (i * 3) % 24, i % 2 ? '여' : '남', '', '');
+  const r2 = E.relationCompat(a, b);
+  const set = {};
+  E.REL_TYPES.forEach((t) => { set[r2.types[t].score] = 1; });
+  if (Object.keys(set).length >= 2) differ++;
+}
+ok('60쌍 중 ' + differ + '쌍에서 관계마다 점수가 갈린다', differ >= 55, true);
+// 백분위라면 무작위 짝의 중앙값이 50 근처여야 한다. 아니면 기준표가 낡은 것이다.
+const scores = { lover: [], work: [], friend: [], family: [] };
+const relPool = [];
+for (let i = 0; i < 26; i++) {
+  const r3 = mk(1945 + i * 2, 1 + (i % 12), 1 + ((i * 11) % 28), (i * 5) % 24, i % 2 ? '남' : '여', '', '');
+  if (!r3.error) relPool.push(r3);
+}
+for (let i = 0; i < relPool.length; i++) {
+  for (let j = i + 1; j < relPool.length; j++) {
+    const r4 = E.relationCompat(relPool[i], relPool[j]);
+    E.REL_TYPES.forEach((t) => { scores[t].push(r4.types[t].score); });
+  }
+}
+E.REL_TYPES.forEach((t) => {
+  const v = scores[t].slice().sort((a, b) => a - b);
+  const mid = v[Math.floor(v.length / 2)];
+  ok(E.REL_TYPE_LABEL[t] + ' 중앙값 ' + mid + ' (40~60이어야 함)', mid >= 40 && mid <= 60, true);
+});
+
 console.log(`\n${pass} 통과, ${fail} 실패`);
 process.exit(fail ? 1 : 0);

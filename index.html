@@ -709,6 +709,71 @@
   }
   .today-row b{font-weight:600; color:var(--text-dim);}
 
+  /* 올해 달력 — 아홉 영역의 좋은 달·조심할 달, 그리고 날짜별 */
+  .year-doms{display:grid; gap:8px; margin-top:14px;}
+  .year-dom{
+    display:grid; grid-template-columns:74px 1fr 1fr; gap:8px; align-items:center;
+    background:var(--bg); border-radius:12px; padding:10px 11px;
+  }
+  .year-dom .yd-name{font-size:13px; font-weight:700;}
+  .year-dom .yd-cell{font-size:12px; line-height:1.5;}
+  .year-dom .yd-cell b{display:block; font-size:10.5px; color:var(--text-mute); font-weight:600;}
+  .ym-head{font-size:12.5px; color:var(--text-dim); margin-bottom:8px; font-weight:600;}
+  .ym-chips{gap:6px;}
+  .ym-chips .chip{padding:8px 12px; font-size:13px; min-height:40px;}
+  .cal{margin-top:14px;}
+  .cal-sub{font-size:12px; color:var(--text-mute); line-height:1.6; margin-bottom:10px;}
+  .cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:4px;}
+  .cal-dow{
+    text-align:center; font-size:10.5px; color:var(--text-mute); font-weight:600; padding-bottom:2px;
+  }
+  .cal-day{
+    aspect-ratio:1; border:1px solid var(--border); background:var(--panel); border-radius:10px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+    font-family:inherit; cursor:pointer; padding:0; color:var(--text); min-height:40px;
+  }
+  .cal-day .d{font-size:12.5px; font-weight:600; line-height:1;}
+  .cal-day .m{font-size:8px; line-height:1; letter-spacing:-.03em;}
+  .cal-day.pad{visibility:hidden;}
+  .cal-day[aria-pressed="true"]{border-color:var(--accent); background:rgba(107,78,255,.09);}
+  .cal-pick{
+    margin-top:12px; background:var(--bg); border-radius:14px; padding:13px 14px;
+  }
+  .cal-pick .cp-head{
+    display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin-bottom:8px;
+  }
+  .cal-pick .cp-date{font-size:15px; font-weight:800;}
+  .cal-pick .cp-ganji{font-size:11.5px; color:var(--text-mute);}
+  .cal-pick .cp-rows{display:grid; grid-template-columns:1fr 1fr; gap:5px 12px;}
+  .cal-pick .cp-row{
+    display:flex; justify-content:space-between; gap:8px; font-size:12.5px;
+    padding:4px 0; border-bottom:1px solid var(--border);
+  }
+  .cal-pick .cp-row b{font-weight:600; color:var(--text-dim);}
+  @media (max-width:400px){ .cal-pick .cp-rows{grid-template-columns:1fr;} }
+
+  /* 관계별 궁합 — 애인·직장·친구·가족 */
+  .rel-wrap{margin:16px 0 4px;}
+  .rel-head{font-size:13px; font-weight:700; margin-bottom:9px;}
+  .rel-chips{display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap;}
+  .rel-chips .chip{padding:9px 15px; font-size:13.5px; min-height:42px;}
+  .rel-card{background:var(--bg); border-radius:14px; padding:14px 15px;}
+  .rel-grade{font-size:19px; font-weight:800; letter-spacing:-.02em;}
+  .rel-note{margin-top:11px; display:grid; gap:7px;}
+  .rel-note div{
+    font-size:13px; line-height:1.65; padding:10px 12px; border-radius:11px;
+    background:var(--panel); border-left:3px solid var(--border);
+  }
+  .rel-note .g{border-left-color:#1c6fb5;}
+  .rel-note .b{border-left-color:#9b2412;}
+  .rel-say{margin-top:14px;}
+  .rel-say .rs-head{font-size:12.5px; font-weight:700; color:var(--text-dim); margin-bottom:7px;}
+  .rel-say .rs-item{
+    font-size:13px; line-height:1.65; padding:10px 12px; border-radius:11px;
+    background:var(--bg); margin-bottom:6px;
+  }
+  .rel-say .rs-item b{font-weight:700;}
+
   /* 한자 고르기 */
   .hj-syl{margin-top:12px;}
   .hj-syl-head{font-size:12.5px; color:var(--text-dim); margin-bottom:7px;}
@@ -922,6 +987,18 @@
       <p class="sub" id="luckSub"></p>
       <div class="luck-scroll"><div class="luck-row" id="luckRow"></div></div>
     </section>
+<section class="panel" id="yearPanel" hidden>
+      <h2 id="yearTitle">올해는 어떤 해인가</h2>
+      <p class="sub" id="yearSub"></p>
+
+      <div class="year-doms" id="yearDoms"></div>
+
+      <div style="margin-top:18px">
+        <div class="ym-head">달을 눌러 날짜별로 보기</div>
+        <div class="chips ym-chips" id="monthChips"></div>
+      </div>
+      <div id="monthView"></div>
+    </section>
 <section class="panel" id="fortunePanel">
       <h2>언제가 좋고, 언제를 조심할까</h2>
       <p class="sub">해마다 드는 세운을 원국·대운에 얹어 돈·건강·관계 세 갈래로 점수를 냅니다.
@@ -1077,6 +1154,8 @@
       </div>
 
       <div class="pair-row" id="pairRow"></div>
+
+      <div id="relBlock"></div>
 
       <div id="axes"></div>
       <p class="bar-legend">막대 길이는 그 축이 얼마나 받쳐 주는지를 나타냅니다.
@@ -1456,7 +1535,8 @@
   var stepIndex = 0;
 
   var PANELS = {
-    solo: ['chartPanel', 'elemPanel', 'luckPanel', 'fortunePanel', 'namePanel', 'readingPanel'],
+    solo: ['chartPanel', 'elemPanel', 'luckPanel', 'yearPanel', 'fortunePanel',
+           'namePanel', 'readingPanel'],
     more: ['batchPanel', 'sharePanel']
   };
   function showPanels() {
@@ -2233,6 +2313,57 @@
     return fallback;
   }
 
+  // ── 관계별 궁합 ───────────────────────────────────────────────────────
+  // 같은 두 사람이라도 애인으로 볼 때와 같이 일할 때 중요한 것이 다르다.
+  var relState = { data: null, type: 'lover' };
+  function renderRelations(A, B, c) {
+    var rel;
+    try { rel = E.relationCompat(A, B, c); }
+    catch (err) { $('relBlock').innerHTML = ''; return; }
+    relState.data = rel;
+    drawRelation();
+  }
+  function drawRelation() {
+    var rel = relState.data;
+    if (!rel) { $('relBlock').innerHTML = ''; return; }
+    var t = rel.types[relState.type];
+
+    var chips = E.REL_TYPES.map(function (k) {
+      return '<button type="button" class="chip" data-rel="' + k + '" aria-pressed="' +
+        (k === relState.type) + '">' + esc(E.REL_TYPE_LABEL[k]) + '</button>';
+    }).join('');
+
+    var notes =
+      t.good.map(function (x) { return '<div class="g">' + esc(x) + '</div>'; }).join('') +
+      t.bad.map(function (x) { return '<div class="b">' + esc(x) + '</div>'; }).join('');
+
+    var say = '';
+    if (rel.talk || rel.act) {
+      say = '<div class="rel-say"><div class="rs-head">이 사람에게는 이렇게</div>' +
+        (rel.talk ? '<div class="rs-item"><b>하면 좋은 말</b> — ' + esc(rel.talk.good) + '</div>' +
+                    '<div class="rs-item"><b>피할 말</b> — ' + esc(rel.talk.bad) + '</div>' : '') +
+        (rel.act ? '<div class="rs-item"><b>하면 좋은 행동</b> — ' + esc(rel.act.good) + '</div>' +
+                   '<div class="rs-item"><b>피할 행동</b> — ' + esc(rel.act.bad) + '</div>' : '') +
+        '</div>';
+    }
+
+    $('relBlock').innerHTML =
+      '<div class="rel-wrap">' +
+        '<div class="rel-head">어떤 사이로 볼까요</div>' +
+        '<div class="chips rel-chips" id="relChips">' + chips + '</div>' +
+        '<div class="rel-card">' +
+          '<div class="rel-grade">' + esc(E.REL_TYPE_LABEL[t.key]) +
+            (hasBatchim(E.REL_TYPE_LABEL[t.key]) ? '으로는 ' : '로는 ') + esc(t.grade) + '</div>' +
+          '<div class="rel-note">' + notes + '</div>' +
+          say +
+        '</div>' +
+      '</div>';
+
+    Array.prototype.forEach.call($('relChips').children, function (b) {
+      b.onclick = function () { relState.type = this.dataset.rel; drawRelation(); };
+    });
+  }
+
   function renderCompat(A, B, c) {
     var d = c.detail;
     var band = scoreBand(c.total);
@@ -2568,10 +2699,176 @@
     renderStep();
     refreshMoreTab();
     renderToday();
+    renderYear();
 
     if (!quiet) $('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
     lastPayload = payload;
     prepareReading(payload);
+  }
+
+  // ── 올해 달력 — 아홉 영역의 좋은 달·조심할 달, 그리고 날짜별 ─────────────
+  var yearState = { months: null, days: null, month: null, pickedDay: null };
+
+  function renderYear() {
+    if (!myReading) return;
+    var Y = myReading.currentYear.year;
+    var ym;
+    try { ym = E.yearMonths(myReading, Y); }
+    catch (err) { $('yearPanel').hidden = true; return; }
+    yearState.months = ym;
+
+    var luck = myReading.currentLuck;
+    var seun = myReading.currentYear.pillar;
+    var seunGod = E.tenGodOfStem(myReading.chart.pillars.day.stem, seun.stemIdx);
+    $('yearTitle').textContent = Y + '년은 어떤 해인가';
+    $('yearSub').innerHTML =
+      (luck
+        ? '지금은 <b>' + esc(luck.hanja) + ' 대운</b>(만 ' + luck.ageFrom + '~' + luck.ageTo +
+          '세) 한가운데예요. 10년쯤 이어지는 배경 같은 흐름입니다.<br>'
+        : '') +
+      '올해 드는 기운(<b>세운</b>)은 <b>' + esc(seun.hanja) + '</b>, 나에게는 <b>' +
+      esc(seunGod) + '</b>에 해당합니다. 아래는 <b>절기 기준</b>으로 나눈 열두 달이라, ' +
+      '달력의 1일이 아니라 절기가 드는 날에 달이 바뀝니다.';
+
+    $('yearDoms').innerHTML = E.DOMAIN9.map(function (k) {
+      var d = ym.domains[k];
+      return '<div class="year-dom">' +
+        '<span class="yd-name">' + esc(d.label) + '</span>' +
+        '<span class="yd-cell"><b>가장 좋은 달</b>' + esc(monthName(d.best)) + '</span>' +
+        '<span class="yd-cell"><b>가장 조심할 달</b>' + esc(monthName(d.worst)) + '</span>' +
+        '</div>';
+    }).join('');
+
+    $('monthChips').innerHTML = ym.months.map(function (m, i) {
+      return '<button type="button" class="chip" data-m="' + i + '" aria-pressed="false">' +
+        esc(monthChipLabel(m)) + '</button>';
+    }).join('');
+    Array.prototype.forEach.call($('monthChips').children, function (b) {
+      b.onclick = function () { pickMonth(parseInt(this.dataset.m, 10)); };
+    });
+
+    // 이번 달을 미리 열어 둔다. 한 번 더 누르게 하면 대부분은 안 누른다.
+    // 절기 달은 달력의 달과 어긋나므로, 오늘이 어느 구간 안에 드는지로 찾는다.
+    var now = new Date();
+    var todayNum = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+    var cur = 0;
+    ym.months.forEach(function (m, i) {
+      var a = m.fromDate.y * 10000 + m.fromDate.m * 100 + m.fromDate.d;
+      var b = m.toDate.y * 10000 + m.toDate.m * 100 + m.toDate.d;
+      if (todayNum >= a && todayNum < b) cur = i;
+    });
+    pickMonth(cur);
+  }
+
+  // 절기로 나눈 열두 달은 입춘에서 시작해 이듬해 입춘 전날에 끝난다. 그래서
+  // 마지막 한 달(소한 달)은 다음 해 1월에 놓인다 — 그걸 밝히지 않으면 "1월"이
+  // 지나간 달인지 다가올 달인지 알 수 없다.
+  function monthName(m) {
+    var next = yearState.months && m.fromDate.y > yearState.months.year;
+    return (next ? '내년 ' : '') + m.fromDate.m + '월 ' + m.fromDate.d + '일부터';
+  }
+  function monthChipLabel(m) {
+    var next = yearState.months && m.fromDate.y > yearState.months.year;
+    return m.civilMonth + '월' + (next ? '(내년)' : '');
+  }
+
+  function pickMonth(i) {
+    var ym = yearState.months;
+    if (!ym || !ym.months[i]) return;
+    yearState.month = i;
+    yearState.pickedDay = null;
+    Array.prototype.forEach.call($('monthChips').children, function (b) {
+      b.setAttribute('aria-pressed', String(parseInt(b.dataset.m, 10) === i));
+    });
+    renderMonthView();
+  }
+
+  // 절기로 나눈 한 달은 달력의 한 달과 어긋난다(예: 4월 5일 ~ 5월 5일). 그래서
+  // 달력 칸은 그 구간에 든 날짜만 채우고, 나머지는 비워 둔다.
+  function renderMonthView() {
+    var ym = yearState.months, mi = yearState.month;
+    if (!ym || mi === null) { $('monthView').innerHTML = ''; return; }
+    var m = ym.months[mi];
+    var Y = ym.year;
+
+    // 절기 달은 해를 넘어갈 수 있으므로(소한 달은 12월 말 ~ 1월 초) 걸친 해를
+    // 모두 불러 하나의 표로 합친다.
+    var byDate = {};
+    try {
+      var years = [m.fromDate.y];
+      if (m.toDate.y !== m.fromDate.y) years.push(m.toDate.y);
+      years.forEach(function (yy) {
+        E.yearDays(myReading, yy).forEach(function (x) {
+          byDate[x.year * 10000 + x.month * 100 + x.day] = x;
+        });
+      });
+    } catch (err) { $('monthView').innerHTML = ''; return; }
+
+    // 구간의 첫날부터 마지막 날까지
+    var from = new Date(Date.UTC(m.fromDate.y, m.fromDate.m - 1, m.fromDate.d));
+    var to = new Date(Date.UTC(m.toDate.y, m.toDate.m - 1, m.toDate.d));
+    var cells = [];
+    for (var t = from.getTime(); t < to.getTime(); t += 86400000) {
+      var dt = new Date(t);
+      var y2 = dt.getUTCFullYear(), m2 = dt.getUTCMonth() + 1, d2 = dt.getUTCDate();
+      cells.push({ y: y2, m: m2, d: d2, dow: dt.getUTCDay(),
+                   rec: byDate[y2 * 10000 + m2 * 100 + d2] || null });
+    }
+    if (!cells.length) { $('monthView').innerHTML = ''; return; }
+
+    var pad = cells[0].dow;
+    var grid = ['일', '월', '화', '수', '목', '금', '토']
+      .map(function (w) { return '<div class="cal-dow">' + w + '</div>'; }).join('');
+    for (var k = 0; k < pad; k++) grid += '<div class="cal-day pad"></div>';
+    cells.forEach(function (c, idx) {
+      if (!c.rec) { grid += '<div class="cal-day pad"></div>'; return; }
+      var g = E.gradeOf(c.rec.overall);
+      grid += '<button type="button" class="cal-day" data-i="' + idx + '" aria-pressed="' +
+        (yearState.pickedDay === idx) + '">' +
+        '<span class="d">' + c.d + '</span>' +
+        '<span class="m tone-' + g.tone + '">' + esc(shortGrade(g.word)) + '</span></button>';
+    });
+
+    var picked = yearState.pickedDay !== null ? cells[yearState.pickedDay] : null;
+    $('monthView').innerHTML =
+      '<div class="cal">' +
+        '<div class="cal-sub">' + esc(m.label) + ' — <b>' + esc(m.ganji.hanja) + '</b> 달입니다. ' +
+          '날짜를 누르면 그날의 아홉 가지를 볼 수 있어요.</div>' +
+        '<div class="cal-grid">' + grid + '</div>' +
+        (picked ? dayCard(picked) : '') +
+      '</div>';
+
+    Array.prototype.forEach.call($('monthView').querySelectorAll('.cal-day[data-i]'), function (b) {
+      b.onclick = function () {
+        var i = parseInt(this.dataset.i, 10);
+        yearState.pickedDay = (yearState.pickedDay === i) ? null : i;
+        renderMonthView();
+      };
+    });
+  }
+
+  // 달력 칸은 좁다. 네 글자를 다 넣으면 줄이 깨진다.
+  var SHORT_GRADE = { '아주 좋아요': '아주좋음', '좋아요': '좋음', '보통이에요': '보통',
+                      '조금 조심': '조심', '많이 조심': '많이조심' };
+  function shortGrade(w) { return SHORT_GRADE[w] || w; }
+
+  function dayCard(c) {
+    var rec = c.rec;
+    var rows = E.DOMAIN9.map(function (k) {
+      var g = E.gradeOf(rec.score[k]);
+      return '<div class="cp-row"><b>' + esc(E.DOMAIN9_LABEL[k]) + '</b>' +
+        '<span class="tone-' + g.tone + '">' + esc(g.word) + '</span></div>';
+    }).join('');
+    var g0 = E.gradeOf(rec.overall);
+    return '<div class="cal-pick">' +
+      '<div class="cp-head">' +
+        '<span class="cp-date">' + c.m + '월 ' + c.d + '일 — <span class="tone-' + g0.tone + '">' +
+          esc(g0.word) + '</span></span>' +
+        '<span class="cp-ganji">' + esc(rec.ganji.hanja) + ' ' + esc(rec.ganji.kor) + '날' +
+          (rec.gongmang ? ' · 공망' : '') + '</span>' +
+      '</div>' +
+      '<div class="cp-rows">' + rows + '</div>' +
+      '</div>';
   }
 
   // 받침이 있으면 "민으로 / 물병자리이에요", 없으면 "서로 / 황소자리예요".
@@ -2754,6 +3051,7 @@
 
     var compat = E.compatibility(me, other);
     renderCompatPlain(me, other, compat);
+    renderRelations(me, other, compat);
     renderCompat(me, other, compat);
     $('compatPanel').hidden = false;
 

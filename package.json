@@ -5,5 +5,10 @@
   "description": "YouTube 인기영상 대시보드 + 사주·성명 풀이. Vercel 배포.",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.123.0"
+  },
+  "scripts": {
+    "dev": "node tools/dev-server.js",
+    "test": "node tools/test-saju.js && node tools/test-quota.js",
+    "test:browser": "node tools/test-browser.js"
   }
 }

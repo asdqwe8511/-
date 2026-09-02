@@ -309,6 +309,29 @@ function describeCompat(A, B, c, inputA, inputB) {
     ` (내 이름 오행 ${d.name.aElems.join('·')} / 상대 ${d.name.bElems.join('·')})`);
   out.push('  ※ 축 점수와 항목 값은 억부 관점을 수치로 옮긴 해석이지 계산된 사실이 아니다.' +
     ' 이 숫자는 판단 재료일 뿐이니 답변 문장에는 절대 쓰지 말고 말로 옮길 것.');
+
+  // 관계별로 나눠 본 궁합. 같은 두 사람이라도 애인으로 볼 때와 같이 일할 때
+  // 중요한 축이 다르므로, 네 가지를 따로 넘긴다.
+  try {
+    const rel = SajuEngine.relationCompat(A, B, c);
+    out.push('[관계별 궁합] 네 축을 관계마다 다르게 저울질한 결과(백분위)');
+    SajuEngine.REL_TYPES.forEach((t) => {
+      const x = rel.types[t];
+      out.push(`  ${x.label}: ${x.score} — ${x.grade} / 받쳐 주는 축 순서 ` +
+        x.axisOrder.map((k) => c.axes[k].label).join(' > '));
+    });
+    if (rel.talk) {
+      out.push(`  상대가 나에게 ${rel.godBtoA} 이므로 —` +
+        ` 하면 좋은 말: ${rel.talk.good} / 피할 말: ${rel.talk.bad}`);
+    }
+    if (rel.act) {
+      out.push(`  일지가 ${rel.actRelation} 이므로 —` +
+        ` 하면 좋은 행동: ${rel.act.good} / 피할 행동: ${rel.act.bad}`);
+    }
+    out.push('  ※ 위 문장은 화면에 이미 그대로 나가 있다. 되풀이하지 말고,' +
+      ' 왜 그런지를 두 사람의 사주로 풀어 주거나 이 사람들에 맞게 구체적으로 바꿔 쓸 것.');
+  } catch (e) { /* 관계별 계산이 실패해도 나머지 풀이는 그대로 나가야 한다 */ }
+
   return out.join('\n');
 }
 
