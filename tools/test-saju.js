@@ -223,5 +223,70 @@ section('생일 형식');
 ok('--0503 은 연도 없음', E.parseBirthday('--0503').noYear, true);
 ok('읽을 수 없는 값', E.parseBirthday('abc'), null);
 
+section('별자리 (황경 기준이라 해마다 경계가 달라진다)');
+const zod = (y, m, d) => E.fullReading(
+  { year: y, month: m, day: d, hour: 12, minute: 0, gender: '남', skipLunar: true, skipFortune: true }
+).zodiac.name;
+ok('2000-03-20 (춘분 전)', zod(2000, 3, 20), '물고기자리');
+ok('2000-03-21 (춘분 후)', zod(2000, 3, 21), '양자리');
+ok('1985-12-21', zod(1985, 12, 21), '궁수자리');
+ok('1985-12-22 (동지)', zod(1985, 12, 22), '염소자리');
+ok('1993-07-22', zod(1993, 7, 22), '게자리');
+ok('1993-07-23', zod(1993, 7, 23), '사자자리');
+ok('띠', E.fullReading({ year: 1990, month: 5, day: 15, hour: 12, minute: 0, gender: '남',
+  skipLunar: true, skipFortune: true }).animal, '말');
+
+section('날짜 → 사주');
+const pod = (y, m, d) => {
+  const P = E.pillarsOfDate(y, m, d);
+  return E.ganjiText(P.day).kor + '/' + E.ganjiText(P.month).kor + '/' + E.ganjiText(P.year).kor;
+};
+// 일주는 buildChart 와 같은 값이 나와야 한다(60갑자 기준점이 하나뿐이므로).
+ok('1949-10-01 일진', E.ganjiText(E.pillarsOfDate(1949, 10, 1).day).kor, '갑자');
+ok('2000-01-01 일진', E.ganjiText(E.pillarsOfDate(2000, 1, 1).day).kor, '무오');
+// 입춘 전은 전년도 간지로 잡힌다.
+ok('2024-02-03 연주 (입춘 전)', E.ganjiText(E.pillarsOfDate(2024, 2, 3).year).kor, '계묘');
+ok('2024-02-05 연주 (입춘 후)', E.ganjiText(E.pillarsOfDate(2024, 2, 5).year).kor, '갑진');
+ok('2024-02-03 월주 (축월)', E.ganjiText(E.pillarsOfDate(2024, 2, 3).month).kor.charAt(1), '축');
+ok('2024-02-05 월주 (인월)', E.ganjiText(E.pillarsOfDate(2024, 2, 5).month).kor.charAt(1), '인');
+
+section('오늘의 운세 · 달별 운세');
+const rr = E.fullReading({ year: 1990, month: 5, day: 15, hour: 14, minute: 30, gender: '남' });
+const day = E.dailyFortune(rr, { year: 2026, month: 9, day: 2 });
+ok('일진', day.ganji.hanja, '己卯');
+ok('아홉 영역', day.domains.length, 9);
+ok('등급이 말', typeof day.grade.word, 'string');
+ok('좋은 쪽 3개', day.best.length, 3);
+ok('조언 있음', !!(day.advice && day.advice.good && day.advice.bad), true);
+// 등급은 그 해 365일 안에서의 순위다 — 온 해가 같은 등급이면 잣대가 없는 것이다.
+const yd = E.yearDays(rr, 2026);
+ok('365일 채점', yd.length, 365);
+const grades = {};
+yd.forEach((x) => { grades[E.gradeOf(x.overall).word] = 1; });
+ok('등급이 다섯 단계 다 나온다', Object.keys(grades).length, 5);
+// 같은 날을 두 번 물으면 같은 답이어야 한다(캐시가 결과를 바꾸면 안 된다).
+ok('두 번 물어도 같은 답', E.dailyFortune(rr, { year: 2026, month: 9, day: 2 }).overall, day.overall);
+
+const ym = E.yearMonths(rr, 2026);
+ok('열두 달', ym.months.length, 12);
+ok('절기 경계 — 첫 달은 입춘부터', ym.months[0].fromDate.m + '/' + ym.months[0].fromDate.d, '2/4');
+ok('아홉 영역 최고·최저', Object.keys(ym.domains).length, 9);
+// 아홉 영역이 전부 같은 달을 가리키면 아홉 가지를 물은 뜻이 없다.
+const bestMonths = {};
+E.DOMAIN9.forEach((k) => { bestMonths[ym.domains[k].best.index] = 1; });
+ok('영역마다 다른 달을 가리킨다', Object.keys(bestMonths).length >= 2, true);
+ok('한 달치 날짜', E.monthDays(rr, 2026, 3).length, 31);
+
+section('한자 후보표');
+const H = require('../hanja-data.js');
+ok('金은 김으로도 읽는다', H.candidates('김').some((c) => c.ch === '金'), true);
+ok('두음법칙 — 李가 이에 있다', H.candidates('이').some((c) => c.ch === '李'), true);
+ok('두음법칙 — 柳가 유에 있다', H.candidates('유').some((c) => c.ch === '柳'), true);
+ok('두음법칙 — 본음도 남는다', H.candidates('리').some((c) => c.ch === '李'), true);
+ok('간체자는 없다', H.candidates('민').some((c) => c.ch === '悯'), false);
+ok('획수가 붙는다', H.candidates('민').find((c) => c.ch === '民').strokes, 5);
+ok('획수를 모르면 null', H.candidates('민').find((c) => c.ch === '旻').strokes, null);
+ok('없는 음', H.candidates('뷁').length, 0);
+
 console.log(`\n${pass} 통과, ${fail} 실패`);
 process.exit(fail ? 1 : 0);

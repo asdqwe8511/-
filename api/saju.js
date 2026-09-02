@@ -221,6 +221,29 @@ function describe(r, input) {
     ' 억부·조후 관점을 수치로 옮긴 해석이지 계산된 사실이 아니다.' +
     ' 이 숫자는 판단 재료일 뿐이니 답변 문장에는 절대 쓰지 말고 말로 옮길 것.');
 
+  // 올해 열두 달, 아홉 영역. 화면이 보여 주는 것과 같은 계산이다.
+  try {
+    const ym = SajuEngine.yearMonths(r, r.currentYear.year);
+    out.push(`[올해(${ym.year}) 달별 — 아홉 영역, 절기 기준]`);
+    SajuEngine.DOMAIN9.forEach((k) => {
+      const d = ym.domains[k];
+      out.push(`  ${d.label}: 가장 좋은 달 ${d.best.label} (${d.best.ganji.hanja}) /` +
+        ` 가장 조심할 달 ${d.worst.label} (${d.worst.ganji.hanja})`);
+    });
+    const today = SajuEngine.dailyFortune(r);
+    if (today && !today.error) {
+      out.push(`[오늘(${today.date.month}월 ${today.date.day}일)] 일진 ${today.ganji.hanja}` +
+        ` — 일간 기준 천간 ${today.tenGod.stem}, 지지 ${today.tenGod.branch}` +
+        (today.gongmang ? ' (공망일)' : '') +
+        ` / 오늘 두드러지는 영역: ${today.best.map((x) => x.label).join('·')},` +
+        ` 눌리는 영역: ${today.worst.map((x) => x.label).join('·')}`);
+    }
+  } catch (e) { /* 달별 계산이 실패해도 나머지 풀이는 그대로 나가야 한다 */ }
+
+  out.push(`[띠·별자리] 띠 ${r.animal} / 별자리 ${r.zodiac.name}(${r.zodiac.elem})` +
+    ' ※ 별자리는 사주와 다른 체계다. 묻지 않으면 굳이 끌어들이지 말고,' +
+    ' 언급하더라도 사주 판단의 근거로 삼지 말 것.');
+
   if (r.name) {
     const n = r.name;
     out.push('[이름]');

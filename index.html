@@ -666,6 +666,69 @@
   }
   .saved-card button:active{background:rgba(255,255,255,.3);}
 
+  /* 오늘의 운세 — 매일 바뀌므로 앱을 열자마자 맨 위에 둔다 */
+  .today{
+    background:var(--panel); border:1px solid var(--border); border-radius:18px;
+    padding:16px 16px 14px; margin-bottom:14px; box-shadow:var(--shadow-sm);
+  }
+  .today-head{display:flex; align-items:baseline; justify-content:space-between; gap:10px;}
+  .today-date{font-size:12.5px; color:var(--text-dim); font-weight:600;}
+  .today-ganji{font-size:12px; color:var(--text-mute);}
+  .today-grade{font-size:25px; font-weight:800; margin:8px 0 2px; letter-spacing:-.02em;}
+  .today-sub{font-size:13px; color:var(--text-dim); line-height:1.7;}
+  /* 등급은 말이 먼저고 색은 거들 뿐이다. 다섯 단계를 다섯 색으로 칠하면 어느
+     색맹 조합에서도 서로 구분되게 만들 수 없어(특히 주황과 빨강), 색은 두 가지만
+     쓰고 단계는 글씨 굵기로 나눈다. #1c6fb5 ↔ #9b2412 은 적록색약에서도
+     ΔE 23 으로 갈리고, 둘 다 흰 바탕에서 본문 대비 기준을 넘긴다. */
+  .tone-great{color:#1c6fb5; font-weight:800;} .tone-good{color:#1c6fb5;}
+  .tone-mid{color:var(--text);}
+  .tone-care{color:#9b2412;} .tone-bad{color:#9b2412; font-weight:800;}
+  .today-doms{display:grid; grid-template-columns:repeat(3,1fr); gap:7px; margin-top:14px;}
+  .today-dom{
+    background:var(--bg); border-radius:12px; padding:9px 8px; text-align:center;
+  }
+  .today-dom b{display:block; font-size:11.5px; color:var(--text-mute); font-weight:600;}
+  .today-dom span{display:block; font-size:12.5px; font-weight:700; margin-top:4px;}
+  .today-advice{margin-top:14px; display:grid; gap:8px;}
+  .today-advice div{
+    font-size:13px; line-height:1.65; padding:11px 12px; border-radius:12px;
+    background:var(--bg); border-left:3px solid var(--border);
+  }
+  .today-advice .do{border-left-color:#1c6fb5;}
+  .today-advice .dont{border-left-color:#9b2412;}
+  .today-more{
+    margin-top:12px; width:100%; background:none; border:1px solid var(--border);
+    border-radius:12px; padding:11px; font-family:inherit; font-size:13px;
+    color:var(--text-dim); cursor:pointer; min-height:44px;
+  }
+  .today-all{margin-top:12px; display:none;}
+  .today-all.on{display:block;}
+  .today-row{
+    display:flex; justify-content:space-between; align-items:center; gap:10px;
+    padding:10px 2px; border-top:1px solid var(--border); font-size:13.5px;
+  }
+  .today-row b{font-weight:600; color:var(--text-dim);}
+
+  /* 한자 고르기 */
+  .hj-syl{margin-top:12px;}
+  .hj-syl-head{font-size:12.5px; color:var(--text-dim); margin-bottom:7px;}
+  .hj-syl-head b{color:var(--text); font-size:15px;}
+  .hj-list{display:flex; flex-wrap:wrap; gap:6px; max-height:168px; overflow-y:auto;
+           padding:2px; -webkit-overflow-scrolling:touch;}
+  .hj-btn{
+    min-width:46px; min-height:46px; border:1px solid var(--border); background:var(--panel);
+    border-radius:11px; font-family:inherit; cursor:pointer; color:var(--text);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px;
+    padding:4px 6px;
+  }
+  .hj-btn .c{font-size:19px; line-height:1;}
+  .hj-btn .n{font-size:9.5px; color:var(--text-mute);}
+  .hj-btn[aria-pressed="true"]{
+    border-color:var(--accent); background:rgba(107,78,255,.09); color:var(--accent);
+  }
+  .hj-btn[aria-pressed="true"] .n{color:var(--accent);}
+  .hj-note{font-size:11.5px; color:var(--text-mute); line-height:1.65; margin-top:10px;}
+
   /* 비어 있는 탭 안내 */
   .empty-state{
     text-align:center; padding:44px 22px; color:var(--text-mute);
@@ -711,6 +774,7 @@
   <div class="container">
     <div id="inviteNotice"></div>
     <div id="savedMe"></div>
+    <div id="todayCard"></div>
 
     <section class="panel" id="formPanel">
       <div class="steps-dots" id="stepDots"><i></i><i></i><i></i></div>
@@ -794,6 +858,9 @@
           <div class="field" style="margin-top:12px">
             <label for="hanja">한자 표기 <span class="hint">(선택)</span></label>
             <input type="text" id="hanja" placeholder="金珉俊" maxlength="5">
+            <button type="button" class="adv-toggle" id="hanjaToggle" style="margin-top:8px" hidden>
+              한자 골라 넣기</button>
+            <div id="hanjaPicker" hidden></div>
           </div>
 
           <div class="field" style="margin-top:16px">
@@ -1215,6 +1282,7 @@
   </div>
 </footer>
 <script src="/saju-engine.js"></script>
+<script src="/hanja-data.js"></script>
 <script>
 (function () {
   'use strict';
@@ -1322,6 +1390,7 @@
     $('formPanel').hidden = false;
     $('compatPanel').hidden = true;
     goStep(0);
+    $('todayCard').innerHTML = '';
     refreshCompatTab();
     refreshMoreTab();
     switchTab('tabMe');
@@ -2100,6 +2169,7 @@
         '지금 당신에게 가장 도움이 되는 기운은 <b>' + esc(yong.thing) + '</b>이에요 — ' +
         esc(yong.force) + '이죠. ' + esc(yong.color) + '과 ' + esc(yong.dir) + '이 그 기운을 부릅니다.<br><br>' +
         esc(missing) +
+        '<br><br>' + zodiacLine(r) +
         '<div class="why-box">' +
           '<button type="button" class="why-head" data-why="whyMe">' +
             '<span>원래 용어로는 어떻게 부르나요</span><span>＋</span></button>' +
@@ -2497,11 +2567,145 @@
     renderFortune();
     renderStep();
     refreshMoreTab();
+    renderToday();
 
     if (!quiet) $('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
     lastPayload = payload;
     prepareReading(payload);
   }
+
+  // 받침이 있으면 "민으로 / 물병자리이에요", 없으면 "서로 / 황소자리예요".
+  // 마지막 글자로 판단한다.
+  function hasBatchim(word) {
+    if (!word) return false;
+    var c = word.charCodeAt(word.length - 1) - 0xAC00;
+    return c >= 0 && c <= 11171 && (c % 28) !== 0;
+  }
+
+  // ── 별자리·띠 ────────────────────────────────────────────────────────
+  // 사주와 뿌리가 다른 체계다. 같은 칸에 섞어 놓으면 어느 쪽 말인지 헷갈리므로
+  // 한 문단으로 떼어 두고, 다른 체계라는 것도 밝힌다.
+  function zodiacLine(r) {
+    var z = r.zodiac;
+    return '태어난 해의 동물(띠)은 <b>' + esc(r.animal) + '</b>, 별자리는 <b>' +
+      esc(z.name) + '</b>' + (hasBatchim(z.name) ? '이에요' : '예요') + ' — ' +
+      esc(z.trait) + '이라고 봅니다. ' +
+      '<span class="hint">별자리는 사주와 다른 체계라 참고로만 곁들입니다.</span>';
+  }
+
+  // ── 오늘의 운세 ───────────────────────────────────────────────────────
+  // 앱을 열면 가장 먼저 보이는 것. 등급은 "그 사람의 그 해 365일 안에서 몇
+  // 번째인가"로 매긴다. 절대 점수를 내놓으면 어떤 해는 온통 좋은 날이 된다.
+  var todayOpen = false;
+  function renderToday() {
+    var box = $('todayCard');
+    if (!myReading) { box.innerHTML = ''; return; }
+    var f;
+    try { f = E.dailyFortune(myReading); }
+    catch (err) { box.innerHTML = ''; return; }
+    if (!f || f.error) { box.innerHTML = ''; return; }
+
+    var d = f.date;
+    var top3 = f.best.map(function (x) {
+      return '<div class="today-dom"><b>' + esc(x.label) + '</b><span class="tone-' +
+        x.grade.tone + '">' + esc(x.grade.word) + '</span></div>';
+    }).join('');
+    var rows = f.domains.map(function (x) {
+      return '<div class="today-row"><b>' + esc(x.label) + '</b>' +
+        '<span class="tone-' + x.grade.tone + '">' + esc(x.grade.word) + '</span></div>';
+    }).join('');
+
+    box.innerHTML =
+      '<div class="today">' +
+        '<div class="today-head">' +
+          '<span class="today-date">' + d.month + '월 ' + d.day + '일 오늘의 운세</span>' +
+          '<span class="today-ganji">' + esc(f.ganji.hanja) + ' ' + esc(f.ganji.kor) + '날</span>' +
+        '</div>' +
+        '<div class="today-grade tone-' + f.grade.tone + '">' + esc(f.grade.word) + '</div>' +
+        '<div class="today-sub">오늘 특히 괜찮은 쪽은 <b>' + esc(f.best[0].label) + '</b>, ' +
+          '한 번 더 살필 쪽은 <b>' + esc(f.worst[0].label) + '</b>이에요.' +
+          (f.gongmang ? ' 오늘은 <b>공망</b>이 든 날이라, 무엇이든 손에 잘 안 잡힐 수 있어요.' : '') +
+        '</div>' +
+        '<div class="today-doms">' + top3 + '</div>' +
+        (f.advice ?
+          '<div class="today-advice">' +
+            '<div class="do">🟢 ' + esc(f.advice.good) + '</div>' +
+            '<div class="dont">🟠 ' + esc(f.advice.bad) + '</div>' +
+          '</div>' : '') +
+        '<button type="button" class="today-more" id="todayMore">' +
+          (todayOpen ? '접기' : '아홉 가지 전부 보기') + '</button>' +
+        '<div class="today-all' + (todayOpen ? ' on' : '') + '" id="todayAll">' + rows +
+          '<div class="hj-note">등급은 올해 365일 가운데 오늘이 어디쯤인지로 매깁니다. ' +
+          '"보통이에요"가 가장 흔하고, 좋은 날과 조심할 날은 그만큼 드뭅니다.</div>' +
+        '</div>' +
+      '</div>';
+
+    $('todayMore').onclick = function () {
+      todayOpen = !todayOpen;
+      $('todayAll').classList.toggle('on', todayOpen);
+      this.textContent = todayOpen ? '접기' : '아홉 가지 전부 보기';
+    };
+  }
+
+  // ── 한자 고르기 ───────────────────────────────────────────────────────
+  // 한자를 직접 칠 수 있는 사람은 많지 않다. 한글을 넣으면 그 음으로 읽는
+  // 한자를 늘어놓고 고르게 한다. 목록은 KS X 1001 — 한글 워드프로세서의 한자
+  // 변환 목록과 같은 범위다.
+  var hanjaPick = [];
+  function nameSyllables() {
+    return ($('surname').value.trim() + $('given').value.trim()).split('')
+      .filter(function (c) { return /[가-힣]/.test(c); });
+  }
+  function renderHanjaPicker() {
+    var HD = window.HanjaData;
+    var syls = nameSyllables();
+    var can = HD && syls.length && syls.some(function (c) { return HD.has(c); });
+    $('hanjaToggle').hidden = !can;
+    if (!can) { $('hanjaPicker').hidden = true; return; }
+    if ($('hanjaPicker').hidden) return;
+
+    if (hanjaPick.length !== syls.length) hanjaPick = syls.map(function () { return null; });
+
+    var html = syls.map(function (syl, i) {
+      var list = HD.candidates(syl);
+      if (!list.length) {
+        return '<div class="hj-syl"><div class="hj-syl-head"><b>' + esc(syl) +
+          '</b> — 이 음으로 읽는 한자가 표에 없습니다.</div></div>';
+      }
+      var btns = list.map(function (c) {
+        return '<button type="button" class="hj-btn" data-i="' + i + '" data-ch="' + esc(c.ch) +
+          '" aria-pressed="' + (hanjaPick[i] === c.ch) + '">' +
+          '<span class="c">' + esc(c.ch) + '</span>' +
+          '<span class="n">' + (c.strokes === null ? '?' : c.strokes + '획') + '</span></button>';
+      }).join('');
+      return '<div class="hj-syl"><div class="hj-syl-head"><b>' + esc(syl) + '</b>' +
+        (hasBatchim(syl) ? '으로' : '로') + ' 읽는 한자 ' + list.length + '자' +
+        '</div><div class="hj-list">' + btns + '</div></div>';
+    }).join('');
+
+    $('hanjaPicker').innerHTML = html +
+      '<div class="hj-note">한글 워드프로세서의 한자 변환 목록과 같은 범위(KS X 1001)입니다. ' +
+      '숫자는 획수이고 <b>?</b>는 획수 자료가 없는 글자입니다 — 골라도 되지만, ' +
+      '한자 획수로 셈하는 수리는 건너뜁니다. 뜻은 아직 붙어 있지 않습니다.</div>';
+
+    Array.prototype.forEach.call($('hanjaPicker').querySelectorAll('.hj-btn'), function (b) {
+      b.onclick = function () {
+        var i = parseInt(this.dataset.i, 10);
+        hanjaPick[i] = (hanjaPick[i] === this.dataset.ch) ? null : this.dataset.ch;
+        $('hanja').value = hanjaPick.map(function (c) { return c || ''; }).join('');
+        renderHanjaPicker();
+      };
+    });
+  }
+  $('hanjaToggle').addEventListener('click', function () {
+    var box = $('hanjaPicker');
+    box.hidden = !box.hidden;
+    this.textContent = box.hidden ? '한자 골라 넣기' : '한자 목록 접기';
+    renderHanjaPicker();
+  });
+  ['surname', 'given'].forEach(function (id) {
+    $(id).addEventListener('input', function () { hanjaPick = []; renderHanjaPicker(); });
+  });
 
   // ── 궁합 탭 ───────────────────────────────────────────────────────────
   function refreshCompatTab() {
