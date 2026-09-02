@@ -192,13 +192,70 @@ function describe(r, input) {
   out.push(`[없는 오행] ${a.missing.length ? a.missing.join(', ') : '없음'} / [과다] ${a.excess.length ? a.excess.join(', ') : '없음'}`);
   out.push(`[강약] ${a.strength} (일간을 돕는 비율 ${a.strengthRatio}) / 태어난 계절 ${a.season}` +
     (a.johuNeed ? ` — 조후상 ${a.johuNeed} 필요` : ''));
+  out.push('  근거(자리별 가중): ' + a.strengthItems.map((x) =>
+    `${x.at} ${x.elem} ×${x.weight} ${x.helps ? '도움' : '깎임'}(${x.why})`).join(' / '));
   out.push(`[용신(억부+조후 추정)] ${a.yongsin.join(' > ')}`);
+  out.push(`[다섯 자리] 용신 ${a.fiveRoles.용신} / 희신 ${a.fiveRoles.희신}(용신을 생함)` +
+    ` / 기신 ${a.fiveRoles.기신}(용신을 극함) / 구신 ${a.fiveRoles.구신}(기신을 생함)` +
+    ` / 한신 ${a.fiveRoles.한신}`);
+  const yh = a.yongsinHave;
+  out.push(`[용신이 원국에 있는가] ${yh.present ? (yh.strong ? '충분히 있음' : '있으나 얇음') : '거의 없음'}` +
+    ` — 천간 ${yh.inStems ? '있음' : '없음'}, 지지 ${yh.inBranches ? '있음' : '없음'},` +
+    ` 지장간까지 셈한 양 ${yh.weighted}`);
+
+  // 십신 분포 — 지지는 지장간 배당일수 비율로 나눠 담은 값이다.
+  out.push('[십신 분포] ' + a.godList.map((g) => `${g} ${a.godCount[g]}`).join(' / '));
+  out.push(`  넘치는 십신: ${a.godExcess.length ? a.godExcess.join(', ') : '없음'}` +
+    ` / 없다시피 한 십신: ${a.godMissing.length ? a.godMissing.join(', ') : '없음'}`);
+
+  // 12운성 — 일간이 각 지지 위에서 얼마나 힘을 쓰는가.
+  const ts = a.twelveStages;
+  out.push('[12운성] ' + ['year', 'month', 'day', 'hour']
+    .filter((k) => ts[k])
+    .map((k) => ({ year: '연지', month: '월지', day: '일지', hour: '시지' }[k]) +
+      ` ${ts[k].branch} → ${ts[k].stage}(힘 ${ts[k].power})`).join(' / '));
+
+  // 원국 안의 형충파해합 — 어느 자리에서 일어나는지가 핵심이다.
+  const nr = a.natalRelations;
+  out.push('[원국 지지 관계] ' + (nr.branches.length
+    ? nr.branches.map((r) => `${r.pair} ${r.a}${r.b} ${r.name} — ${r.area}`).join(' / ')
+    : '형·충·파·해·합 없음'));
+  if (nr.stems.length) {
+    out.push('[원국 천간 관계] ' + nr.stems.map((r) => `${r.pair} ${r.a}${r.b} ${r.name}`).join(' / '));
+  }
+  out.push('  자리의 뜻: ' + Object.keys(nr.positions).map((k) => `${k}=${nr.positions[k]}`).join(' / '));
+
   out.push(`[공망] ${a.gongmang.join('·')} / [신살] ${a.shinsal.length ? a.shinsal.map((s) => s.name + '(' + s.at + ')').join(', ') : '해당 없음'}`);
   out.push(`[대운] ${r.luck.direction}, 대운수 ${r.luck.luckNumber} (${r.luck.startAge}세부터)`);
   out.push('  ' + r.luck.list.map((l) => `${l.ageFrom}~${l.ageTo}세 ${l.hanja}(${l.tenGod})`).join(' / '));
   if (r.currentLuck) {
     out.push(`[현재 대운] ${r.currentLuck.hanja} (${r.currentLuck.ageFrom}~${r.currentLuck.ageTo}세, ${r.currentLuck.tenGod})`);
   }
+
+  // 대운 위의 12운성 — 한살이의 에너지 곡선
+  try {
+    const ls = SajuEngine.luckStages(r);
+    out.push('[대운별 12운성 — 에너지 곡선]');
+    out.push('  ' + ls.list.map((L) =>
+      `${L.yearFrom}~${L.yearTo}(만 ${L.ageFrom}~${L.ageTo}세) ${L.hanja} ${L.stage} 힘${L.power}` +
+      (L.current ? ' ←지금' : '')).join(' / '));
+    if (ls.current) {
+      out.push(`  지금 자리: ${ls.current.hanja} ${ls.current.stage} — ${ls.current.plain}`);
+    }
+    if (ls.peak) out.push(`  앞으로 20년 중 가장 높은 구간: ${ls.peak.yearFrom}~${ls.peak.yearTo} ${ls.peak.hanja} ${ls.peak.stage}`);
+    if (ls.trough) out.push(`  가장 낮은 구간: ${ls.trough.yearFrom}~${ls.trough.yearTo} ${ls.trough.hanja} ${ls.trough.stage}`);
+
+    // 용신이 어느 시기에 채워지는가 — 원국에 용신이 얇을 때 이 답이 필요하다.
+    const ys = SajuEngine.yongsinSupply(r);
+    out.push('[용신이 채워지는 시기]');
+    out.push('  대운: ' + ys.luck.map((L) =>
+      `${L.yearFrom}~${L.yearTo} ${L.hanja}(${L.elems})` +
+      (L.notes.length ? ' ' + L.notes.join('·') : '') + (L.current ? ' ←지금' : '')).join(' / '));
+    if (ys.bestLuck) out.push(`  가장 잘 채워지는 대운: ${ys.bestLuck.yearFrom}~${ys.bestLuck.yearTo} ${ys.bestLuck.hanja}`);
+    if (ys.worstLuck) out.push(`  가장 눌리는 대운: ${ys.worstLuck.yearFrom}~${ys.worstLuck.yearTo} ${ys.worstLuck.hanja}`);
+    out.push('  앞으로 12년 중 용신·희신이 드는 해: ' +
+      (ys.seun.length ? ys.seun.map((x) => `${x.year}(${x.hanja})`).join(', ') : '없음'));
+  } catch (e) { /* 곡선 계산이 실패해도 나머지 풀이는 그대로 나가야 한다 */ }
   out.push(`[올해] ${r.currentYear.year}년 ${r.currentYear.pillar.hanja} / 만 ${r.currentYear.age}세(세는나이 ${r.currentYear.koreanAge}세)`);
 
   // 좋은 시기·조심할 시기. 화면과 같은 계산을 그대로 넘긴다.
@@ -239,6 +296,18 @@ function describe(r, input) {
         ` 눌리는 영역: ${today.worst.map((x) => x.label).join('·')}`);
     }
   } catch (e) { /* 달별 계산이 실패해도 나머지 풀이는 그대로 나가야 한다 */ }
+
+  // 개운 — 용신·희신의 배속. 말로만 "수 기운을 쓰세요" 하면 아무것도 못 한다.
+  [['용신', a.fiveRoles.용신], ['희신', a.fiveRoles.희신]].forEach(([role, el]) => {
+    const pf = SajuEngine.ELEM_PROFILE[el];
+    if (!pf) return;
+    out.push(`[${role} ${el}의 배속] 색 ${pf.color} / 방위 ${pf.dir} / 계절 ${pf.season}` +
+      ` / 숫자 ${pf.nums.join('·')} / 일의 결: ${pf.work} / 생활: ${pf.life}`);
+  });
+  {
+    const gp = SajuEngine.ELEM_PROFILE[a.fiveRoles.기신];
+    if (gp) out.push(`[기신 ${a.fiveRoles.기신}의 배속 — 늘릴 필요 없는 쪽] 색 ${gp.color} / 방위 ${gp.dir}`);
+  }
 
   out.push(`[띠·별자리] 띠 ${r.animal} / 별자리 ${r.zodiac.name}(${r.zodiac.elem})` +
     ' ※ 별자리는 사주와 다른 체계다. 묻지 않으면 굳이 끌어들이지 말고,' +
@@ -304,7 +373,26 @@ function describeCompat(A, B, c, inputA, inputB) {
     ` / 일지 ${d.dayBranchRelations.length ? d.dayBranchRelations.join('·') : '무관'}` +
     ` / 띠 ${d.zodiac.join('·')} ${d.zodiacRelations.length ? d.zodiacRelations.join('·') : '무관'}`);
   out.push(`  상대는 나에게 ${d.godBtoA}, 나는 상대에게 ${d.godAtoB}`);
-  out.push(`  힘의 세기 ${d.strength.join(' / ')} · 계절 ${d.season.join(' / ')} · 용신 ${d.yongsin.join(' / ')}`);
+  out.push(`  힘의 세기 [나 ${d.strength[0]} · 상대 ${d.strength[1]}]` +
+    ` / 계절 [나 ${d.season[0]}생 · 상대 ${d.season[1]}생]` +
+    ` / 용신 [나 ${d.yongsin[0]} · 상대 ${d.yongsin[1]}]`);
+
+  // 겉궁합·속궁합 — 지어내는 말이 아니라 어느 자리를 보느냐의 문제다.
+  out.push(`[겉궁합 — ${d.outer.basis}] ${d.outer.pair.join('·')}띠 (${d.outer.branches.join('·')})` +
+    ` ${d.outer.relations.length ? d.outer.relations.join('·') : '특별한 관계 없음'}` +
+    ` (합이면 +, 충·형이면 − : ${d.outer.net})`);
+  out.push(`[속궁합 — ${d.inner.basis}] ${d.inner.branches.join('·')}` +
+    ` ${d.inner.relations.length ? d.inner.relations.join('·') : '특별한 관계 없음'} (${d.inner.net})`);
+  out.push('  ※ 겉궁합은 연지(띠)끼리, 속궁합은 일지끼리 본 것이다. 이 둘 말고 다른 뜻으로' +
+    ' 쓰지 말고, 잠자리 같은 이야기로 끌고 가지 말 것.');
+
+  // 용신·기신 교차 — 서로에게 필요한 것을 갖고 있는가
+  const cx = d.cross;
+  const jo = (w) => SajuEngine.josa(w, '을/를');
+  out.push(`[용신·기신 교차] 나에게 필요한 건 ${cx.aNeeds}, 피할 건 ${cx.aAvoids}` +
+    ` — 상대는 ${jo(cx.aNeeds)} ${cx.bHasWhatANeeds}만큼, ${jo(cx.aAvoids)} ${cx.bHasWhatAAvoids}만큼 갖고 있다.`);
+  out.push(`  상대에게 필요한 건 ${cx.bNeeds}, 피할 건 ${cx.bAvoids}` +
+    ` — 나는 ${jo(cx.bNeeds)} ${cx.aHasWhatBNeeds}만큼, ${jo(cx.bAvoids)} ${cx.aHasWhatBAvoids}만큼 갖고 있다.`);
   if (d.name) out.push(`  이름 소리: 내 끝 글자와 상대 첫 글자가 ${d.name.tailHeadRelation}` +
     ` (내 이름 오행 ${d.name.aElems.join('·')} / 상대 ${d.name.bElems.join('·')})`);
   out.push('  ※ 축 점수와 항목 값은 억부 관점을 수치로 옮긴 해석이지 계산된 사실이 아니다.' +
@@ -349,19 +437,47 @@ const SYSTEM_COMPAT = `당신은 한국 명리학으로 두 사람의 궁합을 
   낮은 점수는 "더 많은 대화와 조율이 필요한 조합"으로 씁니다.
 - 상대를 깎아내리지 마세요. 마찰 지점은 사람의 흠이 아니라 두 기질이 만나는 방식으로 씁니다.
 - 결혼·이별·임신·재산 분할 같은 결정을 지시하지 마세요. 판단은 두 사람의 몫입니다.
-- 계산에 없는 궁합 요소(겉궁합·속궁합 같은 표현 포함)를 지어내지 마세요.
+- 계산에 없는 궁합 요소를 지어내지 마세요. 겉궁합·속궁합은 자료에 계산되어 있으니
+  써도 됩니다 — 다만 자료에 적힌 뜻 그대로, 겉궁합은 연지(띠)끼리, 속궁합은 일지끼리
+  본 것으로만 씁니다. 속궁합을 잠자리 이야기로 끌고 가지 마세요.
 - 존중하는 상담 어조의 한국어. 과장된 점술 상투어는 쓰지 않습니다.
 
 형식(마크다운):
 ## 한 줄로 요약하면
+각 절에서 반드시 해야 할 일:
+
+**겉궁합과 속궁합** — 두 개를 따로 봅니다. 겉궁합(연지·띠)은 남들 눈에 보이는
+어울림과 집안끼리의 결이고, 속궁합(일지)은 둘만 있을 때의 결입니다. 둘이 어긋나는
+경우가 흔한데(밖에서는 잘 어울리는데 둘만 있으면 어색하다든가) 그럴 때는 그 어긋남
+자체를 말해 줍니다.
+
+**서로 채워 주는 지점과 갉아먹는 지점** — 자료의 '용신·기신 교차'를 읽습니다.
+내가 필요한 오행을 상대가 갖고 있는지, 내가 피해야 할 오행을 상대가 많이 들고
+있는지를 양쪽 방향으로 각각 말합니다. 한쪽만 채워 주는 관계인지, 서로 채워 주는
+관계인지가 여기서 갈립니다.
+
+**싸운다면 어떻게 터지는가** — 계산된 마찰 지점(충·형·해·원진, 겹치는 주도권,
+어긋나는 십신)에서 출발해, 어떤 주제로 어떤 식으로 터질지 실제 장면으로 씁니다
+("일정 얘기를 하다가 한쪽이 말을 끊고, 다른 쪽이 입을 닫는 식"처럼). 그다음 그때
+쓸 대화법과 역할 분담을 구체적으로 제안합니다. 누가 무엇을 맡는 게 나은지까지요.
+
+**관계별 결론** — 자료의 '관계별 궁합'에 애인·부부·직장·동업·친구·가족이 계산되어
+있습니다. 그중 **연인일 때, 부부일 때, 동업일 때** 세 가지 결론을 반드시 각각 따로
+냅니다. 세 결론이 같은 말이 되면 안 됩니다 — 애인은 끌림, 부부는 오래 버티는 힘,
+동업은 역할과 돈이 갈리는 자리를 보기 때문에 강조점이 달라야 합니다.
+
+형식(마크다운):
+## 한 줄로 요약하면
 ## 두 사람은 각각 어떤 사람인가
-## 무엇이 서로를 당기는가
-## 어디서 부딪히기 쉬운가
+## 겉궁합과 속궁합
+## 서로 채워 주는 것, 갉아먹는 것
+## 싸운다면 이렇게 터집니다
+## 그때 쓸 대화법과 역할 분담
+## 연인일 때 / 부부일 때 / 동업일 때
 ## 이 관계를 오래 가져가려면
-각 절은 3~6문장. '오래 가져가려면'은 계산된 마찰 지점 하나하나에 대해
-구체적으로 무엇을 조심하고 무엇으로 메울 수 있는지 적어 5~8문장까지 씁니다.
+'연인/부부/동업' 절은 세 갈래로 나눠 각각 2~4문장씩 씁니다.
 이름이 둘 다 주어졌다면 이름의 소리가 어떻게 작용하는지도 한 문단 넣습니다.
-전체 1400~2000자. 목록보다 문장으로 씁니다.`;
+나머지 절은 각 3~6문장. 전체 2400~3400자. 목록보다 문장으로 씁니다.`;
 
 const SYSTEM = `당신은 한국 명리학(사주)과 성명학을 함께 보는 상담가입니다.
 사주 원국·대운·이름 획수와 발음오행은 이미 프로그램이 정확히 계산해 두었습니다.
@@ -390,16 +506,53 @@ const SYSTEM = `당신은 한국 명리학(사주)과 성명학을 함께 보는
 - '조심할 시기'는 나쁜 일이 정해져 있다는 뜻이 아니라 무리한 확장·과로·성급한 결정을
   피하라는 뜻으로 씁니다. 특히 건강은 진단이 아니라 생활 관리의 관점으로만 다룹니다.
 
+각 절에서 반드시 해야 할 일:
+
+**신강·신약과 다섯 자리** — 강한지 약한지를 먼저 밝히고, 왜 그런지를 자료의
+'근거(자리별 가중)'에서 두세 항목만 골라 보여 줍니다(월지가 어떤 오행이라 득령을
+했는지 같은 식으로). 그다음 용신·희신·기신·구신을 순서대로 짚고, 왜 그 순서인지를
+한 줄씩 답니다. 용신이 원국에 이미 있는지 없는지를 반드시 말하고, 얇거나 없다면
+'용신이 채워지는 시기' 자료에 있는 대운·세운 중 어느 때 채워지는지로 이어 줍니다.
+
+**십신과 행동 패턴** — 넘치는 십신과 없다시피 한 십신을 짚습니다. 넘치는 십신은
+그것이 장점으로 도는 상황과 사고로 도는 상황을 실제 장면으로 나란히 보여 줍니다
+("회의에서는 ~하지만, 상사가 ~할 때는 ~한다"처럼). 없는 십신은 어떤 사람을 곁에
+두거나 어떤 자리에 가면 채워지는지를 현실적으로 말합니다. 십신 이름을 쓸 때는
+괄호로 쉬운 말을 답니다(예: 상관(하고 싶은 말을 하는 힘)).
+
+**형충파해합과 신살** — 자료의 '원국 지지 관계'를 자리별로 읽습니다. 어느 자리와
+어느 자리 사이에서 일어났는지, 그래서 집안·일터·배우자·자식 중 어디에 걸리는지를
+연결합니다. 신살은 옛말 그대로 두지 말고 지금의 모습으로 옮깁니다
+(도화=사람 눈에 잘 띄고 끌어당기는 힘, 역마=옮겨 다니고 밖으로 도는 자리,
+화개=혼자 파고들고 예술·학문으로 가는 자리, 귀문관살=예민하고 촉이 밝은 대신
+생각이 한 곳에 오래 머무는 자리, 천을귀인=어려울 때 손 내미는 사람이 나타나는 자리).
+이 구조가 세게 작동하는 시기는 '영역별 시기'와 '대운' 자료에서 찾아 말합니다.
+
+**12운성 곡선** — 자료의 대운별 12운성을 시간 순서로 이어, 지금까지 어떤 곡선을
+지나왔는지 말합니다. 지금 서 있는 구간이 밀어붙일 때인지 힘을 모을 때인지를
+근거와 함께 판단하고, 앞으로 20년 중 가장 높은 구간과 가장 낮은 구간을 짚어
+각각 어떤 태도로 사는 게 나은지 다르게 말합니다.
+
+**개운 — 앞으로 30일** — 자료의 '용신 배속'을 말로만 옮기지 말고 바로 할 수 있는
+형태로 바꿉니다. 책상을 어느 쪽으로 두는지, 어떤 색 옷과 소품을 쓰는지, 어디에
+자주 가는지처럼 씁니다. 아침·낮·저녁 하루 루틴과 주마다 볼 체크리스트를 만들고,
+이 사람이 궁금해하는 것과 이어서 우선순위가 높은 행동 세 가지를 고릅니다.
+한 달 뒤의 변화는 부풀리지 말고 현실적인 범위로만 말합니다.
+
 형식(마크다운):
 ## 한 줄로 요약하면
 ## 타고난 기질 — 일간과 월지
-## 오행의 균형과 지금 필요한 기운
+## 신강·신약과 나에게 필요한 기운
+## 십신 — 내가 되풀이하는 행동
+## 형충파해와 신살 — 어느 자리가 흔들리는가
 ## 이름이 사주에 하는 일
-## 대운의 흐름과 지금 자리
+## 12운성으로 본 에너지 곡선
 ## 돈·건강·관계, 언제가 좋고 언제를 조심할까
-## 지금 해볼 만한 것
-각 절은 3~6문장. '언제가 좋고' 절은 세 영역을 각각 짚어야 하므로 6~9문장까지 씁니다.
-전체 1600~2400자. 목록보다 문장으로 씁니다.`;
+## 앞으로 30일, 이렇게 해보세요
+'십신' 절에는 십신 분포를 표로 한 번 넣습니다(넘치는 것과 없는 것이 눈에 들어오게).
+'12운성' 절에도 대운별 단계를 표로 넣습니다. 나머지는 문장으로 씁니다.
+'앞으로 30일' 절에는 하루 루틴과 주간 체크리스트를 목록으로 넣습니다.
+표와 목록을 뺀 나머지 절은 각 4~7문장. 전체 3200~4500자.`;
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return fail(res, 405, 'POST 로 요청해 주세요.');

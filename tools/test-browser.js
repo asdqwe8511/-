@@ -139,6 +139,23 @@ async function run() {
   await p.click('#monthChips .chip[data-m="7"]'); await p.waitForTimeout(500);
   ok('달을 바꾸면 상세는 닫힘', !(await p.isVisible('.cal-pick')));
 
+  section('용신·희신·기신·구신');
+  ok('네 자리', (await p.$$('#rolesBlock .role')).length === 4);
+  const roles = await p.$$eval('#rolesBlock .role b', (els) => els.map((e) => e.textContent.trim()));
+  ok('용신·희신·기신·구신', JSON.stringify(roles) === JSON.stringify(['용신', '희신', '기신', '구신']), roles.join(','));
+  const rnote = await p.textContent('.roles-note');
+  ok('원국에 있는지 말해 줌', /사주 안에/.test(rnote), rnote.slice(0, 40));
+  ok('색·방위·숫자', /색|쪽/.test(rnote) && /숫자/.test(rnote));
+
+  section('12운성');
+  ok('막대 10개', (await p.$$('.stage-bars .stage-bar')).length === 10, (await p.$$('.stage-bars .stage-bar')).length);
+  ok('지금 자리 하나', (await p.$$('.stage-bar.now')).length === 1);
+  const snow = await p.textContent('.stage-now');
+  ok('지금 단계를 쉬운 말로', /열두 단계로는/.test(snow), snow.slice(0, 50));
+  ok('가장 높은 때·낮은 때', (await p.$$('.stage-peak div')).length === 2);
+  const stg = await p.textContent('.stage-bars');
+  ok('단계 이름이 적힘', /장생|목욕|관대|건록|제왕|쇠|병|사|묘|절|태|양/.test(stg));
+
   section('저장 — 새로고침해도 남는가');
   await p.reload({ waitUntil: 'networkidle' });
   ok('저장 카드', await p.isVisible('.saved-card'));
@@ -163,7 +180,9 @@ async function run() {
   section('관계별 궁합');
   ok('블록', await p.isVisible('#relBlock .rel-wrap'));
   const labels = await p.$$eval('#relChips .chip', (els) => els.map((e) => e.textContent.trim()));
-  ok('애인·직장·친구·가족', JSON.stringify(labels) === JSON.stringify(['애인', '직장', '친구', '가족']), labels.join(','));
+  ok('애인·부부·직장·동업·친구·가족',
+     JSON.stringify(labels) === JSON.stringify(['애인', '부부', '직장', '동업', '친구', '가족']),
+     labels.join(','));
   const g1 = (await p.textContent('.rel-grade')).trim();
   ok('등급이 말', /^애인으로는 /.test(g1) && !/\d/.test(g1), g1);
   ok('좋은 점', (await p.$$('.rel-note .g')).length >= 1);

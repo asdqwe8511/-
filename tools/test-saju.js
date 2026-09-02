@@ -288,19 +288,86 @@ ok('획수가 붙는다', H.candidates('민').find((c) => c.ch === '民').stroke
 ok('획수를 모르면 null', H.candidates('민').find((c) => c.ch === '旻').strokes, null);
 ok('없는 음', H.candidates('뷁').length, 0);
 
-section('관계별 궁합');
+section('12운성');
+// 널리 알려진 장생·건록·제왕 자리로 표 자체를 확인한다.
+[['갑', '해', '장생'], ['갑', '인', '건록'], ['갑', '묘', '제왕'], ['갑', '신', '절'],
+ ['을', '오', '장생'], ['을', '묘', '건록'], ['을', '인', '제왕'],
+ ['병', '인', '장생'], ['병', '사', '건록'], ['병', '오', '제왕'],
+ ['정', '유', '장생'], ['정', '오', '건록'], ['정', '사', '제왕'],
+ ['무', '인', '장생'], ['기', '유', '장생'],
+ ['경', '사', '장생'], ['경', '신', '건록'], ['경', '유', '제왕'],
+ ['신', '자', '장생'], ['신', '유', '건록'], ['신', '신', '제왕'],
+ ['임', '신', '장생'], ['임', '해', '건록'], ['임', '자', '제왕'],
+ ['계', '묘', '장생'], ['계', '자', '건록'], ['계', '해', '제왕']].forEach(([st, br, want]) => {
+  ok(st + '일간 ' + br + '지', E.twelveStage(E.STEM.indexOf(st), E.BRANCH.indexOf(br)).stage, want);
+});
+const R1 = E.fullReading({ year: 1990, month: 5, day: 15, hour: 14, minute: 30, gender: '남' });
+ok('네 기둥 모두 단계가 나온다',
+   ['year', 'month', 'day', 'hour'].every((k) => R1.analysis.twelveStages[k].stage), true);
+const LS = E.luckStages(R1);
+ok('대운 10개', LS.list.length, 10);
+ok('지금 자리가 하나', LS.list.filter((L) => L.current).length, 1);
+ok('앞으로 20년 최고·최저가 다르다', LS.peak.order !== LS.trough.order, true);
+
+section('용신·희신·기신·구신');
+const AN = R1.analysis;
+ok('다섯 자리가 서로 다른 오행', new Set(Object.values(AN.fiveRoles)).size, 5);
+ok('희신은 용신을 생한다', E.generates(AN.husin, AN.yongsin[0]), true);
+ok('기신은 용신을 극한다', E.controls(AN.gisin, AN.yongsin[0]), true);
+ok('구신은 기신을 생한다', E.generates(AN.gusin, AN.gisin), true);
+ok('용신 보유 판정이 있다', typeof AN.yongsinHave.present, 'boolean');
+const YS = E.yongsinSupply(R1);
+ok('대운마다 용신 채움 여부', YS.luck.length, 10);
+ok('가장 잘 채워지는 대운', YS.bestLuck.fills >= YS.worstLuck.fills, true);
+
+section('십신 분포');
+const GC = AN.godCount;
+ok('열 가지 십신', Object.keys(GC).length, 10);
+// 천간 3개(일간 제외) + 지지 지장간 합 = 기둥 수만큼. 시주가 있으면 3+4=7.
+const gsum = Object.keys(GC).reduce((a, k) => a + GC[k], 0);
+ok('합이 기둥 수와 맞는다 (천간 3 + 지지 4)', Math.abs(gsum - 7) < 0.05, true);
+ok('넘치는 십신 목록', Array.isArray(AN.godExcess), true);
+ok('없는 십신 목록', Array.isArray(AN.godMissing), true);
+
+section('원국 형충파해합 — 자리별');
+const NR = AN.natalRelations;
+ok('자리 짝으로 나온다', NR.branches.every((r) => /^[연월일시]-[연월일시]$/.test(r.pair)), true);
+ok('영역 설명이 붙는다', NR.branches.every((r) => r.area.length > 0), true);
+// 충이 있는 사주로 확인 — 자오충
+const R2 = E.fullReading({ year: 1984, month: 6, day: 20, hour: 0, minute: 30, gender: '남' });
+ok('관계 개수 집계', typeof R2.analysis.natalRelations.counts, 'object');
+ok('네 자리의 뜻', Object.keys(NR.positions).length, 4);
+
+section('궁합 — 이름이 일지 관계를 덮지 않는가');
 const mk = (y, m, d, h, g, sn, gn) => E.fullReading(
   { year: y, month: m, day: d, hour: h, minute: 0, gender: g, surname: sn, given: gn, skipFortune: true });
+
+// var ba 가 일지 인덱스와 이름 오행에 두 번 쓰여, 이름을 넣으면 일지 관계가
+// 통째로 사라지던 적이 있다. 이름 유무로 일지 판정이 달라지면 안 된다.
+const N1 = mk(1990, 5, 15, 14, '남', '김', '민준');
+const N2 = mk(1993, 7, 22, 5, '여', '이', '서연');
+const M1 = mk(1990, 5, 15, 14, '남', '', '');
+const M2 = mk(1993, 7, 22, 5, '여', '', '');
+const cn = E.compatibility(N1, N2), cm = E.compatibility(M1, M2);
+ok('이름이 있어도 일지 관계는 같다',
+   JSON.stringify(cn.detail.dayBranchRelations), JSON.stringify(cm.detail.dayBranchRelations));
+ok('일지가 지지 이름으로 나온다', cn.detail.inner.branches.every((b2) => E.BRANCH.indexOf(b2) >= 0), true);
+ok('겉궁합은 띠', cn.detail.outer.basis, '연지(띠)');
+ok('속궁합은 일지', cn.detail.inner.basis, '일지(배우자 자리)');
+ok('용신 교차 양방향', typeof cn.detail.cross.bHasWhatANeeds === 'number' &&
+   typeof cn.detail.cross.aHasWhatBNeeds === 'number', true);
+
+section('관계별 궁합');
 const PA = mk(1990, 5, 15, 14, '남', '김', '민준');
 const PB = mk(1993, 7, 22, 5, '여', '이', '서연');
 const relc = E.relationCompat(PA, PB);
-ok('네 가지 관계', Object.keys(relc.types).length, 4);
+ok('여섯 가지 관계 (애인·부부·직장·동업·친구·가족)', Object.keys(relc.types).length, 6);
 ok('등급이 말', typeof relc.types.lover.grade === 'string' && !/\d/.test(relc.types.lover.grade), true);
 ok('좋은 점 있음', relc.types.work.good.length >= 1, true);
 ok('걸리는 점 있음', relc.types.work.bad.length >= 1, true);
 ok('할 말이 있다', !!(relc.talk && relc.talk.good && relc.talk.bad), true);
 ok('할 행동이 있다', !!(relc.act && relc.act.good && relc.act.bad), true);
-// 관계마다 무게가 다르니 점수도 갈려야 한다. 넷이 늘 같으면 나눈 뜻이 없다.
+// 관계마다 무게가 다르니 점수도 갈려야 한다. 여섯이 늘 같으면 나눈 뜻이 없다.
 let differ = 0;
 for (let i = 0; i < 60; i++) {
   const a = mk(1950 + i, 1 + (i % 12), 1 + (i % 28), i % 24, i % 2 ? '남' : '여', '', '');
@@ -312,7 +379,8 @@ for (let i = 0; i < 60; i++) {
 }
 ok('60쌍 중 ' + differ + '쌍에서 관계마다 점수가 갈린다', differ >= 55, true);
 // 백분위라면 무작위 짝의 중앙값이 50 근처여야 한다. 아니면 기준표가 낡은 것이다.
-const scores = { lover: [], work: [], friend: [], family: [] };
+const scores = {};
+E.REL_TYPES.forEach((t) => { scores[t] = []; });
 const relPool = [];
 for (let i = 0; i < 26; i++) {
   const r3 = mk(1945 + i * 2, 1 + (i % 12), 1 + ((i * 11) % 28), (i * 5) % 24, i % 2 ? '남' : '여', '', '');

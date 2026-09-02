@@ -33,6 +33,25 @@
   var ELEMS = ['목','화','토','금','수'];
   var ELEM_H = { 목:'木', 화:'火', 토:'土', 금:'金', 수:'水' };
   var ELEM_COLOR = { 목:'청', 화:'적', 토:'황', 금:'백', 수:'흑' };
+  // 오행 배속 — 개운(생활 방향)을 말할 때 쓴다. 색·방위·계절·숫자는 명리에서
+  // 오래 쓰인 배속이고, 직업 결은 그 오행의 성질을 오늘의 일로 옮긴 것이다.
+  var ELEM_PROFILE = {
+    목: { color: '청색·초록', dir: '동쪽', season: '봄', nums: [3, 8],
+          work: '가르치고 기르고 새로 만드는 일 — 교육, 기획, 디자인, 나무·섬유·출판, 의료',
+          life: '아침 햇빛 받기, 걷기, 화초 기르기, 새 것을 배우는 자리에 자주 서기' },
+    화: { color: '붉은색·주황', dir: '남쪽', season: '여름', nums: [2, 7],
+          work: '드러내고 알리고 밝히는 일 — 방송, 광고, 예술, 조명·전기·에너지, 요식',
+          life: '밝은 곳에서 일하기, 사람 앞에 서는 자리 만들기, 따뜻한 음식' },
+    토: { color: '노란색·베이지', dir: '중앙', season: '환절기', nums: [5, 10],
+          work: '중간에서 잇고 쌓는 일 — 부동산, 건설, 중개, 농업, 관리·총무, 상담',
+          life: '흙을 밟기, 한자리에서 오래 하는 습관 만들기, 규칙적인 식사' },
+    금: { color: '흰색·은색', dir: '서쪽', season: '가을', nums: [4, 9],
+          work: '자르고 다듬고 판정하는 일 — 금융, 법률, 회계, 기계·금속, 의료(수술), 군경',
+          life: '정리와 버리기, 금속 소품 곁에 두기, 시간을 정해 끊는 연습' },
+    수: { color: '검정·남색', dir: '북쪽', season: '겨울', nums: [1, 6],
+          work: '흐르고 스며들고 담는 일 — 연구, 유통·무역, 물류, 수산, IT·데이터, 상담',
+          life: '물 자주 마시기, 물가 산책, 혼자 생각을 정리하는 시간 두기' }
+  };
   // 상생: 목→화→토→금→수→목 / 상극: 목→토→수→화→금→목
   function generates(a, b) { return ELEMS[(ELEMS.indexOf(a) + 1) % 5] === b; }
   function controls(a, b)  { return ELEMS[(ELEMS.indexOf(a) + 2) % 5] === b; }
@@ -422,6 +441,9 @@
     return 3;
   }
   var DOHWA = [3,9,6,0], YEOKMA = [8,2,11,5], HWAGAE = [10,4,1,7];
+  // 귀문관살 — 짝을 이루는 두 지지가 한 사주 안에 같이 있을 때 잡는다.
+  // 자유·축오·인미·묘신·진해·사술.
+  var GWIMUN = [[0,9],[1,6],[2,7],[3,8],[4,11],[5,10]];
 
   function findShinsal(chart) {
     var p = chart.pillars, out = [];
@@ -439,6 +461,16 @@
         if (b[1] === HWAGAE[k]) out.push({ name: '화개살', at: b[0], branch: BRANCH[b[1]] });
       });
     });
+    // 귀문관살은 한 자리가 아니라 두 자리가 짝을 이룰 때 생긴다.
+    for (var gi2 = 0; gi2 < branches.length; gi2++) {
+      for (var gj = gi2 + 1; gj < branches.length; gj++) {
+        if (hasPair(GWIMUN, branches[gi2][1], branches[gj][1])) {
+          out.push({ name: '귀문관살', at: branches[gi2][0] + '·' + branches[gj][0],
+                     branch: BRANCH[branches[gi2][1]] + '·' + BRANCH[branches[gj][1]] });
+        }
+      }
+    }
+
     // 중복 제거
     var seen = {}, uniq = [];
     out.forEach(function (s) {
@@ -485,16 +517,24 @@
     var me = STEM_ELEM[p.day.stem];
     // 신강/신약: 월지에 가장 큰 가중치(득령), 일지·시지·천간 순.
     var support = 0, total = 0;
-    function score(elem, w) {
+    var strengthItems = [];
+    function score(label, elem, w) {
       total += w;
-      if (elem === me || generates(elem, me)) support += w;
+      var helps = (elem === me || generates(elem, me));
+      if (helps) support += w;
+      strengthItems.push({ at: label, elem: elem, weight: w, helps: helps,
+        // "화이 나를 극함" 같은 문장이 나가지 않게 받침을 본다.
+        why: helps ? (elem === me ? '나와 같은 ' + elem : josa(elem, '이/가') + ' 나를 생함')
+                    : (controls(elem, me) ? josa(elem, '이/가') + ' 나를 극함'
+                       : generates(me, elem) ? '내가 ' + josa(elem, '을/를') + ' 생함(빠짐)'
+                       : '내가 ' + josa(elem, '을/를') + ' 극함(힘씀)') });
     }
-    score(STEM_ELEM[p.year.stem], 1);
-    score(STEM_ELEM[p.month.stem], 1.5);
-    score(BRANCH_ELEM[p.year.branch], 1);
-    score(BRANCH_ELEM[p.month.branch], 3);   // 득령
-    score(BRANCH_ELEM[p.day.branch], 2);     // 득지
-    if (p.hour) { score(STEM_ELEM[p.hour.stem], 1); score(BRANCH_ELEM[p.hour.branch], 1.5); }
+    score('연간', STEM_ELEM[p.year.stem], 1);
+    score('월간', STEM_ELEM[p.month.stem], 1.5);
+    score('연지', BRANCH_ELEM[p.year.branch], 1);
+    score('월지(득령)', BRANCH_ELEM[p.month.branch], 3);   // 득령
+    score('일지(득지)', BRANCH_ELEM[p.day.branch], 2);     // 득지
+    if (p.hour) { score('시간', STEM_ELEM[p.hour.stem], 1); score('시지', BRANCH_ELEM[p.hour.branch], 1.5); }
     var ratio = support / total;
     var strength = ratio >= 0.6 ? '신강' : ratio >= 0.45 ? '중화(신강 쪽)'
                  : ratio >= 0.35 ? '중화(신약 쪽)' : '신약';
@@ -521,11 +561,53 @@
     var missing = ELEMS.filter(function (e) { return count[e] === 0; });
     var excess = ELEMS.filter(function (e) { return count[e] >= 4; });
 
+    // 용신을 정하고 나면 나머지 넷의 자리도 따라서 정해진다.
+    //   희신 — 용신을 생하는 오행 (용신을 도움)
+    //   기신 — 용신을 극하는 오행 (용신을 깨뜨림)
+    //   구신 — 기신을 생하는 오행 (기신을 도움)
+    //   한신 — 용신이 생하는 오행 (좋지도 나쁘지도 않음)
+    var yi = ELEMS.indexOf(yongsin[0]);
+    var helper  = ELEMS[(yi + 4) % 5];
+    var enemy   = ELEMS[(yi + 3) % 5];
+    var abettor = ELEMS[(yi + 2) % 5];
+    var neutral = ELEMS[(yi + 1) % 5];
+
+    // 용신이 원국에 이미 있는가. 지장간까지 셈한 값으로 본다 — 천간에 없어도
+    // 지지 속에 뿌리가 있으면 "없다"고 말하면 안 된다.
+    var yongsinHave = {
+      inStems: slots.some(function (s2) { return STEM_ELEM[s2.stem] === yongsin[0]; }),
+      inBranches: slots.some(function (s2) { return BRANCH_ELEM[s2.branch] === yongsin[0]; }),
+      weighted: weighted[yongsin[0]],
+      count: count[yongsin[0]]
+    };
+    yongsinHave.present = yongsinHave.weighted >= 0.5;
+    yongsinHave.strong = yongsinHave.weighted >= 1.5;
+
     var tenGods = { stems: [], branches: [] };
     slots.forEach(function (s) {
       tenGods.stems.push({ pos: s.pos, god: s.pos === '일' ? '일간(나)' : tenGodOfStem(p.day.stem, s.stem) });
       tenGods.branches.push({ pos: s.pos, god: tenGodOfBranch(p.day.stem, s.branch) });
     });
+
+    // 십신이 몇 개씩인가. 천간은 한 개로 세고, 지지는 지장간 배당일수 비율로
+    // 나눠 담는다. 지지를 정기 하나로만 세면 진·술·축·미가 통째로 한 십신이 된다.
+    var GODS10 = ['비견', '겁재', '식신', '상관', '편재', '정재', '편관', '정관', '편인', '정인'];
+    var godCount = {};
+    GODS10.forEach(function (g) { godCount[g] = 0; });
+    slots.forEach(function (s2) {
+      if (s2.pos !== '일') godCount[tenGodOfStem(p.day.stem, s2.stem)] += 1;
+      var hid2 = HIDDEN[s2.branch], tot2 = 0;
+      hid2.forEach(function (x) { tot2 += x[1]; });
+      hid2.forEach(function (x) {
+        godCount[tenGodOfStem(p.day.stem, x[0])] += x[1] / tot2;
+      });
+    });
+    GODS10.forEach(function (g) { godCount[g] = Math.round(godCount[g] * 100) / 100; });
+    var godTotal = GODS10.reduce(function (a2, g) { return a2 + godCount[g]; }, 0);
+    var godAvg = godTotal / 10;
+    var godExcess = GODS10.filter(function (g) { return godCount[g] >= Math.max(1.8, godAvg * 2); })
+                          .sort(function (a2, b2) { return godCount[b2] - godCount[a2]; });
+    var godMissing = GODS10.filter(function (g) { return godCount[g] < 0.15; });
 
     return {
       dayMaster: { stem: STEM[p.day.stem], hanja: STEM_H[p.day.stem], elem: me, yang: isYang(p.day.stem) },
@@ -533,10 +615,123 @@
       strength: strength, strengthRatio: Math.round(ratio * 100) / 100,
       season: season, johuNeed: johu,
       yongsin: yongsin, primaryYongsin: yongsin[0],
+      strengthItems: strengthItems,
+      fiveRoles: { 용신: yongsin[0], 희신: helper, 기신: enemy, 구신: abettor, 한신: neutral },
+      husin: helper, gisin: enemy, gusin: abettor, hansin: neutral,
+      yongsinHave: yongsinHave,
       tenGods: tenGods,
+      godCount: godCount, godExcess: godExcess, godMissing: godMissing, godList: GODS10,
+      twelveStages: twelveStagesOf(chart),
+      natalRelations: natalRelations(chart),
       gongmang: gongmang(sixtyIndex(p.day.stem, p.day.branch)),
       shinsal: findShinsal(chart)
     };
+  }
+
+  // ── 12운성 ─────────────────────────────────────────────────────────────
+  //
+  // 일간이 열두 지지 위에서 각각 얼마나 힘을 쓰는지를 사람의 한살이에 빗댄 것.
+  // 양간은 순행하고 음간은 역행한다 — 같은 목(木)이라도 甲은 亥에서 태어나
+  // 卯에서 왕성하고, 乙은 午에서 태어나 寅에서 왕성하다.
+  var STAGE12 = ['장생', '목욕', '관대', '건록', '제왕', '쇠',
+                 '병', '사', '묘', '절', '태', '양'];
+  // 일간별 장생지(장생이 드는 지지). 丙·戊는 寅, 丁·己는 酉로 함께 본다.
+  var STAGE_START = [11, 6, 2, 9, 2, 9, 5, 0, 8, 3];
+  // 힘의 세기 — 곡선을 그릴 때 쓴다. 제왕이 꼭대기, 절이 바닥.
+  var STAGE_POWER = { 장생: 65, 목욕: 50, 관대: 75, 건록: 90, 제왕: 100, 쇠: 60,
+                      병: 40, 사: 25, 묘: 20, 절: 10, 태: 30, 양: 45 };
+  // 사주 용어를 모르는 사람에게 그대로 읽히는 한 줄.
+  var STAGE_PLAIN = {
+    장생: '갓 태어난 힘. 새로 시작하기에 좋고, 아직 여물지는 않았다',
+    목욕: '멋을 내고 흔들리는 때. 마음이 자주 바뀐다',
+    관대: '옷을 갖춰 입고 나서는 때. 의욕이 앞선다',
+    건록: '제 몫을 하는 때. 일이 손에 붙는다',
+    제왕: '가장 왕성한 때. 밀어붙이면 되지만 꺾이면 크게 꺾인다',
+    쇠: '기세가 한풀 꺾인 때. 벌이기보다 지킬 때',
+    병: '몸도 마음도 처지는 때. 무리하면 탈이 난다',
+    사: '움직임이 멎는 때. 안으로 파고들기에는 낫다',
+    묘: '거두어 묻어 두는 때. 정리하고 마무리할 때',
+    절: '끊어지는 때. 가장 힘이 없고, 그래서 새로 갈아탈 수 있다',
+    태: '다시 잉태되는 때. 아직 형체는 없지만 시작은 있다',
+    양: '뱃속에서 자라는 때. 드러내지 않고 준비할 때'
+  };
+
+  function twelveStage(dayStem, branch) {
+    var start = STAGE_START[dayStem];
+    var k = isYang(dayStem)
+      ? ((branch - start) % 12 + 12) % 12
+      : ((start - branch) % 12 + 12) % 12;
+    var name = STAGE12[k];
+    return { stage: name, power: STAGE_POWER[name], plain: STAGE_PLAIN[name], index: k };
+  }
+
+  function twelveStagesOf(chart) {
+    var p = chart.pillars, ds = p.day.stem;
+    var out = { year: null, month: null, day: null, hour: null };
+    ['year', 'month', 'day', 'hour'].forEach(function (k) {
+      if (!p[k]) return;
+      var st = twelveStage(ds, p[k].branch);
+      st.branch = BRANCH[p[k].branch];
+      out[k] = st;
+    });
+    return out;
+  }
+
+  // ── 원국 안의 형충파해합 ────────────────────────────────────────────────
+  //
+  // 지지끼리 맺는 관계는 "어느 자리에서 일어났는가"가 핵심이다. 같은 충이라도
+  // 연-월에서 나면 집안과 일터의 문제고, 일-시에서 나면 배우자와 자식의 문제다.
+  var POS_MEANING = {
+    연: '조상·부모·집안, 어린 시절, 바깥에서 보이는 나',
+    월: '부모·형제, 일터와 사회생활, 자라 온 환경',
+    일: '나 자신과 배우자',
+    시: '자식, 아랫사람, 말년'
+  };
+  // 두 자리가 맺는 관계가 어느 영역에 가장 크게 걸리는가.
+  var PAIR_AREA = {
+    '연-월': '집안과 일터 사이 — 부모·형제, 뿌리와 사회생활',
+    '연-일': '집안과 나 사이 — 부모와 나, 부모와 배우자',
+    '연-시': '집안과 자식 사이 — 조부모와 손주, 물려받은 것',
+    '월-일': '일터와 나 사이 — 직장·형제와 나, 형제와 배우자',
+    '월-시': '일터와 자식 사이 — 일과 자식을 함께 감당하는 자리',
+    '일-시': '나와 자식 사이 — 배우자와 자식, 말년의 자리'
+  };
+
+  function natalRelations(chart) {
+    var p = chart.pillars;
+    var slots = [
+      { pos: '연', b: p.year.branch, s: p.year.stem },
+      { pos: '월', b: p.month.branch, s: p.month.stem },
+      { pos: '일', b: p.day.branch, s: p.day.stem }
+    ];
+    if (p.hour) slots.push({ pos: '시', b: p.hour.branch, s: p.hour.stem });
+
+    var branches = [], stems = [];
+    for (var i = 0; i < slots.length; i++) {
+      for (var j = i + 1; j < slots.length; j++) {
+        var key = slots[i].pos + '-' + slots[j].pos;
+        branchRelations(slots[i].b, slots[j].b).forEach(function (r) {
+          branches.push({
+            pair: key, area: PAIR_AREA[key] || '',
+            a: BRANCH[slots[i].b], b: BRANCH[slots[j].b],
+            name: r.name, good: r.delta > 0, delta: r.delta
+          });
+        });
+        var sr = stemRelation(slots[i].s, slots[j].s);
+        if (sr) {
+          stems.push({
+            pair: key, area: PAIR_AREA[key] || '',
+            a: STEM[slots[i].s], b: STEM[slots[j].s],
+            name: sr.name, good: sr.delta > 0, delta: sr.delta
+          });
+        }
+      }
+    }
+    // 같은 관계가 여러 자리에서 겹치면 그만큼 세게 작동한다.
+    var byName = {};
+    branches.forEach(function (r) { byName[r.name] = (byName[r.name] || 0) + 1; });
+    return { branches: branches, stems: stems, counts: byName,
+             positions: POS_MEANING };
   }
 
   // ── 대운 ───────────────────────────────────────────────────────────────
@@ -1142,6 +1337,93 @@
     }
     out.sort(function (a, b) { return (b.score - a.score) * dir; });
     return out;
+  }
+
+  // ── 대운 위의 12운성 곡선 · 용신이 채워지는 시기 ─────────────────────────
+  //
+  // 대운마다 일간이 어느 단계에 서 있는지를 이어 붙이면 한살이의 에너지 곡선이
+  // 된다. 어느 대운이 밀어붙일 때고 어느 대운이 힘을 모을 때인지가 여기서 갈린다.
+  function luckStages(reading) {
+    var ds = reading.chart.pillars.day.stem;
+    var birth = reading.solar.year;
+    var age = reading.currentYear.age;
+    var list = reading.luck.list.map(function (L) {
+      var st = twelveStage(ds, BRANCH.indexOf(L.branch));
+      return {
+        order: L.order, ageFrom: L.ageFrom, ageTo: L.ageTo,
+        yearFrom: Math.round(birth + L.ageFrom), yearTo: Math.round(birth + L.ageTo),
+        hanja: L.hanja, stem: L.stem, branch: L.branch,
+        stage: st.stage, power: st.power, plain: st.plain,
+        tenGod: L.tenGod,
+        current: age >= L.ageFrom && age < L.ageTo
+      };
+    });
+    var current = null;
+    list.forEach(function (L) { if (L.current) current = L; });
+
+    // 앞으로 20년 안에서 가장 높은 구간과 가장 낮은 구간
+    var ahead = list.filter(function (L) { return L.ageTo > age && L.ageFrom <= age + 20; });
+    var peak = null, trough = null;
+    ahead.forEach(function (L) {
+      if (!peak || L.power > peak.power) peak = L;
+      if (!trough || L.power < trough.power) trough = L;
+    });
+    return { list: list, current: current, ahead: ahead, peak: peak, trough: trough };
+  }
+
+  /**
+   * 용신·희신이 어느 대운·세운에서 들어오는가.
+   * 원국에 용신이 없을 때 "언제 채워지는지"를 답하려면 이 값이 필요하다.
+   */
+  function yongsinSupply(reading, years) {
+    var a = reading.analysis;
+    var want = [a.yongsin[0], a.husin];
+    var birth = reading.solar.year;
+    var age = reading.currentYear.age;
+
+    var luck = reading.luck.list.map(function (L) {
+      var se = STEM_ELEM[STEM.indexOf(L.stem)];
+      var be = BRANCH_ELEM[BRANCH.indexOf(L.branch)];
+      var hit = [];
+      if (se === a.yongsin[0]) hit.push('천간이 용신 ' + se);
+      else if (se === a.husin) hit.push('천간이 희신 ' + se);
+      else if (se === a.gisin) hit.push('천간이 기신 ' + se);
+      if (be === a.yongsin[0]) hit.push('지지가 용신 ' + be);
+      else if (be === a.husin) hit.push('지지가 희신 ' + be);
+      else if (be === a.gisin) hit.push('지지가 기신 ' + be);
+      var good = (se === a.yongsin[0] || se === a.husin ? 1 : 0) +
+                 (be === a.yongsin[0] || be === a.husin ? 1 : 0);
+      var bad = (se === a.gisin || se === a.gusin ? 1 : 0) +
+                (be === a.gisin || be === a.gusin ? 1 : 0);
+      return {
+        order: L.order, ageFrom: L.ageFrom, ageTo: L.ageTo,
+        yearFrom: Math.round(birth + L.ageFrom), yearTo: Math.round(birth + L.ageTo),
+        hanja: L.hanja, elems: se + '/' + be, notes: hit,
+        fills: good, drains: bad,
+        current: age >= L.ageFrom && age < L.ageTo
+      };
+    });
+
+    // 앞으로 몇 해에 용신이 드는가 — 세운은 짧게만 본다.
+    var n = years || 12;
+    var seun = [];
+    for (var i = 0; i < n; i++) {
+      var Y = reading.currentYear.year + i;
+      var yp = yearPillarOf(Y);
+      var se2 = STEM_ELEM[yp.stemIdx], be2 = BRANCH_ELEM[yp.branchIdx];
+      var g = (se2 === a.yongsin[0] || se2 === a.husin ? 1 : 0) +
+              (be2 === a.yongsin[0] || be2 === a.husin ? 1 : 0);
+      if (g) seun.push({ year: Y, hanja: yp.hanja, elems: se2 + '/' + be2, fills: g });
+    }
+
+    return {
+      want: want,
+      have: a.yongsinHave,
+      luck: luck,
+      bestLuck: luck.slice().sort(function (x, y) { return y.fills - x.fills || x.ageFrom - y.ageFrom; })[0],
+      worstLuck: luck.slice().sort(function (x, y) { return y.drains - x.drains || x.ageFrom - y.ageFrom; })[0],
+      seun: seun
+    };
   }
 
   // ── 별자리 ─────────────────────────────────────────────────────────────
@@ -1828,9 +2110,11 @@
       var bTail = B.name.syllables[B.name.syllables.length - 1].elem;
       var aHead = A.name.syllables[0].elem;
       var bHead = B.name.syllables[0].elem;
-      var ab = soundPair(aTail, bHead), ba = soundPair(bTail, aHead);
-      var rel2 = ab.rel === ba.rel ? ab.rel : ab.rel + '·' + ba.rel;
-      add('communication', (ab.d + ba.d) / 2, '두 이름을 이어 부르면 ' + rel2);
+      // 이름은 fwd/bwd 로 받는다. 위에서 일지 인덱스를 ba 로 쓰고 있어서,
+      // 여기서 같은 이름을 다시 쓰면 일지가 통째로 덮여 일지 관계가 사라진다.
+      var fwd = soundPair(aTail, bHead), bwd = soundPair(bTail, aHead);
+      var rel2 = fwd.rel === bwd.rel ? fwd.rel : fwd.rel + '·' + bwd.rel;
+      add('communication', (fwd.d + bwd.d) / 2, '두 이름을 이어 부르면 ' + rel2);
       // 상대 이름이 내 용신을 불러 주는가
       var bElems = B.name.syllables.map(function (s2) { return s2.elem; });
       if (bElems.indexOf(A.analysis.yongsin[0]) >= 0) {
@@ -1840,7 +2124,7 @@
       if (aElems.indexOf(B.analysis.yongsin[0]) >= 0) {
         add('stability', 5, '내 이름에 상대 용신 ' + josa(B.analysis.yongsin[0], '이/가') + ' 들어 있음');
       }
-      nameNote = { tailHeadRelation: rel2, forward: ab.rel, backward: ba.rel,
+      nameNote = { tailHeadRelation: rel2, forward: fwd.rel, backward: bwd.rel,
                    aElems: aElems, bElems: bElems };
     }
 
@@ -1882,6 +2166,29 @@
         season: [seasonA, seasonB],
         yongsin: [A.analysis.yongsin[0], B.analysis.yongsin[0]],
         supply: { toMe: supAB, toThem: supBA },
+        // 겉궁합·속궁합은 지어내는 말이 아니라 어느 자리를 보느냐의 문제다.
+        //   겉궁합 — 연지(띠). 남들 눈에 보이는 어울림, 집안끼리의 결
+        //   속궁합 — 일지(배우자 자리). 둘만 있을 때의 결
+        outer: {
+          basis: '연지(띠)', pair: [BRANCH_ANIMAL[za], BRANCH_ANIMAL[zb]],
+          branches: [BRANCH[za], BRANCH[zb]],
+          relations: branchRelations(za, zb).map(function (r) { return r.name; }),
+          net: branchRelations(za, zb).reduce(function (t, r) { return t + r.delta; }, 0)
+        },
+        inner: {
+          basis: '일지(배우자 자리)', branches: [BRANCH[ba], BRANCH[bb]],
+          relations: branchRelations(ba, bb).map(function (r) { return r.name; }),
+          net: branchRelations(ba, bb).reduce(function (t, r) { return t + r.delta; }, 0)
+        },
+        // 서로의 용신·기신이 어떻게 얽히는가 — 교차로 본다.
+        cross: {
+          aNeeds: A.analysis.yongsin[0], aAvoids: A.analysis.gisin,
+          bNeeds: B.analysis.yongsin[0], bAvoids: B.analysis.gisin,
+          bHasWhatANeeds: elementCount(B)[A.analysis.yongsin[0]] || 0,
+          bHasWhatAAvoids: elementCount(B)[A.analysis.gisin] || 0,
+          aHasWhatBNeeds: elementCount(A)[B.analysis.yongsin[0]] || 0,
+          aHasWhatBAvoids: elementCount(A)[B.analysis.gisin] || 0
+        },
         name: nameNote
       }
     };
@@ -1893,11 +2200,16 @@
   // 끌림이 먼저지만 직장은 소통과 지속이 먼저다. 그래서 네 축(끌림·안정·소통·
   // 지속)을 관계마다 다르게 저울질한다. 축 점수 자체는 하나만 계산하고, 무게만
   // 바꾼다 — 관계마다 다른 계산을 하면 어느 쪽이 진짜인지 알 수 없어진다.
-  var REL_TYPES = ['lover', 'work', 'friend', 'family'];
-  var REL_TYPE_LABEL = { lover: '애인', work: '직장', friend: '친구', family: '가족' };
+  var REL_TYPES = ['lover', 'spouse', 'work', 'biz', 'friend', 'family'];
+  var REL_TYPE_LABEL = { lover: '애인', spouse: '부부', work: '직장', biz: '동업',
+                         friend: '친구', family: '가족' };
   var REL_TYPE_WEIGHT = {
     lover:  { attraction: 0.38, stability: 0.22, communication: 0.18, endurance: 0.22 },
+    // 부부는 애인과 다르다. 끌림보다 같은 집에서 오래 버티는 힘이 먼저다.
+    spouse: { attraction: 0.18, stability: 0.30, communication: 0.18, endurance: 0.34 },
     work:   { attraction: 0.08, stability: 0.28, communication: 0.34, endurance: 0.30 },
+    // 동업은 돈과 위험을 나눈다. 역할이 갈리고 오래 가는지가 전부다.
+    biz:    { attraction: 0.05, stability: 0.33, communication: 0.28, endurance: 0.34 },
     friend: { attraction: 0.22, stability: 0.20, communication: 0.34, endurance: 0.24 },
     family: { attraction: 0.10, stability: 0.32, communication: 0.24, endurance: 0.34 }
   };
@@ -1934,6 +2246,26 @@
                       '말투 때문에 오해가 생기기 쉽습니다. 문자보다 통화가 낫습니다.'],
       endurance:  ['오래 볼 사이입니다. 뜸해도 다시 이어집니다.',
                    '한 번 크게 어긋나면 회복이 더딥니다. 돈과 험담을 조심하세요.']
+    },
+    spouse: {
+      attraction: ['오래 살아도 서로 질리지 않는 자리가 있습니다.',
+                   '설렘으로 가는 사이는 아닙니다. 편안함으로 가는 쪽이에요.'],
+      stability:  ['살림과 역할이 자연스럽게 갈립니다.',
+                   '집안일과 돈 문제에서 부딪히기 쉽습니다. 처음에 나눠 정하세요.'],
+      communication: ['말하지 않아도 눈치로 통하는 부분이 있습니다.',
+                      '같은 말을 다르게 알아듣습니다. 짐작하지 말고 물어보세요.'],
+      endurance:  ['풍파가 와도 함께 넘길 힘이 있습니다.',
+                   '같은 문제로 되풀이해 부딪힙니다. 규칙을 글로 정해 두세요.']
+    },
+    biz: {
+      attraction: ['서로에게 끌려 일이 빨리 붙습니다.',
+                   '친해지려 애쓰지 마세요. 일로만 만나는 편이 낫습니다.'],
+      stability:  ['맡을 자리가 서로 다릅니다. 역할을 나누기 좋습니다.',
+                   '주도권이 겹칩니다. 지분과 결정권을 처음에 문서로 못 박으세요.'],
+      communication: ['숫자와 조건을 말할 때 어긋남이 적습니다.',
+                      '돈 이야기가 특히 잘 어긋납니다. 구두 합의는 남기지 마세요.'],
+      endurance:  ['길게 끌고 갈 수 있는 조합입니다.',
+                   '한 건은 되지만 몇 년은 어렵습니다. 나갈 조건도 함께 정해 두세요.']
     },
     family: {
       attraction: ['정이 오가는 자리가 있습니다.',
@@ -2006,7 +2338,9 @@
   // 100점 만점에 70점이라는 뜻이 아니다.
   var REL_BASELINE = {
     lover:  [27, 42, 46, 48, 50, 51, 53, 54, 54, 55, 56, 57, 58, 59, 60, 61, 63, 64, 66, 68, 83],
+    spouse: [27, 43, 46, 49, 50, 52, 53, 54, 55, 56, 56, 57, 58, 59, 60, 61, 62, 63, 65, 67, 79],
     work:   [30, 45, 47, 49, 51, 52, 53, 54, 55, 56, 57, 57, 58, 59, 60, 61, 62, 63, 64, 66, 74],
+    biz:    [29, 45, 48, 49, 51, 52, 53, 54, 55, 56, 57, 58, 59, 59, 60, 61, 62, 64, 65, 67, 76],
     friend: [29, 44, 47, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 60, 62, 63, 64, 66, 77],
     family: [28, 44, 47, 49, 51, 52, 53, 54, 55, 56, 57, 58, 58, 59, 60, 61, 62, 63, 65, 67, 76]
   };
@@ -2314,13 +2648,17 @@
   return {
     STEM: STEM, STEM_H: STEM_H, BRANCH: BRANCH, BRANCH_H: BRANCH_H,
     BRANCH_ANIMAL: BRANCH_ANIMAL, STEM_ELEM: STEM_ELEM, BRANCH_ELEM: BRANCH_ELEM,
-    ELEMS: ELEMS, ELEM_H: ELEM_H, ELEM_COLOR: ELEM_COLOR, HIDDEN: HIDDEN,
+    ELEMS: ELEMS, ELEM_H: ELEM_H, ELEM_COLOR: ELEM_COLOR, ELEM_PROFILE: ELEM_PROFILE,
+    HIDDEN: HIDDEN,
     SOLAR_TERM_NAMES: SOLAR_TERM_NAMES,
-    isYang: isYang, generates: generates, controls: controls,
+    isYang: isYang, generates: generates, controls: controls, josa: josa,
     toJD: toJD, fromJD: fromJD, sunLongitude: sunLongitude, jdUTtoTT: jdUTtoTT,
     solveSolarLongitude: solveSolarLongitude, newMoonJD: newMoonJD,
     equationOfTime: equationOfTime, standardOffset: standardOffset, inDST: inDST,
     buildChart: buildChart, analyze: analyze, buildLuckCycles: buildLuckCycles,
+    twelveStage: twelveStage, twelveStagesOf: twelveStagesOf,
+    STAGE12: STAGE12, STAGE_POWER: STAGE_POWER, STAGE_PLAIN: STAGE_PLAIN,
+    natalRelations: natalRelations, luckStages: luckStages, yongsinSupply: yongsinSupply,
     yearPillarOf: yearPillarOf, tenGodOfStem: tenGodOfStem, tenGodOfBranch: tenGodOfBranch,
     solarToLunar: solarToLunar, lunarToSolar: lunarToSolar, leapMonthsOf: leapMonthsOf,
     syllableInfo: syllableInfo, suriOf: suriOf, analyzeName: analyzeName,

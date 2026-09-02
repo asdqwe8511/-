@@ -752,6 +752,42 @@
   .cal-pick .cp-row b{font-weight:600; color:var(--text-dim);}
   @media (max-width:400px){ .cal-pick .cp-rows{grid-template-columns:1fr;} }
 
+  /* 12운성 — 대운마다 기운이 얼마나 차 있는지 */
+  .stage-wrap{margin-top:18px;}
+  .stage-head{font-size:13px; font-weight:700; margin-bottom:4px;}
+  .stage-sub{font-size:12px; color:var(--text-mute); line-height:1.65; margin-bottom:11px;}
+  .stage-bars{display:flex; gap:3px; align-items:flex-end; height:96px;}
+  .stage-bar{
+    flex:1; display:flex; flex-direction:column; justify-content:flex-end;
+    align-items:center; gap:3px; min-width:0;
+  }
+  .stage-bar .fill{
+    width:100%; background:var(--border); border-radius:5px 5px 0 0; min-height:4px;
+  }
+  .stage-bar.now .fill{background:var(--accent);}
+  .stage-bar .nm{font-size:9px; color:var(--text-mute); letter-spacing:-.04em; white-space:nowrap;}
+  .stage-bar.now .nm{color:var(--accent); font-weight:700;}
+  .stage-axis{display:flex; gap:3px; margin-top:3px;}
+  .stage-axis span{flex:1; text-align:center; font-size:9px; color:var(--text-mute); min-width:0;}
+  .stage-now{
+    margin-top:12px; background:var(--bg); border-radius:12px; padding:12px 13px;
+    font-size:13px; line-height:1.7;
+  }
+  .stage-now b{font-weight:700;}
+  .stage-peak{display:grid; gap:6px; margin-top:9px;}
+  .stage-peak div{
+    font-size:12.5px; line-height:1.6; padding:9px 11px; border-radius:10px; background:var(--bg);
+  }
+
+  /* 용신·희신·기신·구신 — 네 자리 */
+  .roles{display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin-top:12px;}
+  .role{background:var(--bg); border-radius:11px; padding:9px 6px; text-align:center;}
+  .role b{display:block; font-size:10.5px; color:var(--text-mute); font-weight:600;}
+  .role span{display:block; font-size:16px; font-weight:800; margin-top:3px;}
+  .role.good span{color:#1c6fb5;}
+  .role.bad span{color:#9b2412;}
+  .roles-note{font-size:11.5px; color:var(--text-mute); line-height:1.7; margin-top:9px;}
+
   /* 관계별 궁합 — 애인·직장·친구·가족 */
   .rel-wrap{margin:16px 0 4px;}
   .rel-head{font-size:13px; font-weight:700; margin-bottom:9px;}
@@ -981,11 +1017,13 @@
       <p class="sub">천간·지지 여덟 글자를 오행으로 세고, 지지 속 지장간까지 배당 일수만큼 나눠 담은 값입니다.</p>
       <div class="bars" id="bars"></div>
       <p class="bar-legend">막대 길이는 그 기운의 양입니다. 청록색 막대는 지금 사주에 필요하다고 본 기운(용신)입니다.</p>
+      <div id="rolesBlock"></div>
     </section>
 <section class="panel" id="luckPanel">
       <h2>대운 — 10년 단위의 흐름</h2>
       <p class="sub" id="luckSub"></p>
       <div class="luck-scroll"><div class="luck-row" id="luckRow"></div></div>
+      <div id="stageBlock"></div>
     </section>
 <section class="panel" id="yearPanel" hidden>
       <h2 id="yearTitle">올해는 어떤 해인가</h2>
@@ -1762,6 +1800,39 @@
         '<div class="bar-val"><b>' + v.toFixed(1) + '</b>' + (need ? '<span class="bar-tag">용신</span>' : '') + '</div>' +
       '</div>';
     }).join('');
+    renderRoles(r);
+  }
+
+  // ── 용신·희신·기신·구신 ─────────────────────────────────────────────────
+  // 용신 하나만 말하면 "그럼 나머지는?"이 남는다. 용신을 정하면 나머지 네
+  // 자리도 따라서 정해지므로 넷을 같이 보여 준다.
+  function renderRoles(r) {
+    var a = r.analysis, f = a.fiveRoles;
+    var cells = [
+      { k: '용신', v: f.용신, cls: 'good', why: '지금 나에게 가장 필요한 기운' },
+      { k: '희신', v: f.희신, cls: 'good', why: '용신을 도와주는 기운' },
+      { k: '기신', v: f.기신, cls: 'bad',  why: '용신을 깨뜨리는 기운' },
+      { k: '구신', v: f.구신, cls: 'bad',  why: '기신을 도와주는 기운' }
+    ];
+    var have = a.yongsinHave;
+    var b1 = hasBatchim(f.용신);
+    var haveText = have.strong
+      ? '용신 ' + esc(f.용신) + (b1 ? '은' : '는') + ' 이미 사주 안에 넉넉히 있습니다. 쓸 줄만 알면 되는 자리예요.'
+      : have.present
+        ? '용신 ' + esc(f.용신) + (b1 ? '이' : '가') + ' 사주 안에 있긴 하지만 두껍지는 않습니다. 밖에서 끌어와 보태면 좋습니다.'
+        : '용신 ' + esc(f.용신) + (b1 ? '이' : '가') + ' 사주 안에 거의 없습니다. 타고나기보다 살면서 채워 넣어야 하는 자리예요.';
+
+    var pf = E.ELEM_PROFILE[f.용신];
+    $('rolesBlock').innerHTML =
+      '<div class="roles">' + cells.map(function (c) {
+        return '<div class="role ' + c.cls + '" title="' + esc(c.why) + '">' +
+          '<b>' + esc(c.k) + '</b><span>' + esc(c.v) + '</span></div>';
+      }).join('') + '</div>' +
+      '<div class="roles-note">' + haveText +
+        (pf ? '<br>' + esc(f.용신) + ' 기운은 <b>' + esc(pf.color) + '</b>, <b>' + esc(pf.dir) +
+              '</b>, 숫자 <b>' + pf.nums.join('·') + '</b>에 붙습니다. ' + esc(pf.life) + '.' : '') +
+        '<br>희신은 용신을 도와주고, 기신은 용신을 깨뜨리고, 구신은 그 기신을 도와줍니다.' +
+      '</div>';
   }
 
   function renderLuck(r) {
@@ -1777,6 +1848,51 @@
         '<div class="tg">' + esc(l.tenGod.replace('/', ' · ')) + '</div>' +
       '</div>';
     }).join('');
+    renderStages(r);
+  }
+
+  // ── 12운성 — 대운마다 기운이 얼마나 차 있는가 ───────────────────────────
+  // 사주에서 힘의 세기는 점수가 아니라 한살이에 빗댄 열두 단계로 말한다.
+  // 막대 높이는 그 단계의 세기이고, 아래에 그 단계 이름을 그대로 적는다.
+  function renderStages(r) {
+    var ls;
+    try { ls = E.luckStages(r); }
+    catch (err) { $('stageBlock').innerHTML = ''; return; }
+
+    var bars = ls.list.map(function (L) {
+      return '<div class="stage-bar' + (L.current ? ' now' : '') + '">' +
+        '<span class="nm">' + esc(L.stage) + '</span>' +
+        '<span class="fill" style="height:' + Math.round(L.power * 0.62) + 'px"></span>' +
+        '</div>';
+    }).join('');
+    var axis = ls.list.map(function (L) {
+      return '<span>' + Math.floor(L.ageFrom) + '</span>';
+    }).join('');
+
+    var now = ls.current
+      ? '<div class="stage-now">지금은 <b>' + esc(ls.current.hanja) + ' 대운</b>, ' +
+        '열두 단계로는 <b>' + esc(ls.current.stage) + '</b>입니다 — ' + esc(ls.current.plain) + '.</div>'
+      : '';
+    var peak = '';
+    if (ls.peak && ls.trough && ls.peak.order !== ls.trough.order) {
+      peak = '<div class="stage-peak">' +
+        '<div>앞으로 20년 중 기운이 가장 높은 때는 <b>' + ls.peak.yearFrom + '~' + ls.peak.yearTo +
+          '년</b>(' + esc(ls.peak.hanja) + ' · ' + esc(ls.peak.stage) + ')입니다.</div>' +
+        '<div>가장 낮은 때는 <b>' + ls.trough.yearFrom + '~' + ls.trough.yearTo +
+          '년</b>(' + esc(ls.trough.hanja) + ' · ' + esc(ls.trough.stage) + ')입니다. ' +
+          '나쁜 일이 정해졌다는 뜻이 아니라, 벌이기보다 지킬 때라는 뜻이에요.</div>' +
+        '</div>';
+    }
+
+    $('stageBlock').innerHTML =
+      '<div class="stage-wrap">' +
+        '<div class="stage-head">기운의 오르내림 (12운성)</div>' +
+        '<div class="stage-sub">태어나 자라고 저물었다 다시 태어나는 열두 단계로, ' +
+          '대운마다 내 기운이 어디쯤 차 있는지를 봅니다. 아래 숫자는 나이예요.</div>' +
+        '<div class="stage-bars">' + bars + '</div>' +
+        '<div class="stage-axis">' + axis + '</div>' +
+        now + peak +
+      '</div>';
   }
 
   function renderName(r) {
