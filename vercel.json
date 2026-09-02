@@ -1,0 +1,15 @@
+{
+  "cleanUrls": true,
+  "functions": {
+    "api/saju.js": {
+      "maxDuration": 60
+    }
+  },
+  "redirects": [
+    {
+      "source": "/saju",
+      "destination": "/",
+      "permanent": true
+    }
+  ]
+}

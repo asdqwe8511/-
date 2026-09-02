@@ -1,0 +1,1441 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>인기영상 대시보드</title>
+<meta name="description" content="국가별 · 카테고리별 실시간 인기 영상을 한눈에. 인기 급상승 랭킹과 채널 파인더를 한 곳에서.">
+
+<!-- Link preview card (KakaoTalk, Slack, Facebook, X, ...). og:image must be an
+     absolute URL; these pages are static so crawlers can read them even though
+     the data endpoints behind them require login. -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="인기영상 대시보드">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:title" content="인기영상 대시보드">
+<meta property="og:description" content="국가별 · 카테고리별 실시간 인기 영상을 한눈에. 인기 급상승 랭킹과 채널 파인더를 한 곳에서.">
+<meta property="og:url" content="https://delta-ten-68.vercel.app/youtube">
+<meta property="og:image" content="https://delta-ten-68.vercel.app/og-image.png?v=2">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="인기영상 대시보드 - 지금 뜨는 유튜브 인기 영상">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="인기영상 대시보드">
+<meta name="twitter:description" content="국가별 · 카테고리별 실시간 인기 영상을 한눈에. 인기 급상승 랭킹과 채널 파인더를 한 곳에서.">
+<meta name="twitter:image" content="https://delta-ten-68.vercel.app/og-image.png?v=2">
+<link rel="icon" type="image/png" href="/favicon.png">
+
+<style>
+  :root{
+    --bg: #0e0f13;
+    --panel: #16181f;
+    --panel-2: #1c1f28;
+    --border: #2a2d38;
+    --text: #f2f3f5;
+    --text-dim: #9298a8;
+    --accent: #7c5cff;
+    --accent-2: #2dd4bf;
+    --danger: #ff5470;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Pretendard","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+    line-height:1.5;
+    overflow-x:hidden; /* belt-and-suspenders: never let a stray element cause sideways page scroll */
+  }
+  a{color:inherit; text-decoration:none;}
+
+  header.topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 28px; border-bottom:1px solid var(--border);
+    background: var(--panel);
+    position:sticky; top:0; z-index:20;
+  }
+  .brand{display:flex; align-items:center; gap:10px; font-weight:700; font-size:18px;}
+  .brand-badge{
+    width:32px; height:32px; border-radius:9px;
+    background: linear-gradient(135deg,var(--accent),var(--accent-2));
+    display:flex; align-items:center; justify-content:center; font-size:16px;
+  }
+  .gear-btn{
+    background: var(--panel-2); border:1px solid var(--border); color:var(--text);
+    padding:8px 14px; border-radius:8px; cursor:pointer; font-size:13px;
+  }
+  .gear-btn:hover{border-color:var(--accent);}
+
+  .hero{
+    text-align:center; padding:64px 20px 40px;
+    background: radial-gradient(circle at 50% 0%, rgba(124,92,255,0.15), transparent 60%);
+  }
+  .hero h1{font-size:38px; font-weight:800; margin-bottom:12px;}
+  .hero p{color:var(--text-dim); font-size:15px;}
+  .hero .accent{color:var(--accent-2);}
+
+  .container{max-width:1180px; margin:0 auto; padding:0 20px 60px;}
+
+  .filter-bar{
+    display:flex; flex-wrap:wrap; align-items:center; gap:10px;
+    background:var(--panel); border:1px solid var(--border); border-radius:14px;
+    padding:16px 18px; margin-top:-10px; margin-bottom:26px;
+  }
+  .chip{
+    padding:8px 16px; border-radius:20px; border:1px solid var(--border);
+    background:var(--panel-2); color:var(--text-dim); font-size:13px; cursor:pointer;
+    transition:.15s;
+  }
+  .chip.active{background:var(--accent); border-color:var(--accent); color:#fff;}
+  .chip:hover{border-color:var(--accent);}
+  .filter-bar .spacer{flex:1;}
+  .status-text{font-size:13px; color:var(--text-dim);}
+  .status-text b{color:var(--accent-2);}
+
+  .stats-row{
+    display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:30px;
+  }
+  .stat-card{
+    background:var(--panel); border:1px solid var(--border); border-radius:14px;
+    padding:18px 20px;
+  }
+  .stat-card .label{font-size:13px; color:var(--text-dim); margin-bottom:6px;}
+  .stat-card .value{font-size:26px; font-weight:800;}
+  .stat-card .value.pink{color:var(--danger);}
+  .stat-card .value.teal{color:var(--accent-2);}
+  .stat-card .value.purple{color:var(--accent);}
+
+  .grid-2{display:grid; grid-template-columns:1fr 1fr; gap:18px;}
+  @media(max-width:900px){ .grid-2{grid-template-columns:1fr;} .stats-row{grid-template-columns:repeat(2,1fr);} }
+
+  .panel{
+    background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:22px;
+  }
+  .panel h2{font-size:17px; margin-bottom:4px;}
+  .panel .sub{font-size:13px; color:var(--text-dim); margin-bottom:16px;}
+
+  /* Thumbnail-first video cards — title is truncated in JS (not just CSS
+     ellipsis) so it reads as a short, consistent label instead of a long
+     line that gets cut off awkwardly on narrow screens. */
+  .video-grid{
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(140px,1fr)); gap:10px;
+  }
+  .video-card{
+    background:var(--panel-2); border:1px solid var(--border); border-radius:10px; overflow:hidden;
+    cursor:pointer; transition:.15s;
+  }
+  .video-card:hover{border-color:var(--accent);}
+  .vcard-thumb-wrap{position:relative; width:100%; aspect-ratio:16/9; background:#000;}
+  .vcard-thumb{width:100%; height:100%; object-fit:cover; display:block;}
+  .vcard-rank{
+    position:absolute; top:6px; left:6px; background:rgba(0,0,0,.72); color:#fff;
+    font-size:11px; font-weight:800; padding:2px 7px; border-radius:6px;
+  }
+  .vcard-dur{
+    position:absolute; bottom:6px; right:6px; background:rgba(0,0,0,.72); color:#fff;
+    font-size:10.5px; padding:2px 6px; border-radius:5px;
+  }
+  .vcard-title{
+    font-size:12.5px; font-weight:600; padding:9px 9px 2px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .vcard-meta{font-size:11px; color:var(--text-dim); padding:0 9px 10px;}
+
+  .region-block{margin-bottom:22px;}
+  .region-block:last-child{margin-bottom:0;}
+  .region-list-scroll{height:480px; overflow-y:auto; padding-right:4px;}
+  .region-list-scroll::-webkit-scrollbar{width:8px;}
+  .region-list-scroll::-webkit-scrollbar-thumb{background:var(--border); border-radius:8px;}
+  .region-title{
+    display:flex; align-items:center; gap:8px; font-size:14px; font-weight:700; margin-bottom:8px;
+  }
+  .region-flag{
+    font-size:12px; padding:2px 8px; border-radius:6px; background:var(--panel-2);
+    border:1px solid var(--border); color:var(--accent-2);
+  }
+
+  .cat-card{
+    display:flex; gap:12px; align-items:center; padding:14px; border-radius:12px;
+    background:var(--panel-2); border:1px solid var(--border); margin-bottom:12px;
+    cursor:pointer; transition:.15s;
+  }
+  .cat-card:last-child{margin-bottom:0;}
+  .cat-card:hover{border-color:var(--accent);}
+  .cat-tag{
+    font-size:11px; font-weight:700; padding:4px 9px; border-radius:6px; color:#fff; flex-shrink:0;
+  }
+  .cat-card .cinfo{flex:1; min-width:0;}
+  .cat-card .cinfo .cnum{font-size:20px; font-weight:800;}
+  .cat-card .cinfo .clabel{font-size:12px; color:var(--text-dim);}
+  .cat-card .cthumb{width:56px; height:56px; border-radius:8px; object-fit:cover; background:#000;}
+
+  .empty, .loading{
+    text-align:center; padding:40px; color:var(--text-dim); font-size:13px;
+  }
+
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(0,0,0,.6); display:none;
+    align-items:center; justify-content:center; z-index:50;
+  }
+  .modal-overlay.open{display:flex;}
+  .modal{
+    background:var(--panel); border:1px solid var(--border); border-radius:14px;
+    width:420px; max-width:90vw; padding:24px;
+  }
+  .modal h3{font-size:16px; margin-bottom:6px;}
+  .modal p{font-size:12.5px; color:var(--text-dim); margin-bottom:14px;}
+  .modal input{
+    width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--border);
+    background:var(--panel-2); color:var(--text); font-size:13px; margin-bottom:12px;
+  }
+  .modal .row{display:flex; gap:8px; justify-content:flex-end;}
+  .modal button{
+    padding:9px 16px; border-radius:8px; border:1px solid var(--border); cursor:pointer;
+    background:var(--panel-2); color:var(--text); font-size:13px;
+  }
+  .modal button.primary{background:var(--accent); border-color:var(--accent); color:#fff;}
+  .modal.wide{width:820px;}
+
+  .hidden{display:none !important;}
+
+  /* Tab nav */
+  .tab-nav{display:flex; gap:4px;}
+  .tab-btn{
+    background:transparent; border:none; color:var(--text-dim); font-size:14px; font-weight:600;
+    padding:8px 14px; border-radius:8px; cursor:pointer;
+  }
+  .tab-btn.active{background:var(--panel-2); color:var(--text);}
+  .tab-btn:hover{color:var(--text);}
+
+  /* Channel finder search row */
+  .search-input{
+    background:var(--panel-2); border:1px solid var(--border); color:var(--text);
+    padding:8px 12px; border-radius:8px; font-size:13px; min-width:220px;
+  }
+  .icon-btn{
+    background:var(--panel-2); border:1px solid var(--border); color:var(--text);
+    padding:8px 12px; border-radius:8px; cursor:pointer; font-size:13px;
+  }
+  .icon-btn:hover{border-color:var(--accent);}
+
+  /* Channel table */
+  .ch-table{width:100%; border-collapse:collapse; font-size:13px;}
+  .ch-table th{
+    text-align:left; color:var(--text-dim); font-weight:600; font-size:12px;
+    padding:10px 8px; border-bottom:1px solid var(--border); white-space:nowrap;
+  }
+  .ch-table th.sortable{cursor:pointer;}
+  .ch-table th.sortable:hover{color:var(--text);}
+  .ch-table td{padding:12px 8px; border-bottom:1px solid var(--border); vertical-align:middle;}
+  .ch-table tr:hover td{background:var(--panel-2);}
+  .ch-info{display:flex; align-items:center; gap:10px; min-width:220px;}
+  .ch-avatar{width:40px; height:40px; border-radius:50%; object-fit:cover; background:#000; flex-shrink:0;}
+  .ch-name-block .ch-name{font-weight:700; font-size:13.5px; display:flex; align-items:center; gap:6px;}
+  .ch-name-block .ch-handle{font-size:11.5px; color:var(--text-dim);}
+  .ch-tags{display:flex; gap:4px; margin-top:4px; flex-wrap:wrap;}
+  .ch-tag{font-size:10.5px; padding:2px 7px; border-radius:5px; background:var(--panel-2); border:1px solid var(--border); color:var(--accent-2);}
+  .ch-thumbs{display:flex; gap:4px;}
+  .ch-thumbs a{display:block; border-radius:6px; overflow:hidden; transition:.15s; flex-shrink:0;}
+  .ch-thumbs a:hover{outline:2px solid var(--accent); transform:scale(1.08);}
+  .ch-thumbs img{width:44px; height:44px; border-radius:6px; object-fit:cover; background:#000; display:block;}
+  .grade-badge{
+    font-size:11px; font-weight:800; width:20px; height:20px; border-radius:5px;
+    display:inline-flex; align-items:center; justify-content:center; color:#fff; flex-shrink:0;
+  }
+  .grade-S{background:#f5a524;} .grade-A{background:#7c5cff;} .grade-B{background:#3b82f6;}
+  .grade-C{background:#2dd4bf;} .grade-D{background:#9298a8;} .grade-F{background:#ff5470;}
+  .delta-up{color:#2dd4bf;} .delta-down{color:#ff5470;}
+  .row-actions{display:flex; gap:6px;}
+  .row-actions button{
+    background:var(--panel-2); border:1px solid var(--border); color:var(--text);
+    width:30px; height:30px; border-radius:8px; cursor:pointer; font-size:13px;
+  }
+  .row-actions button.fav-active{color:var(--danger); border-color:var(--danger);}
+  .row-actions button:hover{border-color:var(--accent);}
+
+  /* Advanced filter modal */
+  .filter-group{margin-bottom:16px;}
+  .filter-label{font-size:12.5px; color:var(--text-dim); margin-bottom:8px; font-weight:600;}
+  .chip-row{display:flex; gap:8px; flex-wrap:wrap;}
+  .chip.mini{padding:6px 12px; font-size:12px;}
+  .range-row{display:flex; align-items:center; gap:8px;}
+  .range-row input{
+    flex:1; padding:8px 10px; border-radius:8px; border:1px solid var(--border);
+    background:var(--panel-2); color:var(--text); font-size:13px;
+  }
+  .range-row span{color:var(--text-dim);}
+
+  #catFilterChips.chip-row{max-height:280px; overflow-y:auto;}
+
+
+  /* 쿠팡파트너스 다이나믹 배너 */
+  .cp-banner{
+    background:var(--panel); border-bottom:1px solid var(--border);
+    padding:14px 16px 10px; text-align:center;
+  }
+  .cp-banner-inner{
+    display:flex; justify-content:center;
+    max-width:100%; overflow-x:auto;   /* fixed-width Coupang iframe must not widen the page */
+  }
+  .cp-banner-inner iframe{border:0; display:block;}
+  .cp-disclosure{margin-top:8px; font-size:11px; color:var(--text-dim); line-height:1.4;}
+
+  /* ---------- Mobile ---------- */
+  @media(max-width:640px){
+    header.topbar{
+      flex-wrap:wrap; row-gap:8px; padding:10px 14px;
+    }
+    .brand{font-size:14.5px; gap:8px;}
+    .brand-badge{width:26px; height:26px; font-size:13px;}
+    .gear-btn{font-size:12px; padding:6px 10px;}
+    .tab-nav{order:3; width:100%; justify-content:center;}
+    .tab-btn{font-size:12.5px; padding:7px 10px;}
+
+    .hero{padding:32px 16px 24px;}
+    .hero h1{font-size:23px;}
+    .hero p{font-size:12.5px;}
+
+    .container{padding:0 12px 40px;}
+    .filter-bar{padding:12px; gap:8px;}
+    .chip{padding:6px 12px; font-size:12px;}
+
+    .stats-row{grid-template-columns:repeat(2,1fr); gap:10px;}
+    .stat-card{padding:14px 16px;}
+    .stat-card .value{font-size:21px;}
+
+    .region-list-scroll{height:420px;}
+    .video-grid{grid-template-columns:repeat(auto-fill, minmax(120px,1fr)); gap:8px;}
+    .vcard-title{font-size:12px; padding:7px 7px 2px;}
+    .vcard-meta{font-size:10.5px; padding:0 7px 8px;}
+
+    .cp-banner{padding:10px 10px 8px;}
+    .cp-disclosure{font-size:10px;}
+    .panel{padding:16px;}
+    .search-input{min-width:0; flex:1 1 100%;}
+
+    .modal{padding:18px;}
+    .ch-info{min-width:170px;}
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><div class="brand-badge">🔥</div>인기영상 대시보드</div>
+  <nav class="tab-nav">
+    <button class="tab-btn active" id="tabBtnVideos" data-tab="videos">실시간 인기영상</button>
+    <button class="tab-btn" id="tabBtnChannels" data-tab="channels">채널 파인더</button>
+  </nav>
+  <a class="gear-btn" href="/">사주·이름 풀이 →</a>
+</header>
+
+<!-- ===== 쿠팡파트너스 다이나믹 배너 =====
+     Coupang's widget inserts its iframe at the position of the *currently
+     executing* script, so these two tags must stay inline and synchronous
+     here — loading g.js dynamically would leave document.currentScript null
+     and drop the banner at the end of <body> instead. -->
+<div class="cp-banner" id="cpBanner">
+  <div class="cp-banner-inner">
+    <script src="https://ads-partners.coupang.com/g.js"></script>
+    <script>
+      // Guarded so a blocked/failed g.js doesn't throw a ReferenceError into
+      // the page's global error handler.
+      if (typeof PartnersCoupang !== 'undefined') {
+        new PartnersCoupang.G({"id":1023747,"template":"carousel","trackingCode":"AF2918695","width":"680","height":"140","tsource":""});
+      }
+    </script>
+  </div>
+  <p class="cp-disclosure">이 사이트는 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p>
+</div>
+
+<script>
+  // If an ad blocker or network error meant no banner rendered, hide the whole
+  // strip rather than leaving a bare disclosure line above an empty box.
+  window.addEventListener('load', function(){
+    setTimeout(function(){
+      var box = document.getElementById('cpBanner');
+      if (box && !box.querySelector('iframe')) box.style.display = 'none';
+    }, 3000);
+  });
+</script>
+
+<section id="tabVideos">
+
+<section class="hero">
+  <h1>지금 뜨는 <span class="accent">유튜브 인기 영상</span></h1>
+  <p>YouTube Data API로 국가별 · 카테고리별 실시간 인기 영상을 한눈에 확인하세요.</p>
+</section>
+
+<div class="container">
+
+  <div class="filter-bar">
+    <div class="chip active" data-region="ALL">전체</div>
+    <div class="chip" data-region="KR">🇰🇷 한국</div>
+    <div class="chip" data-region="US">🇺🇸 미국</div>
+    <div class="chip" data-region="JP">🇯🇵 일본</div>
+    <div class="chip" data-region="IN">🇮🇳 인도</div>
+    <div class="spacer"></div>
+    <div class="status-text" id="statusText">데이터를 불러오는 중입니다...</div>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat-card"><div class="label">전체 영상</div><div class="value" id="statTotal">-</div></div>
+    <div class="stat-card"><div class="label">숏폼(≤60초)</div><div class="value pink" id="statShorts">-</div></div>
+    <div class="stat-card"><div class="label">롱폼</div><div class="value teal" id="statLong">-</div></div>
+    <div class="stat-card"><div class="label">최고 조회수</div><div class="value purple" id="statMaxView">-</div></div>
+  </div>
+
+  <div class="grid-2">
+    <div class="panel">
+      <h2>국가별 실시간 랭킹</h2>
+      <div class="sub">국가별로 지금 뜨는 영상을 바로 확인하세요.</div>
+      <div id="regionRankings"><div class="loading">불러오는 중...</div></div>
+    </div>
+
+    <div class="panel">
+      <h2>카테고리별 TOP</h2>
+      <div class="sub">현재 필터 기준 영상이 가장 많이 몰린 카테고리입니다.</div>
+      <div id="categoryTop"><div class="loading">불러오는 중...</div></div>
+    </div>
+  </div>
+
+</div>
+
+</section>
+
+<section id="tabChannels" class="hidden">
+
+<section class="hero">
+  <h1>HOT <span class="accent">채널 파인더</span></h1>
+  <p>구독자 대비 조회수가 급성장하는 채널을 실시간 인기영상 기준으로 찾아보세요.</p>
+</section>
+
+<div class="container">
+
+  <div class="filter-bar">
+    <input type="text" class="search-input" id="chSearchInput" placeholder="채널명 검색...">
+    <button class="icon-btn" id="chSearchBtn">🔍 검색</button>
+    <button class="icon-btn" id="openAdvFilter">📊 고급 필터</button>
+    <button class="icon-btn" id="openCatFilter">🏷 카테고리 필터</button>
+    <button class="icon-btn" id="chRefreshBtn">🔄 새로고침</button>
+    <div class="spacer"></div>
+    <div class="status-text" id="chStatusText">인기영상 데이터를 먼저 불러와주세요.</div>
+  </div>
+
+  <div class="panel">
+    <div id="chResultCount" style="font-size:12.5px; color:var(--text-dim); margin-bottom:10px;"></div>
+    <div style="overflow-x:auto;">
+      <table class="ch-table">
+        <thead>
+          <tr>
+            <th>채널 정보</th>
+            <th class="sortable" data-sortkey="subs">구독자</th>
+            <th>최근 인기영상</th>
+            <th class="sortable" data-sortkey="videos">영상 수</th>
+            <th class="sortable" data-sortkey="views">조회수 / 증감</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="chTableBody">
+          <tr><td colspan="6"><div class="loading">"새로고침"을 눌러 채널 데이터를 불러오세요.</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+</section>
+
+<div class="modal-overlay" id="advFilterOverlay">
+  <div class="modal">
+    <h3>📊 고급 필터</h3>
+    <p>채널 파인더 목록에 적용할 조건을 설정하세요.</p>
+
+    <div class="filter-group">
+      <div class="filter-label">일일 조회수 기준</div>
+      <div class="chip-row" id="periodChips">
+        <div class="chip mini active" data-period="0">없음</div>
+        <div class="chip mini" data-period="1">1일</div>
+        <div class="chip mini" data-period="7">7일</div>
+        <div class="chip mini" data-period="30">30일</div>
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <div class="filter-label">정렬 기준</div>
+      <div class="chip-row" id="sortChips">
+        <div class="chip mini active" data-sort="views">총 조회수</div>
+        <div class="chip mini" data-sort="subs">구독자</div>
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <div class="filter-label">구독자 범위</div>
+      <div class="range-row">
+        <input type="number" id="subMin" placeholder="최소" min="0">
+        <span>~</span>
+        <input type="number" id="subMax" placeholder="최대" min="0">
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <div class="filter-label">국가</div>
+      <div class="chip-row" id="countryChips">
+        <div class="chip mini" data-country="KR">🇰🇷 한국</div>
+        <div class="chip mini" data-country="US">🇺🇸 미국</div>
+        <div class="chip mini" data-country="JP">🇯🇵 일본</div>
+        <div class="chip mini" data-country="IN">🇮🇳 인도</div>
+        <div class="chip mini" data-country="ETC">🌐 그 외</div>
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <div class="filter-label">등급 필터 (S~F)</div>
+      <div class="chip-row" id="gradeChips">
+        <div class="chip mini" data-grade="S">S</div>
+        <div class="chip mini" data-grade="A">A</div>
+        <div class="chip mini" data-grade="B">B</div>
+        <div class="chip mini" data-grade="C">C</div>
+        <div class="chip mini" data-grade="D">D</div>
+        <div class="chip mini" data-grade="F">F</div>
+      </div>
+      <div style="font-size:11px; color:var(--text-dim); margin-top:6px;">
+        * 등급은 실제 수익 데이터가 아니라, 수집된 채널들 사이에서 "구독자 대비 조회수 성장률" 순위로 제가 임의로 매긴 상대 등급입니다.
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <div class="filter-label">예상 수익 단가 (원 / 조회수 1,000회)</div>
+      <input type="number" id="rpmInput" min="0" style="width:140px;">
+    </div>
+
+    <div class="row" style="justify-content:space-between;">
+      <button id="advResetBtn">초기화</button>
+      <button class="primary" id="advApplyBtn">필터 적용</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="catFilterOverlay">
+  <div class="modal">
+    <h3>🏷 카테고리 필터</h3>
+    <p>관심있는 카테고리를 선택하세요 (복수 선택 가능). YouTube가 채널의 최근 인기영상을 분석해 붙인 세부 주제 태그 기준입니다.</p>
+    <div class="chip-row" id="catFilterChips"></div>
+    <div class="row" style="justify-content:space-between; margin-top:16px;">
+      <button id="catResetBtn">초기화</button>
+      <button class="primary" id="catApplyBtn">필터 적용</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="videoDetailOverlay">
+  <div class="modal wide">
+    <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:10px;">
+      <h3 id="vDetailTitle">영상 정보</h3>
+      <button id="vDetailClose">✕</button>
+    </div>
+    <div style="position:relative; width:100%; aspect-ratio:16/9; background:#000; border-radius:10px; overflow:hidden; margin-bottom:14px;">
+      <iframe id="vDetailIframe" style="width:100%; height:100%; border:0;" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen src=""></iframe>
+    </div>
+    <div id="vDetailInfo"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="catDetailOverlay">
+  <div class="modal wide">
+    <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:10px;">
+      <h3 id="catDetailTitle">카테고리 상세</h3>
+      <button id="catDetailClose">✕</button>
+    </div>
+    <div id="catDetailBody" style="max-height:65vh; overflow-y:auto;"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="chDetailOverlay">
+  <div class="modal wide">
+    <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:4px;">
+      <h3 id="chDetailTitle">채널 통계 추이</h3>
+      <button id="chDetailClose">✕</button>
+    </div>
+    <p>이 브라우저를 열 때마다 하루 1회 스냅샷이 쌓입니다. 처음 사용하면 데이터가 하루 1개뿐이라 그래프가 비어 보이는 게 정상입니다.</p>
+    <div id="chDetailChartWrap" style="margin:14px 0;">
+      <canvas id="chDetailChart" width="760" height="260" style="width:100%; height:260px; background:var(--panel-2); border-radius:10px;"></canvas>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="ch-table" id="chDetailTable"></table>
+    </div>
+  </div>
+</div>
+
+<script>
+const REGIONS = [
+  {code:'KR', label:'한국', flag:'🇰🇷'},
+  {code:'US', label:'미국', flag:'🇺🇸'},
+  {code:'JP', label:'일본', flag:'🇯🇵'},
+  {code:'IN', label:'인도', flag:'🇮🇳'},
+];
+const VIDEOS_PER_REGION = 200; // YouTube API caps a single request at 50, so this paginates
+const CAT_COLORS = ['#7c5cff','#2dd4bf','#ff5470','#f5a524','#3b82f6','#ec4899','#22c55e'];
+
+// localStorage can throw (privacy settings, browser policy, etc).
+// Never let that take down the whole script — fall back to in-memory only.
+function safeGet(key){
+  try{ return localStorage.getItem(key); }catch(e){ console.warn('localStorage 사용 불가:', e); return null; }
+}
+function safeSet(key, val){
+  try{ localStorage.setItem(key, val); return true; }catch(e){ console.warn('localStorage 저장 불가:', e); return false; }
+}
+
+let currentRegionFilter = 'ALL';
+let dataByRegion = {}; // { KR: { videos:[...], categoryMap:{} } }
+
+const $ = (id) => document.getElementById(id);
+
+function formatNum(n){
+  n = Number(n) || 0;
+  if(n >= 100000000) return (n/100000000).toFixed(1).replace(/\.0$/,'') + '억';
+  if(n >= 10000) return (n/10000).toFixed(1).replace(/\.0$/,'') + '만';
+  return n.toLocaleString('ko-KR');
+}
+
+function parseISODuration(iso){
+  const m = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if(!m) return 0;
+  const h = parseInt(m[1]||0), mi = parseInt(m[2]||0), s = parseInt(m[3]||0);
+  return h*3600 + mi*60 + s;
+}
+
+function formatDuration(sec){
+  const h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60), s = sec%60;
+  if(h>0) return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  return `${m}:${String(s).padStart(2,'0')}`;
+}
+
+// All real YouTube calls go through our own /api/yt/* proxy — the actual
+// Google API key lives only on the server (Vercel env var), never here.
+// The site is public, so the proxy needs no session; it allow-lists a few
+// read endpoints and caches responses at the edge to protect the quota.
+async function ytFetch(path, params){
+  const url = new URL(`/api/yt/${path}`, location.origin);
+  Object.entries(params).forEach(([k,v]) => url.searchParams.set(k,v));
+  const res = await fetch(url);
+  if(!res.ok){
+    const err = await res.json().catch(()=>({}));
+    throw new Error(err?.error?.message || `API 요청 실패 (${res.status})`);
+  }
+  return res.json();
+}
+
+// YouTube's per-video "topicDetails.topicCategories" field returns Wikipedia
+// URLs from a fixed, much more granular taxonomy than the ~15 official
+// videoCategories (this is the "Google AI analyzes the video and tags it"
+// classification). We translate the known slugs to Korean; anything outside
+// this list still shows up, just using an auto-derived English-ish label.
+const TOPIC_LABELS = {
+  'Music': '음악', 'Christian_music': '기독교 음악', 'Classical_music': '클래식 음악',
+  'Country_music': '컨트리 음악', 'Electronic_music': '일렉트로닉 음악', 'Hip_hop_music': '힙합',
+  'Independent_music': '인디 음악', 'Jazz': '재즈', 'Music_of_Asia': '아시아 음악',
+  'Music_of_Latin_America': '라틴 아메리카 음악', 'Pop_music': '팝 음악', 'Reggae': '레게',
+  'Rhythm_and_blues': '알앤비', 'Rock_music': '록 음악', 'Soul_music': '소울 음악',
+  'Video_game_culture': '비디오 게임 문화', 'Action_game': '액션 게임',
+  'Action-adventure_game': '액션 어드벤처 게임', 'Casual_game': '캐주얼 게임',
+  'Music_video_game': '음악 게임', 'Puzzle_video_game': '퍼즐 게임',
+  'Racing_video_game': '레이싱 게임', 'Role-playing_video_game': 'RPG 게임',
+  'Simulation_video_game': '시뮬레이션 게임', 'Sports_game': '스포츠 게임',
+  'Strategy_video_game': '전략 게임',
+  'Sport': '스포츠', 'American_football': '미식 축구', 'Baseball': '야구',
+  'Basketball': '농구', 'Boxing': '복싱', 'Cricket': '크리켓',
+  'Football': '축구', 'Association_football': '축구', 'Golf': '골프',
+  'Ice_hockey': '아이스하키', 'Mixed_martial_arts': '격투기', 'Motorsport': '모터 스포츠',
+  'Tennis': '테니스', 'Volleyball': '배구',
+  'Entertainment': '엔터테인먼트', 'Humour': '유머', 'Film': '영화/애니',
+  'Performing_arts': '공연 예술', 'Professional_wrestling': '프로레슬링',
+  'Television_program': 'TV 프로그램',
+  'Lifestyle_(sociology)': '라이프스타일', 'Fashion': '패션', 'Physical_fitness': '피트니스',
+  'Food': '음식', 'Hobby': '취미', 'Pet': '반려동물', 'Physical_attractiveness': '신체적 매력',
+  'Technology': '기술/테크', 'Tourism': '여행/관광', 'Vehicle': '자동차',
+  'Business': '비즈니스', 'Health': '건강', 'Military': '군사', 'Politics': '정치',
+  'Religion': '종교', 'Society': '사회', 'Knowledge': '지식',
+};
+
+function parseTopicUrl(url){
+  const slug = decodeURIComponent(url.split('/wiki/')[1] || url);
+  if(TOPIC_LABELS[slug]) return TOPIC_LABELS[slug];
+  return slug.replace(/_/g, ' ').replace(/\(.*?\)/g, '').trim() || slug;
+}
+
+function escapeHtml(str){
+  return String(str||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function loadCategoryMap(regionCode){
+  const data = await ytFetch('videoCategories', {part:'snippet', regionCode});
+  const map = {};
+  (data.items||[]).forEach(c => { map[c.id] = c.snippet.title; });
+  return map;
+}
+
+async function fetchMostPopular(regionCode, target){
+  // YouTube caps a single request at 50 items, so page through until we
+  // hit the target count or run out of results (mostPopular charts top out
+  // around 200 per region anyway).
+  let items = [];
+  let pageToken = '';
+  while(items.length < target){
+    const params = {
+      part: 'snippet,statistics,contentDetails,topicDetails',
+      chart: 'mostPopular',
+      regionCode,
+      maxResults: Math.min(50, target - items.length),
+    };
+    if(pageToken) params.pageToken = pageToken;
+    const data = await ytFetch('videos', params);
+    items = items.concat(data.items || []);
+    if(!data.nextPageToken) break;
+    pageToken = data.nextPageToken;
+  }
+  return items;
+}
+
+async function loadRegion(regionCode){
+  const [rawVideos, categoryMap] = await Promise.all([
+    fetchMostPopular(regionCode, VIDEOS_PER_REGION),
+    loadCategoryMap(regionCode)
+  ]);
+  const videos = rawVideos.map(v => ({
+    id: v.id,
+    title: v.snippet.title,
+    channel: v.snippet.channelTitle,
+    channelId: v.snippet.channelId,
+    thumb: v.snippet.thumbnails?.medium?.url || v.snippet.thumbnails?.default?.url,
+    views: Number(v.statistics.viewCount||0),
+    likes: Number(v.statistics.likeCount||0),
+    comments: Number(v.statistics.commentCount||0),
+    categoryId: v.snippet.categoryId,
+    categoryName: categoryMap[v.snippet.categoryId] || '기타',
+    topicCategories: (v.topicDetails?.topicCategories || []).map(parseTopicUrl),
+    durationSec: parseISODuration(v.contentDetails.duration),
+    seenInRegion: regionCode,
+  }));
+  return { videos, categoryMap };
+}
+
+async function loadAll(){
+  $('statusText').textContent = '불러오는 중...';
+  $('regionRankings').innerHTML = '<div class="loading">불러오는 중...</div>';
+  $('categoryTop').innerHTML = '<div class="loading">불러오는 중...</div>';
+  try{
+    const results = await Promise.all(REGIONS.map(r => loadRegion(r.code)));
+    REGIONS.forEach((r, i) => dataByRegion[r.code] = results[i]);
+    $('statusText').innerHTML = `업데이트 완료 · <b>${new Date().toLocaleTimeString('ko-KR')}</b>`;
+    render();
+  }catch(e){
+    $('statusText').textContent = '오류: ' + e.message;
+    $('regionRankings').innerHTML = `<div class="empty">데이터를 불러오지 못했습니다.<br>${e.message}</div>`;
+    $('categoryTop').innerHTML = '';
+  }
+}
+
+function activeRegions(){
+  return currentRegionFilter === 'ALL' ? REGIONS.map(r=>r.code) : [currentRegionFilter];
+}
+
+function allActiveVideos(){
+  return activeRegions().flatMap(code => (dataByRegion[code]?.videos || []));
+}
+
+function renderStats(){
+  const vids = allActiveVideos();
+  const shorts = vids.filter(v => v.durationSec <= 60).length;
+  const long = vids.length - shorts;
+  const maxView = vids.reduce((m,v) => Math.max(m, v.views), 0);
+  $('statTotal').textContent = vids.length ? vids.length + '개' : '-';
+  $('statShorts').textContent = vids.length ? shorts + '개' : '-';
+  $('statLong').textContent = vids.length ? long + '개' : '-';
+  $('statMaxView').textContent = vids.length ? formatNum(maxView) : '-';
+}
+
+// Character-count truncation (not just CSS ellipsis) so titles read as a
+// short, consistent label — e.g. "무한다이노…" — regardless of column width.
+function truncateTitle(title, n){
+  const t = (title || '').trim();
+  return t.length > n ? t.slice(0, n) + '…' : t;
+}
+
+// id -> video object, refreshed on every render so click handlers can look
+// up the full record (region cards, category-detail cards, etc all share this).
+let videoIndex = {};
+
+function videoCardHTML(v, rank){
+  videoIndex[v.id] = v;
+  const hoverInfo = `${v.title}\n조회수 ${formatNum(v.views)} · 좋아요 ${formatNum(v.likes)}\n예상 누적 수익 ${formatWon(estimatedRevenueWon(v.views))} (클릭하면 상세 정보)`;
+  return `
+  <div class="video-card" data-video-id="${v.id}" title="${escapeHtml(hoverInfo)}">
+    <div class="vcard-thumb-wrap">
+      <img class="vcard-thumb" src="${v.thumb}" alt="" loading="lazy">
+      <span class="vcard-rank">${rank}</span>
+      <span class="vcard-dur">${formatDuration(v.durationSec)}</span>
+    </div>
+    <div class="vcard-title">${escapeHtml(truncateTitle(v.title, 12))}</div>
+    <div class="vcard-meta">${escapeHtml(v.channel)} · 조회 ${formatNum(v.views)}</div>
+  </div>`;
+}
+
+// Delegate video-card clicks from a container into the shared detail modal.
+function bindVideoCardClicks(container){
+  container.querySelectorAll('.video-card').forEach(card => {
+    card.addEventListener('click', () => openVideoDetail(card.dataset.videoId));
+  });
+}
+
+function renderRegionRankings(){
+  const codes = activeRegions();
+  const html = codes.map(code => {
+    const r = REGIONS.find(x=>x.code===code);
+    const vids = dataByRegion[code]?.videos || [];
+    return `
+    <div class="region-block">
+      <div class="region-title">${r.flag} ${r.label} <span class="region-flag">${vids.length}개</span></div>
+      <div class="region-list-scroll">
+        <div class="video-grid">
+          ${vids.map((v,i) => videoCardHTML(v, i+1)).join('') || '<div class="empty">데이터 없음</div>'}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  $('regionRankings').innerHTML = html || '<div class="empty">데이터 없음</div>';
+  bindVideoCardClicks($('regionRankings'));
+}
+
+function openVideoDetail(id){
+  const v = videoIndex[id];
+  if(!v) return;
+  $('vDetailTitle').textContent = v.title;
+  $('vDetailIframe').src = `https://www.youtube.com/embed/${v.id}?autoplay=1`;
+  $('vDetailInfo').innerHTML = `
+    <div style="margin-bottom:14px;">
+      <a href="https://www.youtube.com/channel/${v.channelId}" target="_blank" rel="noopener"
+         style="color:var(--accent-2); font-weight:700; font-size:14px;">
+        ${escapeHtml(v.channel)} 채널 정보 보기 →
+      </a>
+    </div>
+    <div class="stats-row" style="margin-bottom:14px;">
+      <div class="stat-card"><div class="label">조회수</div><div class="value">${formatNum(v.views)}</div></div>
+      <div class="stat-card"><div class="label">좋아요</div><div class="value teal">${formatNum(v.likes)}</div></div>
+      <div class="stat-card"><div class="label">댓글</div><div class="value">${formatNum(v.comments)}</div></div>
+      <div class="stat-card"><div class="label">예상 누적 수익</div><div class="value purple">${formatWon(estimatedRevenueWon(v.views))}</div></div>
+    </div>
+    <div style="font-size:11px; color:var(--text-dim); margin-bottom:14px;">
+      * 예상 수익은 실제 데이터가 아니라, 설정된 단가(1,000회당 ${rpm.toLocaleString('ko-KR')}원) 기준 추정치입니다.
+    </div>
+    <a class="icon-btn" href="https://www.youtube.com/watch?v=${v.id}" target="_blank" rel="noopener" style="display:inline-block;">
+      🔗 유튜브에서 바로 보기
+    </a>
+  `;
+  $('videoDetailOverlay').classList.add('open');
+}
+
+// name -> {count, views, sample, videos:[...]}, refreshed on every render
+// so the category-detail modal can list everything in that bucket.
+let categoryIndex = {};
+
+function renderCategoryTop(){
+  const vids = allActiveVideos();
+  const byCat = {};
+  vids.forEach(v => {
+    if(!byCat[v.categoryName]) byCat[v.categoryName] = {count:0, views:0, sample:v, videos:[]};
+    byCat[v.categoryName].count++;
+    byCat[v.categoryName].views += v.views;
+    byCat[v.categoryName].videos.push(v);
+  });
+  categoryIndex = byCat;
+  const top = Object.entries(byCat)
+    .sort((a,b) => b[1].count - a[1].count)
+    .slice(0,5);
+
+  if(!top.length){ $('categoryTop').innerHTML = '<div class="empty">데이터 없음</div>'; return; }
+
+  $('categoryTop').innerHTML = top.map(([name, info], idx) => `
+    <div class="cat-card" data-cat="${escapeHtml(name)}">
+      <div class="cat-tag" style="background:${CAT_COLORS[idx % CAT_COLORS.length]}">${escapeHtml(name)}</div>
+      <img class="cthumb" src="${info.sample.thumb}" alt="">
+      <div class="cinfo">
+        <div class="cnum">${info.count}개</div>
+        <div class="clabel">${escapeHtml(info.sample.title.slice(0,26))}${info.sample.title.length>26?'…':''}</div>
+      </div>
+    </div>
+  `).join('');
+  $('categoryTop').querySelectorAll('.cat-card').forEach(card => {
+    card.addEventListener('click', () => openCategoryDetail(card.dataset.cat));
+  });
+}
+
+function openCategoryDetail(name){
+  const info = categoryIndex[name];
+  if(!info) return;
+  $('catDetailTitle').textContent = `🏷 ${name} 인기 영상 (${info.count}개)`;
+  const sorted = info.videos.slice().sort((a,b) => b.views - a.views).slice(0,30);
+  $('catDetailBody').innerHTML = `<div class="video-grid">${sorted.map((v,i) => videoCardHTML(v,i+1)).join('')}</div>`;
+  $('catDetailBody').querySelectorAll('.video-card').forEach(card => {
+    card.addEventListener('click', () => {
+      $('catDetailOverlay').classList.remove('open');
+      openVideoDetail(card.dataset.videoId);
+    });
+  });
+  $('catDetailOverlay').classList.add('open');
+}
+
+function render(){
+  renderStats();
+  renderRegionRankings();
+  renderCategoryTop();
+}
+
+// ==================================================================
+// 채널 파인더 (Channel Finder)
+// ------------------------------------------------------------------
+// YouTube API has no "search all channels by subscriber range" endpoint,
+// so the discovery pool here is built from channels that appear in the
+// trending-video data we already fetched. Growth/daily-view figures need
+// real history, which YouTube doesn't expose either — so we record one
+// snapshot per channel each day this page is opened, in localStorage,
+// and deltas only become available once a few days of snapshots exist.
+// (Note: history/favorites are stored per-browser, not shared between
+// invited users — everyone builds up their own local growth history.)
+// ==================================================================
+
+const COUNTRY_LABELS = {KR:'🇰🇷 한국', US:'🇺🇸 미국', JP:'🇯🇵 일본', IN:'🇮🇳 인도'};
+const GRADE_ORDER = ['S','A','B','C','D','F'];
+const MAX_CHANNELS_SHOWN = 200; // always cap the list, even with no search text
+
+let channelPool = {};      // channelId -> channel record
+let channelHistory = {};   // channelId -> [{date, subs, views, videos}, ...]
+try{ channelHistory = JSON.parse(safeGet('yt_ch_hist') || '{}'); }catch(e){ channelHistory = {}; }
+
+let favChannels = new Set();
+try{ favChannels = new Set(JSON.parse(safeGet('yt_ch_favs') || '[]')); }catch(e){ favChannels = new Set(); }
+
+let rpm = Number(safeGet('yt_rpm')) || 1500; // 예상 수익 단가: 원 / 조회수 1000회 (임의 추정치)
+
+let chFilters = {
+  search: '',
+  period: 0,          // 0 | 1 | 7 | 30
+  sort: 'views',       // 'views' | 'subs'
+  subMin: null,
+  subMax: null,
+  countries: new Set(),
+  grades: new Set(),
+  categories: new Set(),
+};
+
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+
+function daysAgoStr(n){
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toISOString().slice(0,10);
+}
+
+function saveChannelHistory(){ safeSet('yt_ch_hist', JSON.stringify(channelHistory)); }
+function saveFavChannels(){ safeSet('yt_ch_favs', JSON.stringify(Array.from(favChannels))); }
+
+function recordSnapshot(channelId, subs, views, videoCount){
+  const list = channelHistory[channelId] || (channelHistory[channelId] = []);
+  const today = todayStr();
+  const last = list[list.length - 1];
+  if(last && last.date === today){
+    last.subs = subs; last.views = views; last.videos = videoCount;
+  } else {
+    list.push({date: today, subs, views, videos: videoCount});
+  }
+  // keep at most ~120 days of history per channel
+  if(list.length > 120) list.splice(0, list.length - 120);
+}
+
+// Find the most recent snapshot at or before (today - days). Returns null
+// if we don't have anything that old yet (i.e. delta isn't knowable).
+function snapshotAround(channelId, days){
+  const list = channelHistory[channelId];
+  if(!list || list.length < 2) return null;
+  const target = daysAgoStr(days);
+  let best = null;
+  for(const entry of list){
+    if(entry.date <= target) best = entry;
+  }
+  return best;
+}
+
+function computeDelta(channelId, period){
+  const list = channelHistory[channelId];
+  if(!list || !list.length) return null;
+  const latest = list[list.length - 1];
+  if(period === 0) return null; // "없음" — no period comparison requested
+  const past = snapshotAround(channelId, period);
+  if(!past) return null;
+  return {
+    viewDelta: latest.views - past.views,
+    subDelta: latest.subs - past.subs,
+    fromDate: past.date,
+  };
+}
+
+function estimatedRevenueWon(viewDelta){
+  if(viewDelta == null || viewDelta <= 0) return 0;
+  return Math.round((viewDelta / 1000) * rpm);
+}
+
+function formatWon(n){
+  if(n >= 100000000) return (n/100000000).toFixed(1).replace(/\.0$/,'') + '억원';
+  if(n >= 10000) return (n/10000).toFixed(1).replace(/\.0$/,'') + '만원';
+  return n.toLocaleString('ko-KR') + '원';
+}
+
+function inferCountry(record){
+  // YouTube channels.list snippet.country isn't always set. Fall back to
+  // whichever trending regions we actually saw this channel's videos in.
+  if(record.apiCountry && COUNTRY_LABELS[record.apiCountry]) return record.apiCountry;
+  if(record.regionsSeen.size === 1) return Array.from(record.regionsSeen)[0];
+  return 'ETC';
+}
+
+async function fetchChannelsStats(ids){
+  const out = {};
+  for(let i = 0; i < ids.length; i += 50){
+    const chunk = ids.slice(i, i+50);
+    const data = await ytFetch('channels', {part: 'snippet,statistics', id: chunk.join(',')});
+    (data.items||[]).forEach(c => { out[c.id] = c; });
+  }
+  return out;
+}
+
+async function loadChannelPool(){
+  $('chStatusText').textContent = '인기영상 데이터를 불러오는 중...';
+  $('chTableBody').innerHTML = '<tr><td colspan="6"><div class="loading">불러오는 중...</div></td></tr>';
+
+  try{
+    if(!Object.keys(dataByRegion).length){
+      await loadAll();
+    }
+
+    // 1) collect unique channels + metadata from every fetched trending video
+    const byId = {};
+    REGIONS.forEach(r => {
+      (dataByRegion[r.code]?.videos || []).forEach(v => {
+        if(!v.channelId) return;
+        const rec = byId[v.channelId] || (byId[v.channelId] = {
+          id: v.channelId, title: v.channel, categories: new Set(),
+          regionsSeen: new Set(), videos: [],
+        });
+        // Prefer the richer AI-derived topic tags; fall back to the coarse
+        // official category when a video has no topicDetails.
+        (v.topicCategories.length ? v.topicCategories : [v.categoryName]).forEach(t => rec.categories.add(t));
+        rec.regionsSeen.add(v.seenInRegion);
+        if(rec.videos.length < 5) rec.videos.push({id: v.id, thumb: v.thumb, title: v.title, views: v.views});
+      });
+    });
+
+    const ids = Object.keys(byId);
+    $('chStatusText').textContent = `채널 통계 조회 중... (0/${ids.length})`;
+
+    // 2) fetch real channel stats in batches of 50
+    const stats = await fetchChannelsStats(ids);
+
+    const pool = {};
+    ids.forEach(id => {
+      const s = stats[id];
+      if(!s) return; // channel might be deleted/private since the video was fetched
+      const rec = byId[id];
+      rec.thumb = s.snippet.thumbnails?.default?.url || '';
+      rec.handle = s.snippet.customUrl || '';
+      rec.apiCountry = s.snippet.country || null;
+      rec.subs = Number(s.statistics.subscriberCount || 0);
+      rec.hiddenSubs = !!s.statistics.hiddenSubscriberCount;
+      rec.views = Number(s.statistics.viewCount || 0);
+      rec.videoCount = Number(s.statistics.videoCount || 0);
+      pool[id] = rec;
+      recordSnapshot(id, rec.subs, rec.views, rec.videoCount);
+    });
+
+    channelPool = pool;
+    saveChannelHistory();
+
+    $('chStatusText').innerHTML = `발굴된 채널 <b>${Object.keys(pool).length}</b>개 (최근 인기영상 기준) · <b>${new Date().toLocaleTimeString('ko-KR')}</b> 업데이트`;
+    populateCategoryFilterChips();
+    renderChannelTable();
+  }catch(e){
+    $('chStatusText').textContent = '오류: ' + e.message;
+    $('chTableBody').innerHTML = `<tr><td colspan="6"><div class="empty">채널 데이터를 불러오지 못했습니다.<br>${e.message}</div></td></tr>`;
+  }
+}
+
+// growth-efficiency score used for both grading and the fallback sort:
+// view growth (or lifetime views if we don't have history yet) per subscriber.
+function growthScore(rec){
+  const delta = computeDelta(rec.id, chFilters.period);
+  const viewsForScore = delta ? Math.max(delta.viewDelta, 0) : rec.views;
+  return viewsForScore / Math.max(rec.subs, 1);
+}
+
+function computeGrades(records){
+  const scored = records.map(r => ({id: r.id, score: growthScore(r)})).sort((a,b) => b.score - a.score);
+  const n = scored.length;
+  const cuts = [0.10, 0.25, 0.45, 0.70, 0.90]; // cumulative percentile boundaries for S/A/B/C/D (rest = F)
+  const grades = {};
+  scored.forEach((s, i) => {
+    const pct = n <= 1 ? 0 : i / n;
+    let grade = 'F';
+    for(let g = 0; g < cuts.length; g++){
+      if(pct < cuts[g]){ grade = GRADE_ORDER[g]; break; }
+    }
+    grades[s.id] = grade;
+  });
+  return grades;
+}
+
+function populateCategoryFilterChips(){
+  const counts = {};
+  Object.values(channelPool).forEach(rec => {
+    rec.categories.forEach(cat => { counts[cat] = (counts[cat]||0) + 1; });
+  });
+  const sorted = Object.entries(counts).sort((a,b) => b[1]-a[1]);
+  $('catFilterChips').innerHTML = sorted.map(([name, count]) => `
+    <div class="chip mini${chFilters.categories.has(name)?' active':''}" data-cat="${name}">${name} (${count})</div>
+  `).join('') || '<div class="empty">카테고리 없음</div>';
+  $('catFilterChips').querySelectorAll('.chip[data-cat]').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const cat = chip.dataset.cat;
+      if(chFilters.categories.has(cat)) chFilters.categories.delete(cat); else chFilters.categories.add(cat);
+      chip.classList.toggle('active');
+    });
+  });
+}
+
+function filteredChannels(){
+  const grades = computeGrades(Object.values(channelPool));
+  let list = Object.values(channelPool).map(rec => ({rec, grade: grades[rec.id]}));
+
+  if(chFilters.search.trim()){
+    const q = chFilters.search.trim().toLowerCase();
+    list = list.filter(({rec}) => rec.title.toLowerCase().includes(q));
+  }
+  if(chFilters.subMin != null) list = list.filter(({rec}) => rec.subs >= chFilters.subMin);
+  if(chFilters.subMax != null) list = list.filter(({rec}) => rec.subs <= chFilters.subMax);
+  if(chFilters.countries.size) list = list.filter(({rec}) => chFilters.countries.has(inferCountry(rec)));
+  if(chFilters.grades.size) list = list.filter(({grade}) => chFilters.grades.has(grade));
+  if(chFilters.categories.size) list = list.filter(({rec}) => Array.from(rec.categories).some(c => chFilters.categories.has(c)));
+
+  list.sort((a,b) => chFilters.sort === 'subs' ? b.rec.subs - a.rec.subs : b.rec.views - a.rec.views);
+  const total = list.length;
+  return { list: list.slice(0, MAX_CHANNELS_SHOWN), total };
+}
+
+function channelRowHTML({rec, grade}){
+  const delta = computeDelta(rec.id, chFilters.period);
+  const country = inferCountry(rec);
+  const countryLabel = COUNTRY_LABELS[country] || '🌐 그 외';
+  const tagList = Array.from(rec.categories).slice(0,3);
+  const isFav = favChannels.has(rec.id);
+
+  let viewCell;
+  if(chFilters.period === 0 || !delta){
+    viewCell = `<div>${formatNum(rec.views)}</div><div style="font-size:11px; color:var(--text-dim);">${chFilters.period===0 ? '전체 누적' : '데이터 쌓는 중 (며칠 후 표시)'}</div>`;
+  } else {
+    const up = delta.viewDelta >= 0;
+    viewCell = `
+      <div>${formatNum(rec.views)}</div>
+      <div class="${up?'delta-up':'delta-down'}" style="font-size:11.5px;">${up?'▲':'▼'} ${formatNum(Math.abs(delta.viewDelta))} · ${formatWon(estimatedRevenueWon(delta.viewDelta))}</div>
+    `;
+  }
+
+  return `
+  <tr>
+    <td>
+      <div class="ch-info">
+        <img class="ch-avatar" src="${rec.thumb||''}" alt="">
+        <div class="ch-name-block">
+          <div class="ch-name"><span class="grade-badge grade-${grade}">${grade}</span> ${escapeHtml(rec.title)}</div>
+          <div class="ch-handle">${escapeHtml(rec.handle || '')} · ${countryLabel}</div>
+          <div class="ch-tags">${tagList.map(t => `<span class="ch-tag">${escapeHtml(t)}</span>`).join('')}</div>
+        </div>
+      </div>
+    </td>
+    <td>${rec.hiddenSubs ? '비공개' : formatNum(rec.subs)}</td>
+    <td>
+      <div class="ch-thumbs">
+        ${rec.videos.map(vd => `
+          <a href="https://www.youtube.com/watch?v=${vd.id}" target="_blank" rel="noopener"
+             title="${escapeHtml(vd.title)} · 조회수 ${formatNum(vd.views)}">
+            <img src="${vd.thumb}" alt="${escapeHtml(vd.title)}">
+          </a>`).join('')}
+      </div>
+    </td>
+    <td>${rec.videoCount.toLocaleString('ko-KR')}</td>
+    <td>${viewCell}</td>
+    <td>
+      <div class="row-actions">
+        <button class="fav-btn${isFav?' fav-active':''}" data-id="${rec.id}" title="즐겨찾기">${isFav?'♥':'♡'}</button>
+        <button class="detail-btn" data-id="${rec.id}" title="상세 통계">📈</button>
+      </div>
+    </td>
+  </tr>`;
+}
+
+function renderChannelTable(){
+  const { list, total } = filteredChannels();
+  $('chTableBody').innerHTML = list.length
+    ? list.map(channelRowHTML).join('')
+    : '<tr><td colspan="6"><div class="empty">조건에 맞는 채널이 없습니다.</div></td></tr>';
+
+  const countNote = total > MAX_CHANNELS_SHOWN
+    ? `조건에 맞는 ${total}개 중 상위 ${MAX_CHANNELS_SHOWN}개 표시 중`
+    : `조건에 맞는 채널 ${total}개`;
+  $('chResultCount').textContent = countNote;
+
+  $('chTableBody').querySelectorAll('.fav-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      if(favChannels.has(id)) favChannels.delete(id); else favChannels.add(id);
+      saveFavChannels();
+      renderChannelTable();
+    });
+  });
+  $('chTableBody').querySelectorAll('.detail-btn').forEach(btn => {
+    btn.addEventListener('click', () => openChannelDetail(btn.dataset.id));
+  });
+}
+
+function drawChannelChart(canvas, history){
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height, PAD = 36;
+  ctx.clearRect(0,0,W,H);
+  if(!history || history.length < 2){
+    ctx.fillStyle = '#9298a8';
+    ctx.font = '13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('아직 데이터가 부족합니다. 며칠 뒤 다시 확인해주세요.', W/2, H/2);
+    return;
+  }
+  const views = history.map(h => h.views);
+  const subs = history.map(h => h.subs);
+  const vMin = Math.min(...views), vMax = Math.max(...views, vMin+1);
+  const sMin = Math.min(...subs), sMax = Math.max(...subs, sMin+1);
+  const stepX = (W - PAD*2) / (history.length - 1);
+
+  const xOf = i => PAD + i*stepX;
+  const yOf = (val, min, max) => H - PAD - ((val-min)/(max-min)) * (H - PAD*2);
+
+  // grid
+  ctx.strokeStyle = '#2a2d38';
+  ctx.lineWidth = 1;
+  for(let i=0;i<=4;i++){
+    const y = PAD + i*(H-PAD*2)/4;
+    ctx.beginPath(); ctx.moveTo(PAD,y); ctx.lineTo(W-PAD,y); ctx.stroke();
+  }
+
+  function drawLine(values, min, max, color){
+    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath();
+    values.forEach((v,i) => {
+      const x = xOf(i), y = yOf(v, min, max);
+      i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+    ctx.fillStyle = color;
+    values.forEach((v,i) => {
+      ctx.beginPath(); ctx.arc(xOf(i), yOf(v,min,max), 2.5, 0, Math.PI*2); ctx.fill();
+    });
+  }
+  drawLine(views, vMin, vMax, '#ff5470');
+  drawLine(subs, sMin, sMax, '#3b82f6');
+
+  // x-axis date labels (first, middle, last)
+  ctx.fillStyle = '#9298a8';
+  ctx.font = '10px sans-serif';
+  ctx.textAlign = 'center';
+  [0, Math.floor((history.length-1)/2), history.length-1].forEach(i => {
+    ctx.fillText(history[i].date.slice(5), xOf(i), H-10);
+  });
+
+  // legend
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#ff5470'; ctx.fillText('● 총 조회수', PAD, 16);
+  ctx.fillStyle = '#3b82f6'; ctx.fillText('● 구독자', PAD+80, 16);
+}
+
+function openChannelDetail(channelId){
+  const rec = channelPool[channelId];
+  if(!rec) return;
+  $('chDetailTitle').textContent = `📈 ${rec.title} 통계 추이`;
+  $('chDetailOverlay').classList.add('open');
+
+  const history = (channelHistory[channelId] || []).slice(-60);
+  drawChannelChart($('chDetailChart'), history);
+
+  const rows = history.slice().reverse().map((h, idx, arr) => {
+    const prev = arr[idx+1];
+    const subDelta = prev ? h.subs - prev.subs : 0;
+    const viewDelta = prev ? h.views - prev.views : 0;
+    const up = viewDelta >= 0;
+    return `
+    <tr>
+      <td>${h.date}</td>
+      <td>${formatNum(h.subs)}</td>
+      <td>${prev ? (subDelta>=0?'+':'') + subDelta.toLocaleString('ko-KR') : '-'}</td>
+      <td>${formatNum(h.views)}</td>
+      <td>${prev ? formatWon(estimatedRevenueWon(viewDelta)) : '-'}</td>
+      <td class="${prev ? (up?'delta-up':'delta-down') : ''}">${prev ? (up?'▲':'▼')+' '+formatNum(Math.abs(viewDelta)) : '-'}</td>
+    </tr>`;
+  }).join('');
+
+  $('chDetailTable').innerHTML = `
+    <thead><tr><th>날짜</th><th>구독자</th><th>구독자 증감</th><th>총 조회수</th><th>예상 수익</th><th>조회수 증감</th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="6"><div class="empty">데이터 없음</div></td></tr>'}</tbody>
+  `;
+}
+
+// --- UI events ---
+document.querySelectorAll('.chip[data-region]').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.chip[data-region]').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    currentRegionFilter = chip.dataset.region;
+    if(Object.keys(dataByRegion).length) render();
+  });
+});
+
+// --- tab switching ---
+let channelPoolLoaded = false;
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const tab = btn.dataset.tab;
+    $('tabVideos').classList.toggle('hidden', tab !== 'videos');
+    $('tabChannels').classList.toggle('hidden', tab !== 'channels');
+    if(tab === 'channels' && !channelPoolLoaded){
+      channelPoolLoaded = true;
+      loadChannelPool();
+    }
+  });
+});
+
+// --- channel finder: search / refresh ---
+$('chSearchBtn').addEventListener('click', () => {
+  chFilters.search = $('chSearchInput').value;
+  if(Object.keys(channelPool).length) renderChannelTable();
+});
+$('chSearchInput').addEventListener('keydown', (e) => {
+  if(e.key === 'Enter') $('chSearchBtn').click();
+});
+$('chRefreshBtn').addEventListener('click', () => loadChannelPool());
+
+// sortable column headers double as quick sort triggers
+document.querySelectorAll('.ch-table th.sortable').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.sortkey;
+    if(key === 'subs') chFilters.sort = 'subs';
+    else if(key === 'views') chFilters.sort = 'views';
+    if(Object.keys(channelPool).length) renderChannelTable();
+  });
+});
+
+// --- advanced filter modal ---
+$('openAdvFilter').addEventListener('click', () => {
+  $('rpmInput').value = rpm;
+  $('subMin').value = chFilters.subMin ?? '';
+  $('subMax').value = chFilters.subMax ?? '';
+  $('advFilterOverlay').classList.add('open');
+});
+$('advFilterOverlay').addEventListener('click', (e) => { if(e.target.id === 'advFilterOverlay') $('advFilterOverlay').classList.remove('open'); });
+
+$('periodChips').querySelectorAll('.chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    $('periodChips').querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+  });
+});
+$('sortChips').querySelectorAll('.chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    $('sortChips').querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+  });
+});
+$('countryChips').querySelectorAll('.chip').forEach(chip => {
+  chip.addEventListener('click', () => chip.classList.toggle('active'));
+});
+$('gradeChips').querySelectorAll('.chip').forEach(chip => {
+  chip.classList.add(`grade-${chip.dataset.grade}`);
+  chip.addEventListener('click', () => chip.classList.toggle('active'));
+});
+
+$('advResetBtn').addEventListener('click', () => {
+  chFilters.period = 0; chFilters.sort = 'views';
+  chFilters.subMin = null; chFilters.subMax = null;
+  chFilters.countries.clear(); chFilters.grades.clear();
+  rpm = 1500; safeSet('yt_rpm', rpm);
+  $('periodChips').querySelectorAll('.chip').forEach((c,i) => c.classList.toggle('active', i===0));
+  $('sortChips').querySelectorAll('.chip').forEach((c,i) => c.classList.toggle('active', i===0));
+  $('countryChips').querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  $('gradeChips').querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  $('subMin').value = ''; $('subMax').value = ''; $('rpmInput').value = rpm;
+  if(Object.keys(channelPool).length) renderChannelTable();
+});
+
+$('advApplyBtn').addEventListener('click', () => {
+  chFilters.period = Number($('periodChips').querySelector('.chip.active')?.dataset.period ?? 0);
+  chFilters.sort = $('sortChips').querySelector('.chip.active')?.dataset.sort || 'views';
+  chFilters.subMin = $('subMin').value ? Number($('subMin').value) : null;
+  chFilters.subMax = $('subMax').value ? Number($('subMax').value) : null;
+  chFilters.countries = new Set(Array.from($('countryChips').querySelectorAll('.chip.active')).map(c => c.dataset.country));
+  chFilters.grades = new Set(Array.from($('gradeChips').querySelectorAll('.chip.active')).map(c => c.dataset.grade));
+  rpm = Number($('rpmInput').value) || 1500;
+  safeSet('yt_rpm', rpm);
+  $('advFilterOverlay').classList.remove('open');
+  if(Object.keys(channelPool).length) renderChannelTable();
+});
+
+// --- category filter modal ---
+$('openCatFilter').addEventListener('click', () => $('catFilterOverlay').classList.add('open'));
+$('catFilterOverlay').addEventListener('click', (e) => { if(e.target.id === 'catFilterOverlay') $('catFilterOverlay').classList.remove('open'); });
+$('catResetBtn').addEventListener('click', () => {
+  chFilters.categories.clear();
+  populateCategoryFilterChips();
+  if(Object.keys(channelPool).length) renderChannelTable();
+});
+$('catApplyBtn').addEventListener('click', () => {
+  $('catFilterOverlay').classList.remove('open');
+  if(Object.keys(channelPool).length) renderChannelTable();
+});
+
+// --- channel detail modal ---
+$('chDetailClose').addEventListener('click', () => $('chDetailOverlay').classList.remove('open'));
+$('chDetailOverlay').addEventListener('click', (e) => { if(e.target.id === 'chDetailOverlay') $('chDetailOverlay').classList.remove('open'); });
+
+// --- video detail modal (clicking a video card) ---
+function closeVideoDetail(){
+  $('videoDetailOverlay').classList.remove('open');
+  $('vDetailIframe').src = ''; // stop playback once the modal is closed
+}
+$('vDetailClose').addEventListener('click', closeVideoDetail);
+$('videoDetailOverlay').addEventListener('click', (e) => { if(e.target.id === 'videoDetailOverlay') closeVideoDetail(); });
+
+// --- category detail modal (clicking a "카테고리별 TOP" card) ---
+$('catDetailClose').addEventListener('click', () => $('catDetailOverlay').classList.remove('open'));
+$('catDetailOverlay').addEventListener('click', (e) => { if(e.target.id === 'catDetailOverlay') $('catDetailOverlay').classList.remove('open'); });
+
+// Surface any unexpected runtime error instead of failing silently.
+window.addEventListener('error', (e) => {
+  const el = document.getElementById('statusText');
+  if(el) el.textContent = '오류 발생: ' + e.message;
+});
+
+// init
+try{
+  loadAll();
+}catch(e){
+  $('statusText').textContent = '초기화 오류: ' + e.message;
+  console.error(e);
+}
+</script>
+</body>
+</html>
