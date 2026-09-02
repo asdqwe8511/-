@@ -135,5 +135,75 @@ ok('진진 자형', E.branchRelations(4, 4).some((r) => r.name === '자형'), tr
 ok('갑기 천간합', E.stemRelation(0, 5).name, '천간합');
 ok('갑경 천간충', E.stemRelation(0, 6).name, '천간충');
 
+section('궁합 — 구조');
+const cA = E.fullReading({ calendar: '양력', year: 1990, month: 5, day: 15, hour: 14, minute: 30, gender: '남', surname: '김', given: '민준' });
+const cB = E.fullReading({ calendar: '양력', year: 1993, month: 7, day: 22, hour: 5, minute: 40, gender: '여', surname: '이', given: '서연' });
+const cc = E.compatibility(cA, cB);
+ok('총점 0~100', cc.total >= 0 && cc.total <= 100, true);
+ok('네 축 모두 0~100', E.COMPAT_AXES.every((k) => cc.axes[k].score >= 0 && cc.axes[k].score <= 100), true);
+ok('축마다 근거 항목이 있음', E.COMPAT_AXES.every((k) => Array.isArray(cc.axes[k].items)), true);
+ok('강점은 전부 +', cc.strengths.every((s) => s.delta > 0), true);
+ok('마찰은 전부 -', cc.frictions.every((s) => s.delta < 0), true);
+
+// 환산 점수는 원점수에 대해 단조 증가해야 한다 — 아니면 순위가 뒤집힌다
+section('궁합 — 환산 점수 단조성');
+let mono = true, prev = -1;
+const pool = [];
+for (let y = 1970; y < 2000; y += 3) {
+  pool.push(E.fullReading({ calendar: '양력', year: y, month: 6, day: 10, hour: 10, minute: 0,
+                            gender: '남', skipLunar: true, skipFortune: true }));
+}
+const pairs = [];
+pool.forEach((a) => pool.forEach((b) => { if (a !== b) { const c = E.compatibility(a, b); pairs.push([c.raw, c.total]); } }));
+pairs.sort((x, y) => x[0] - y[0]).forEach((p) => { if (p[1] < prev) mono = false; prev = p[1]; });
+ok('원점수가 오르면 환산 점수도 오름', mono, true);
+
+section('궁합 — 알려진 관계가 반영되는가');
+// 일간이 천간합(갑·기 등)인 짝을 실제 날짜에서 찾아 확인한다
+function chartWithDayStem(stemIdx) {
+  for (let d = 0; d < 60; d++) {
+    const r = E.fullReading({ calendar: '양력', year: 1990, month: 1, day: 1 + d, hour: 12, minute: 0,
+                              gender: '남', skipLunar: true, skipFortune: true });
+    if (r.chart.pillars.day.stem === stemIdx) return r;
+  }
+  return null;
+}
+const gap = chartWithDayStem(0), gi = chartWithDayStem(5);   // 갑 · 기
+ok('갑·기 일간 짝을 찾음', !!(gap && gi), true);
+if (gap && gi) {
+  const c2 = E.compatibility(gap, gi);
+  ok('일간 천간합으로 판정', c2.detail.dayStemRelation, '천간합');
+  ok('끌림에 천간합이 잡힘', c2.axes.attraction.items.some((i) => /천간합/.test(i.label)), true);
+}
+
+section('연락처 읽기');
+const vcf = ['BEGIN:VCARD', 'FN:홍길동', 'BDAY:19900515', 'END:VCARD',
+             'BEGIN:VCARD', 'N:김;서연;;;', 'BDAY;VALUE=DATE:1993-07-22', 'END:VCARD',
+             'BEGIN:VCARD', 'FN:연도없음', 'BDAY:--0503', 'END:VCARD'].join('\n');
+const pv = E.parseContacts(vcf);
+ok('vCard 2명', pv.people.length, 2);
+ok('vCard 한글 이름 순서', pv.people[1].name, '김서연');
+ok('연도 없는 생일은 건너뜀', pv.skipped.length, 1);
+
+const csv = 'Name,Birthday\n이도현,1988/02/17\n최민준,20010309\n생일없음,';
+const pc = E.parseContacts(csv);
+ok('CSV 2명', pc.people.length, 2);
+ok('CSV 생일 없음 1명 건너뜀', pc.skipped.length, 1);
+
+const plain = '홍길동 1990-05-15\n김서연,930722\n박지우\t1986.11.03\n날짜없는줄';
+const pp = E.parseContacts(plain);
+ok('붙여넣기 3명', pp.people.length, 3);
+ok('두 자리 연도 추정', pp.people[1].year, 1993);
+ok('날짜 없는 줄도 건너뜀에 남음', pp.skipped.length, 1);
+
+section('생일 형식');
+[['19900515', 1990], ['1990-05-15', 1990], ['1990.5.15', 1990], ['1990/05/15', 1990],
+ ['1990. 5. 15.', 1990], ['930722', 1993], ['000101', 2000]].forEach(([raw, year]) => {
+  const d = E.parseBirthday(raw);
+  ok(raw, d && d.year, year);
+});
+ok('--0503 은 연도 없음', E.parseBirthday('--0503').noYear, true);
+ok('읽을 수 없는 값', E.parseBirthday('abc'), null);
+
 console.log(`\n${pass} 통과, ${fail} 실패`);
 process.exit(fail ? 1 : 0);

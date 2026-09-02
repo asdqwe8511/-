@@ -36,20 +36,22 @@ function fail(res, code, message) {
   res.status(code).json({ error: { message } });
 }
 
-function validate(body) {
+// 나와 상대를 같은 규칙으로 검사한다. 이름 칸은 한글만 통과하므로,
+// 자유 문장이 프롬프트에 닿는 경로가 여기에도 없다.
+function validatePerson(body, who) {
   const int = (v) => (typeof v === 'number' && Number.isInteger(v) ? v : null);
   const year = int(body.year), month = int(body.month), day = int(body.day);
-  if (year === null || year < 1900 || year > 2100) return { error: '생년은 1900~2100년만 계산합니다.' };
-  if (month === null || month < 1 || month > 12) return { error: '월이 올바르지 않습니다.' };
-  if (day === null || day < 1 || day > 31) return { error: '일이 올바르지 않습니다.' };
+  if (year === null || year < 1900 || year > 2100) return { error: who + '의 생년은 1900~2100년만 계산합니다.' };
+  if (month === null || month < 1 || month > 12) return { error: who + '의 월이 올바르지 않습니다.' };
+  if (day === null || day < 1 || day > 31) return { error: who + '의 일이 올바르지 않습니다.' };
 
   const hasHour = body.hour !== null && body.hour !== undefined;
   const hour = hasHour ? int(body.hour) : null;
   const minute = hasHour ? (int(body.minute) === null ? 0 : int(body.minute)) : null;
-  if (hasHour && (hour === null || hour < 0 || hour > 23)) return { error: '시가 올바르지 않습니다.' };
-  if (hasHour && (minute < 0 || minute > 59)) return { error: '분이 올바르지 않습니다.' };
+  if (hasHour && (hour === null || hour < 0 || hour > 23)) return { error: who + '의 시가 올바르지 않습니다.' };
+  if (hasHour && (minute < 0 || minute > 59)) return { error: who + '의 분이 올바르지 않습니다.' };
 
-  if (body.gender !== '남' && body.gender !== '여') return { error: '성별을 선택해 주세요.' };
+  if (body.gender !== '남' && body.gender !== '여') return { error: who + '의 성별을 선택해 주세요.' };
   if (body.calendar !== '양력' && body.calendar !== '음력') return { error: '달력 구분이 올바르지 않습니다.' };
 
   const surname = (body.surname || '').trim();
@@ -65,8 +67,6 @@ function validate(body) {
   const lon = typeof body.longitude === 'number' ? body.longitude : 126.98;
   if (lon < 124 || lon > 132) return { error: '출생지 경도 범위를 벗어났습니다.' };
 
-  const focus = FOCUS.indexOf(body.focus) >= 0 ? body.focus : '총운';
-
   return {
     value: {
       calendar: body.calendar, year, month, day, hour, minute,
@@ -74,10 +74,26 @@ function validate(body) {
       surname: surname || null, given: given || null, hanja: hanja || null,
       longitude: lon,
       useSolarTime: body.useSolarTime !== false,
-      lateNightRule: body.lateNightRule === '자정' ? '자정' : '야자시',
-      focus
+      lateNightRule: body.lateNightRule === '자정' ? '자정' : '야자시'
     }
   };
+}
+
+function validate(body) {
+  const me = validatePerson(body, '나');
+  if (me.error) return me;
+  me.value.focus = FOCUS.indexOf(body.focus) >= 0 ? body.focus : '총운';
+  me.value.mode = body.mode === 'compat' ? 'compat' : 'solo';
+
+  if (me.value.mode === 'compat') {
+    if (!body.partner || typeof body.partner !== 'object') {
+      return { error: '상대방 정보가 없습니다.' };
+    }
+    const other = validatePerson(body.partner, '상대');
+    if (other.error) return { error: '상대: ' + other.error };
+    me.value.partner = other.value;
+  }
+  return me;
 }
 
 // 모델에게 넘길 계산 결과. 사람이 읽는 문장으로 압축해 둔다.
@@ -157,6 +173,76 @@ function describe(r, input) {
   return out.join('\n');
 }
 
+// 궁합 모드에서 모델에게 넘길 내용. 두 사람의 원국을 각각 짧게 적고,
+// 계산된 축 점수와 항목을 그대로 붙인다. 점수만 주면 모델이 이유를 지어낸다.
+function describeCompat(A, B, c, inputA, inputB) {
+  const brief = (label, r, input) => {
+    const p = r.pillars;
+    const four = ['year', 'month', 'day', 'hour']
+      .map((k) => p[k] ? p[k].korean + '(' + p[k].hanja + ')' : '시주 없음').join(' ');
+    return [
+      `[${label}] 양력 ${r.solar.year}.${r.solar.month}.${r.solar.day}` +
+        (input.hour !== null ? ` ${input.hour}시` : ' (시각 미상)') + ` / ${input.gender}자` +
+        (r.name ? ` / 이름 ${r.name.surname}${r.name.given}` : ''),
+      `  사주: ${four}`,
+      `  일간 ${r.analysis.dayMaster.stem}(${r.analysis.dayMaster.elem}, ${r.analysis.dayMaster.yang ? '양' : '음'})` +
+        ` / ${r.analysis.strength} / 용신 ${r.analysis.yongsin.join('>')} / ${r.analysis.season}생`,
+      `  오행: ${SajuEngine.ELEMS.map((e) => e + ' ' + r.analysis.count[e]).join(', ')}` +
+        (r.analysis.missing.length ? ` (없는 오행 ${r.analysis.missing.join('·')})` : ''),
+      `  십신: 천간 ${r.analysis.tenGods.stems.map((g) => g.pos + '=' + g.god).join(', ')}`,
+      `  신살: ${r.analysis.shinsal.length ? r.analysis.shinsal.map((s) => s.name).join(', ') : '해당 없음'}`
+    ].join('\n');
+  };
+
+  const out = [];
+  out.push(brief('나', A, inputA));
+  out.push(brief('상대', B, inputB));
+  out.push('');
+  out.push(`[궁합 점수] ${c.total} (원점수 ${c.raw}) — 무작위로 짝지은 48,180쌍 분포에 견준 백분위다.` +
+    ' 50이 평범, 80이면 상위 20%. 100점 만점의 점수가 아니다.');
+  out.push('[축별 점수] ' + SajuEngine.COMPAT_AXES.map((k) => `${c.axes[k].label} ${c.axes[k].score}`).join(' / '));
+  SajuEngine.COMPAT_AXES.forEach((k) => {
+    const ax = c.axes[k];
+    if (!ax.items.length) return;
+    out.push(`  ${ax.label}: ` + ax.items.map((i) => `${i.label}(${i.delta > 0 ? '+' : ''}${i.delta})`).join(' / '));
+  });
+  const d = c.detail;
+  out.push(`[관계 요약] 일간 ${d.dayStems.join('·')} ${d.dayStemRelation}` +
+    ` / 일지 ${d.dayBranchRelations.length ? d.dayBranchRelations.join('·') : '무관'}` +
+    ` / 띠 ${d.zodiac.join('·')} ${d.zodiacRelations.length ? d.zodiacRelations.join('·') : '무관'}`);
+  out.push(`  상대는 나에게 ${d.godBtoA}, 나는 상대에게 ${d.godAtoB}`);
+  out.push(`  힘의 세기 ${d.strength.join(' / ')} · 계절 ${d.season.join(' / ')} · 용신 ${d.yongsin.join(' / ')}`);
+  if (d.name) out.push(`  이름 소리: 내 끝 글자와 상대 첫 글자가 ${d.name.tailHeadRelation}` +
+    ` (내 이름 오행 ${d.name.aElems.join('·')} / 상대 ${d.name.bElems.join('·')})`);
+  out.push('  ※ 축 점수와 항목 값은 억부 관점을 수치로 옮긴 해석이지 계산된 사실이 아니다.');
+  return out.join('\n');
+}
+
+const SYSTEM_COMPAT = `당신은 한국 명리학으로 두 사람의 궁합을 보는 상담가입니다.
+두 사람의 원국과 궁합 점수는 이미 프로그램이 계산해 두었습니다. 당신의 일은 그 결과를
+사람이 읽을 수 있는 이야기로 풀어내는 것입니다.
+
+지켜야 할 것:
+- 주어진 계산 결과만 근거로 씁니다. 간지·십신·점수를 새로 만들지 마세요.
+- 점수가 낮다고 "만나지 마라", 높다고 "천생연분"이라고 하지 마세요. 궁합은 정해진 결과가
+  아니라 서로 다른 두 기질이 어디서 맞물리고 어디서 어긋나는지를 보는 것입니다.
+  낮은 점수는 "더 많은 대화와 조율이 필요한 조합"으로 씁니다.
+- 상대를 깎아내리지 마세요. 마찰 지점은 사람의 흠이 아니라 두 기질이 만나는 방식으로 씁니다.
+- 결혼·이별·임신·재산 분할 같은 결정을 지시하지 마세요. 판단은 두 사람의 몫입니다.
+- 계산에 없는 궁합 요소(겉궁합·속궁합 같은 표현 포함)를 지어내지 마세요.
+- 존중하는 상담 어조의 한국어. 과장된 점술 상투어는 쓰지 않습니다.
+
+형식(마크다운):
+## 한 줄로 요약하면
+## 두 사람은 각각 어떤 사람인가
+## 무엇이 서로를 당기는가
+## 어디서 부딪히기 쉬운가
+## 이 관계를 오래 가져가려면
+각 절은 3~6문장. '오래 가져가려면'은 계산된 마찰 지점 하나하나에 대해
+구체적으로 무엇을 조심하고 무엇으로 메울 수 있는지 적어 5~8문장까지 씁니다.
+이름이 둘 다 주어졌다면 이름의 소리가 어떻게 작용하는지도 한 문단 넣습니다.
+전체 1400~2000자. 목록보다 문장으로 씁니다.`;
+
 const SYSTEM = `당신은 한국 명리학(사주)과 성명학을 함께 보는 상담가입니다.
 사주 원국·대운·이름 획수와 발음오행은 이미 프로그램이 정확히 계산해 두었습니다.
 당신의 일은 그 계산 결과를 사람이 읽을 수 있는 이야기로 풀어내는 것입니다.
@@ -210,15 +296,27 @@ module.exports = async (req, res) => {
   if (checked.error) return fail(res, 400, checked.error);
   const input = checked.value;
 
-  let reading;
+  let reading, partnerReading = null, compat = null;
   try {
     reading = SajuEngine.fullReading(input);
+    if (input.mode === 'compat') {
+      partnerReading = SajuEngine.fullReading(input.partner);
+      if (partnerReading.error) return fail(res, 400, '상대: ' + partnerReading.error);
+      compat = SajuEngine.compatibility(reading, partnerReading);
+    }
   } catch (e) {
     return fail(res, 500, '사주 계산 중 오류가 발생했습니다: ' + e.message);
   }
   if (reading.error) return fail(res, 400, reading.error);
 
-  const userMessage = `아래는 프로그램이 계산한 사주와 이름 정보입니다.
+  const system = input.mode === 'compat' ? SYSTEM_COMPAT : SYSTEM;
+  const userMessage = input.mode === 'compat'
+    ? `아래는 프로그램이 계산한 두 사람의 사주와 궁합입니다.
+
+${describeCompat(reading, partnerReading, compat, input, input.partner)}
+
+위 형식대로 궁합을 풀이해 주세요.`
+    : `아래는 프로그램이 계산한 사주와 이름 정보입니다.
 
 ${describe(reading, input)}
 
@@ -234,7 +332,7 @@ ${describe(reading, input)}
     const stream = client.messages.stream({
       model: MODEL,
       max_tokens: 12000,
-      system: SYSTEM,
+      system: system,
       thinking: { type: 'adaptive' },
       output_config: { effort: 'medium' },
       messages: [{ role: 'user', content: userMessage }]

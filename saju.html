@@ -178,6 +178,80 @@
   .luck-cell .tg{font-size:10.5px; color:var(--text-mute); line-height:1.3;}
   .luck-cell.now .age{color:var(--accent-2);}
 
+  .mode-tabs{margin:14px 0 18px;}
+  .sub-block{
+    margin-top:18px; padding:16px; border-radius:13px;
+    background:var(--panel-2); border:1px solid var(--border);
+  }
+  .sub-block[hidden]{display:none;}
+  .sub-block-head{font-size:13.5px; font-weight:700; margin-bottom:5px;}
+  .sub-block-note{font-size:12px; color:var(--text-mute); line-height:1.75; margin-bottom:14px;}
+  .sub-block-note b{color:var(--text-dim);}
+  .sub-block-note i{color:var(--text-dim); font-style:normal;}
+  textarea{
+    background:var(--panel-3); border:1px solid var(--border); color:var(--text);
+    border-radius:9px; padding:10px 12px; font-size:13px; width:100%;
+    font-family:inherit; resize:vertical; line-height:1.6;
+  }
+  textarea:focus{outline:none; border-color:var(--accent);}
+  input[type=file]{
+    background:var(--panel-3); border:1px solid var(--border); color:var(--text-dim);
+    border-radius:9px; padding:9px 12px; font-size:12.5px; width:100%;
+  }
+  input[type=file]::file-selector-button{
+    background:var(--panel); border:1px solid var(--border); color:var(--text);
+    border-radius:7px; padding:6px 12px; margin-right:10px; cursor:pointer; font-family:inherit;
+  }
+  .parse-status{font-size:12.5px; color:var(--text-dim); margin-top:10px; line-height:1.7;}
+  .parse-status b{color:var(--accent-2);}
+  .parse-status .warn{color:#f5cd70;}
+
+  /* 궁합 */
+  .compat-head{display:flex; align-items:center; gap:20px; flex-wrap:wrap; margin-bottom:18px;}
+  .compat-score{
+    width:104px; height:104px; border-radius:50%; flex:0 0 auto;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:var(--panel-2); border:2px solid var(--accent);
+  }
+  .compat-score .n{font-size:32px; font-weight:800; line-height:1;}
+  .compat-score .u{font-size:11px; color:var(--text-mute); margin-top:3px;}
+  .compat-head .desc{flex:1; min-width:220px; font-size:13.5px; color:var(--text-dim); line-height:1.8;}
+  .compat-head .desc b{color:var(--text);}
+  .pair-row{display:grid; grid-template-columns:1fr auto 1fr; gap:12px; align-items:center; margin-bottom:18px;}
+  .pair-card{background:var(--panel-2); border:1px solid var(--border); border-radius:12px; padding:13px 15px;}
+  .pair-card .who{font-size:12px; color:var(--text-mute); margin-bottom:4px;}
+  .pair-card .gz{font-size:20px; font-weight:800;}
+  .pair-card .meta{font-size:11.5px; color:var(--text-dim); margin-top:3px; line-height:1.6;}
+  .pair-link{font-size:11.5px; color:var(--accent-2); text-align:center; white-space:nowrap;}
+  .axis-row{display:grid; grid-template-columns:44px 1fr 40px; align-items:center; gap:10px; padding:5px 0;}
+  .axis-name{font-size:13px; font-weight:700;}
+  .axis-track{height:14px; background:var(--panel-2); border-radius:7px;}
+  .axis-fill{height:14px; border-radius:4px; background:var(--bar); min-width:3px; transition:width .5s ease;}
+  .axis-val{font-size:12.5px; color:var(--text-dim); text-align:right;}
+  .sf-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:20px;}
+  .sf-title{font-size:12.5px; margin-bottom:8px; display:flex; align-items:center; gap:5px;}
+  .sf-title.good{color:var(--accent-2);}
+  .sf-title.bad{color:#ffb3c1;}
+  .sf-item{
+    font-size:12.5px; color:var(--text-dim); padding:7px 0;
+    border-top:1px solid var(--border); line-height:1.6;
+  }
+  .sf-item .ax{color:var(--text-mute); font-size:11px;}
+
+  /* 여러 명 비교 */
+  .batch-summary{font-size:13px; color:var(--text-dim); margin-bottom:14px; line-height:1.8;}
+  .rank-wrap{overflow-x:auto;}
+  table.rank{width:100%; border-collapse:collapse; font-size:13px; min-width:640px;}
+  table.rank th, table.rank td{padding:9px 10px; border-bottom:1px solid var(--border); text-align:left;}
+  table.rank th{color:var(--text-dim); font-weight:600; font-size:11.5px; white-space:nowrap;}
+  table.rank td.num, table.rank th.num{text-align:right;}
+  table.rank tr.top td{background:rgba(45,212,191,.07);}
+  table.rank .who{font-weight:700;}
+  table.rank .sub2{font-size:11px; color:var(--text-mute);}
+  .mini-bar{display:inline-block; width:52px; height:7px; border-radius:4px; background:var(--panel-2); vertical-align:middle; margin-right:7px;}
+  .mini-bar i{display:block; height:7px; border-radius:3px; background:var(--bar);}
+  .rank-why{font-size:11.5px; color:var(--text-mute); max-width:260px; line-height:1.55;}
+
   /* 운세 시기 */
   .range-chips{margin-bottom:16px;}
   .chart-wrap{position:relative; margin:6px 0 4px;}
@@ -322,6 +396,9 @@
     header.topbar{padding:12px 16px;}
   }
   @media(max-width:520px){
+    .sf-grid{grid-template-columns:1fr; gap:6px;}
+    .pair-row{grid-template-columns:1fr;}          /* 나 / 관계 / 상대 를 세로로 */
+    .compat-head{gap:14px;}
     .legend .legend-note{margin-left:0; flex-basis:100%;}
     .form-grid{grid-template-columns:repeat(2,1fr); gap:12px;}
     .f-name,.f-num{grid-column:span 1;}
@@ -351,6 +428,12 @@
   <section class="panel">
     <h2>어떤 사주를 볼까요</h2>
     <p class="sub">이름은 비워도 사주만 볼 수 있습니다. 입력한 정보는 저장되지 않습니다.</p>
+
+    <div class="chips mode-tabs" id="mode">
+      <button type="button" class="chip" data-v="solo" aria-pressed="true">혼자 보기</button>
+      <button type="button" class="chip" data-v="compat" aria-pressed="false">둘이 보기 — 궁합</button>
+      <button type="button" class="chip" data-v="batch" aria-pressed="false">여러 명과 비교</button>
+    </div>
 
     <form id="form" autocomplete="off">
       <div class="form-grid">
@@ -428,6 +511,88 @@
         </div>
       </div>
 
+      <!-- 상대방 (궁합) -->
+      <div class="sub-block" id="partnerBlock" hidden>
+        <div class="sub-block-head">상대방</div>
+        <p class="sub-block-note">출생지와 계산 방식은 위에서 고른 것을 그대로 씁니다.
+          상대의 태어난 시각을 모르면 비워 두세요 — 시주 없이도 궁합은 나옵니다.</p>
+        <div class="form-grid">
+          <div class="field f-name">
+            <label for="p_surname">성</label>
+            <input type="text" id="p_surname" placeholder="이" maxlength="5">
+          </div>
+          <div class="field f-name">
+            <label for="p_given">이름</label>
+            <input type="text" id="p_given" placeholder="도현" maxlength="5">
+          </div>
+          <div class="field f-wide">
+            <label>성별</label>
+            <div class="chips" id="p_gender">
+              <button type="button" class="chip" data-v="여" aria-pressed="true">여</button>
+              <button type="button" class="chip" data-v="남" aria-pressed="false">남</button>
+            </div>
+          </div>
+          <div class="field f-wide">
+            <label>양력 / 음력</label>
+            <div class="chips" id="p_calendar">
+              <button type="button" class="chip" data-v="양력" aria-pressed="true">양력</button>
+              <button type="button" class="chip" data-v="음력" aria-pressed="false">음력</button>
+            </div>
+          </div>
+          <div class="field f-wide">
+            <label for="p_year">태어난 해</label>
+            <input type="number" id="p_year" min="1900" max="2100" placeholder="1992">
+          </div>
+          <div class="field f-num">
+            <label for="p_month">월</label>
+            <select id="p_month"></select>
+          </div>
+          <div class="field f-num">
+            <label for="p_day">일</label>
+            <select id="p_day"></select>
+          </div>
+          <div class="field f-leap" id="p_leapWrap" hidden>
+            <label>윤달</label>
+            <label class="check"><input type="checkbox" id="p_leapMonth"> 윤달입니다</label>
+          </div>
+          <div class="field f-num">
+            <label for="p_hour">태어난 시</label>
+            <select id="p_hour"></select>
+          </div>
+          <div class="field f-num">
+            <label for="p_minute">분</label>
+            <input type="number" id="p_minute" min="0" max="59" value="0">
+          </div>
+          <div class="field f-wide">
+            <label>시각을 모른다면</label>
+            <label class="check"><input type="checkbox" id="p_noHour"> 태어난 시각 모름</label>
+          </div>
+        </div>
+      </div>
+
+      <!-- 연락처 (여러 명과 비교) -->
+      <div class="sub-block" id="batchBlock" hidden>
+        <div class="sub-block-head">비교할 사람들</div>
+        <p class="sub-block-note">
+          <b>카카오톡은 친구 생일을 내보내는 기능이 없습니다</b>(공개 API도 없습니다).
+          대신 휴대폰이나 구글 연락처에서 내보낸 파일을 쓰세요.
+          <b>파일은 이 브라우저 안에서만 열리고 어디로도 전송되지 않습니다.</b>
+          내보내는 법: 아이폰 <i>연락처 → 공유</i>, 안드로이드 <i>연락처 → 설정 → 가져오기/내보내기</i>,
+          구글 <i>contacts.google.com → 내보내기 → vCard 또는 CSV</i>.
+        </p>
+        <div class="form-grid">
+          <div class="field f-full">
+            <label for="contactFile">연락처 파일 (.vcf 또는 .csv)</label>
+            <input type="file" id="contactFile" accept=".vcf,.csv,.txt,text/vcard,text/csv,text/plain">
+          </div>
+          <div class="field f-full">
+            <label for="contactPaste">또는 직접 붙여넣기 <span class="hint">— 한 줄에 한 명, "이름 생년월일"</span></label>
+            <textarea id="contactPaste" rows="5" placeholder="홍길동 1990-05-15&#10;김서연, 930722&#10;박지우	1986.11.03"></textarea>
+          </div>
+        </div>
+        <div class="parse-status" id="parseStatus"></div>
+      </div>
+
       <div style="margin-top:14px">
         <button type="button" class="adv-toggle" id="advToggle">계산 방식 자세히 설정</button>
         <div class="adv" id="adv">
@@ -462,21 +627,56 @@
 
     <div class="summary-row" id="summary"></div>
 
-    <section class="panel">
+    <section class="panel" id="chartPanel">
       <h2>사주팔자</h2>
       <p class="sub" id="chartSub"></p>
       <div class="pillars" id="pillars"></div>
       <div class="kv" id="chartTags"></div>
     </section>
 
-    <section class="panel">
+    <section class="panel" id="compatPanel" hidden>
+      <h2>궁합</h2>
+      <p class="sub" id="compatSub"></p>
+
+      <div class="compat-head">
+        <div class="compat-score"><div class="n" id="compatScore">–</div><div class="u">궁합 점수</div></div>
+        <div class="desc" id="compatDesc"></div>
+      </div>
+
+      <div class="pair-row" id="pairRow"></div>
+
+      <div id="axes"></div>
+      <p class="bar-legend">네 축은 각각 0~100입니다. 위의 궁합 점수는 이 네 축을 가중평균한 뒤,
+        무작위로 짝지은 48,180쌍의 분포에 견주어 환산한 값입니다 — 70이면 "무작위로 만난 상대
+        100명 중 상위 30번째"라는 뜻입니다.</p>
+
+      <div class="sf-grid">
+        <div>
+          <div class="sf-title good">▲ 잘 맞는 지점</div>
+          <div id="compatStrengths"></div>
+        </div>
+        <div>
+          <div class="sf-title bad">▼ 부딪히기 쉬운 지점</div>
+          <div id="compatFrictions"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="batchPanel" hidden>
+      <h2>나와 잘 맞는 순서</h2>
+      <p class="sub" id="batchSub"></p>
+      <div class="batch-summary" id="batchSummary"></div>
+      <div class="rank-wrap"><table class="rank" id="rankTable"></table></div>
+    </section>
+
+    <section class="panel" id="elemPanel">
       <h2>오행의 균형</h2>
       <p class="sub">천간·지지 여덟 글자를 오행으로 세고, 지지 속 지장간까지 배당 일수만큼 나눠 담은 값입니다.</p>
       <div class="bars" id="bars"></div>
       <p class="bar-legend">막대 길이는 그 기운의 양입니다. 청록색 막대는 지금 사주에 필요하다고 본 기운(용신)입니다.</p>
     </section>
 
-    <section class="panel">
+    <section class="panel" id="luckPanel">
       <h2>대운 — 10년 단위의 흐름</h2>
       <p class="sub" id="luckSub"></p>
       <div class="luck-scroll"><div class="luck-row" id="luckRow"></div></div>
@@ -528,7 +728,7 @@
       <div class="kv" id="nameTags"></div>
     </section>
 
-    <section class="panel">
+    <section class="panel" id="readingPanel">
       <h2>풀이</h2>
       <p class="sub">위 계산 결과를 바탕으로 Claude 가 사주와 이름을 이어서 읽습니다.</p>
       <div id="reading"></div>
@@ -593,6 +793,80 @@
     };
   }
   var getGender = chipGroup('gender'), getCalendar = chipGroup('calendar'), getFocus = chipGroup('focus');
+
+  fillSelect($('p_month'), months, 1);
+  fillSelect($('p_day'), days, 1);
+  fillSelect($('p_hour'), hours, 12);
+  var getPGender = chipGroup('p_gender'), getPCalendar = chipGroup('p_calendar');
+  $('p_noHour').addEventListener('change', function () {
+    var off = this.checked;
+    $('p_hour').disabled = off; $('p_minute').disabled = off;
+    $('p_hour').style.opacity = $('p_minute').style.opacity = off ? .45 : 1;
+  });
+
+  // ── 모드 ────────────────────────────────────────────────────────────
+  var MODES = {
+    solo:   { label: '사주 뽑고 풀이 받기', panels: ['chartPanel', 'elemPanel', 'luckPanel', 'fortunePanel', 'namePanel', 'readingPanel'] },
+    compat: { label: '궁합 보고 풀이 받기', panels: ['chartPanel', 'compatPanel', 'readingPanel'] },
+    batch:  { label: '전부 비교하기',       panels: ['chartPanel', 'batchPanel'] }
+  };
+  var mode = 'solo';
+  var ALL_PANELS = ['chartPanel', 'compatPanel', 'batchPanel', 'elemPanel', 'luckPanel',
+                    'fortunePanel', 'namePanel', 'readingPanel'];
+
+  function applyMode(next) {
+    mode = next;
+    $('partnerBlock').hidden = (mode !== 'compat');
+    $('batchBlock').hidden = (mode !== 'batch');
+    $('submitBtn').textContent = MODES[mode].label;
+    // 결과가 이미 떠 있으면 모드에 맞게 접었다 편다.
+    var show = MODES[mode].panels;
+    ALL_PANELS.forEach(function (id) {
+      var el = $(id);
+      if (el) el.hidden = show.indexOf(id) < 0;
+    });
+  }
+  $('mode').addEventListener('click', function (e) {
+    var btn = e.target.closest('.chip');
+    if (!btn) return;
+    Array.prototype.forEach.call(this.querySelectorAll('.chip'), function (c) {
+      c.setAttribute('aria-pressed', String(c === btn));
+    });
+    applyMode(btn.dataset.v);
+  });
+
+  // ── 연락처 읽기 ──────────────────────────────────────────────────────
+  var contacts = { people: [], skipped: [], total: 0 };
+
+  function refreshContacts(text, source) {
+    contacts = E.parseContacts(text || '');
+    var s = $('parseStatus');
+    if (!contacts.total) { s.innerHTML = ''; return; }
+    var parts = ['<b>' + contacts.people.length + '명</b>의 생년월일을 읽었습니다' +
+                 (source ? ' (' + esc(source) + ')' : '') + '.'];
+    if (contacts.skipped.length) {
+      var reasons = {};
+      contacts.skipped.forEach(function (k) { reasons[k.reason] = (reasons[k.reason] || 0) + 1; });
+      parts.push('<span class="warn">' + contacts.skipped.length + '명은 건너뜁니다 — ' +
+        Object.keys(reasons).map(function (r) { return esc(r) + ' ' + reasons[r] + '명'; }).join(', ') + '.</span>');
+    }
+    var guessed = contacts.people.filter(function (p) { return p.guessedCentury; }).length;
+    if (guessed) parts.push('<span class="warn">' + guessed + '명은 두 자리 연도라 세기를 추정했습니다.</span>');
+    parts.push('연락처에는 태어난 시각이 없으므로 <b>시주 없이</b> 계산합니다 — 그만큼 거칠어집니다.');
+    s.innerHTML = parts.join('<br>');
+  }
+
+  $('contactFile').addEventListener('change', function () {
+    var f = this.files && this.files[0];
+    if (!f) return;
+    var reader = new FileReader();
+    reader.onload = function () { refreshContacts(String(reader.result), f.name); };
+    reader.onerror = function () { $('parseStatus').innerHTML = '<span class="warn">파일을 읽지 못했습니다.</span>'; };
+    reader.readAsText(f, 'utf-8');
+  });
+  $('contactPaste').addEventListener('input', function () {
+    if (this.value.trim()) refreshContacts(this.value, '붙여넣기');
+  });
 
   $('advToggle').addEventListener('click', function () { $('adv').classList.toggle('open'); });
   $('noHour').addEventListener('change', function () {
@@ -789,6 +1063,9 @@
 
   function drawTimeline() {
     var rows = fortuneState.rows;
+    // 궁합·여러 명 모드에서는 시기 계산을 돌리지 않으므로 rows 가 비어 있다.
+    // 그 상태로 그리려 들면 마지막 점을 읽다가 터진다.
+    if (!rows.length) return;
     // viewBox 를 컨테이너 실제 폭에 맞춘다. 900 고정으로 두고 CSS 로 줄이면
     // 좁은 화면에서 10px 글자가 4px 로 찌그러져 축이 안 읽힌다.
     var W = Math.max(320, Math.min(900, $('chartWrap').clientWidth || 900));
@@ -990,7 +1267,7 @@
     renderFortune();
   });
   window.addEventListener('resize', function () {
-    if (fortuneState.reading) drawTimeline();
+    if (fortuneState.reading && fortuneState.rows.length) drawTimeline();
   });
 
   function renderBoundary(r) {
@@ -1056,11 +1333,194 @@
     });
   }
 
+  // ── 궁합 ─────────────────────────────────────────────────────────────
+  function scoreBand(n) {
+    if (n >= 85) return { label: '드물게 잘 맞는 조합', tone: 'good' };
+    if (n >= 70) return { label: '잘 맞는 편', tone: 'good' };
+    if (n >= 55) return { label: '무난한 편', tone: 'mid' };
+    if (n >= 40) return { label: '보통', tone: 'mid' };
+    if (n >= 25) return { label: '맞추려는 노력이 필요한 편', tone: 'bad' };
+    return { label: '부딪히기 쉬운 조합', tone: 'bad' };
+  }
+
+  function personLabel(r, fallback) {
+    if (r.name) return r.name.surname + r.name.given;
+    return fallback;
+  }
+
+  function renderCompat(A, B, c) {
+    var d = c.detail;
+    var band = scoreBand(c.total);
+    var nameA = personLabel(A, '나'), nameB = personLabel(B, '상대');
+
+    $('compatSub').textContent =
+      nameA + '(' + A.solar.year + '.' + A.solar.month + '.' + A.solar.day + ')와 ' +
+      nameB + '(' + B.solar.year + '.' + B.solar.month + '.' + B.solar.day + ')의 원국을 견줍니다. ' +
+      '대운·세운이 아니라 타고난 자리끼리의 비교라, 시기에 따라 체감은 달라집니다.';
+
+    $('compatScore').textContent = c.total;
+    $('compatScore').parentNode.style.borderColor =
+      band.tone === 'good' ? 'var(--accent-2)' : band.tone === 'bad' ? 'var(--danger)' : 'var(--accent)';
+
+    var top = c.strengths[0], bad = c.frictions[0];
+    $('compatDesc').innerHTML =
+      '<b>' + esc(band.label) + '.</b> 일간은 ' + esc(d.dayStems.join(' · ')) + ' 로 ' + esc(d.dayStemRelation) + ' 관계이고, ' +
+      '배우자 자리인 일지는 ' + (d.dayBranchRelations.length ? esc(d.dayBranchRelations.join('·')) : '특별한 관계 없음') + '입니다. ' +
+      '띠로는 ' + esc(d.zodiac.join('·')) + (d.zodiacRelations.length ? ' ' + esc(d.zodiacRelations.join('·')) : ' 무관') + '. ' +
+      (top ? '가장 크게 받쳐 주는 것은 <b>' + esc(top.label) + '</b>' : '') +
+      (bad ? ', 가장 걸리는 것은 <b>' + esc(bad.label) + '</b>입니다.' : '입니다.');
+
+    function card(who, r, name) {
+      return '<div class="pair-card"><div class="who">' + esc(who) + '</div>' +
+        '<div class="gz">' + esc(r.pillars.day.hanja) + ' <span style="font-size:13px;color:var(--text-dim)">' + esc(r.pillars.day.korean) + '일주</span></div>' +
+        '<div class="meta">' + esc(name) + ' · ' + esc(r.pillars.year.animal) + '띠 · 일간 ' + esc(r.analysis.dayMaster.stem) + '(' + esc(r.analysis.dayMaster.elem) + ')<br>' +
+        esc(r.analysis.strength) + ' · 용신 ' + esc(r.analysis.yongsin[0]) + '</div></div>';
+    }
+    $('pairRow').innerHTML =
+      card('나', A, nameA) +
+      '<div class="pair-link">' + esc(d.dayStemRelation) + '<br>↔<br>' +
+        esc(d.godBtoA) + ' / ' + esc(d.godAtoB) + '</div>' +
+      card('상대', B, nameB);
+
+    $('axes').innerHTML = E.COMPAT_AXES.map(function (k) {
+      var ax = c.axes[k];
+      return '<div class="axis-row" title="' + esc(ax.items.slice(0, 3).map(function (i) {
+          return i.label + ' (' + (i.delta > 0 ? '+' : '') + i.delta + ')'; }).join(' / ')) + '">' +
+        '<div class="axis-name">' + esc(ax.label) + '</div>' +
+        '<div class="axis-track"><div class="axis-fill" style="width:' + Math.max(2, ax.score) + '%"></div></div>' +
+        '<div class="axis-val">' + ax.score + '</div></div>';
+    }).join('');
+
+    function items(list, empty) {
+      if (!list.length) return '<div class="sf-item" style="color:var(--text-mute)">' + empty + '</div>';
+      return list.map(function (i) {
+        return '<div class="sf-item"><span class="ax">[' + esc(i.axis) + ']</span> ' + esc(i.label) + '</div>';
+      }).join('');
+    }
+    $('compatStrengths').innerHTML = items(c.strengths, '두드러지게 받쳐 주는 자리는 없습니다.');
+    $('compatFrictions').innerHTML = items(c.frictions, '크게 걸리는 자리는 없습니다.');
+  }
+
+  // ── 여러 명과 비교 ────────────────────────────────────────────────────
+  var batchRows = [];
+
+  function runBatch(A) {
+    var out = [];
+    contacts.people.forEach(function (p) {
+      var r;
+      try {
+        r = E.fullReading({
+          calendar: '양력', year: p.year, month: p.month, day: p.day,
+          hour: null, minute: null, gender: '남',   // 성별은 대운에만 쓰이고 궁합엔 관여하지 않는다
+          longitude: parseFloat($('city').value),
+          useSolarTime: $('useSolarTime').checked,
+          lateNightRule: $('lateNight').value,
+          skipLunar: true, skipFortune: true
+        });
+      } catch (e) { return; }
+      if (r.error) return;
+      var c = E.compatibility(A, r);
+      out.push({ person: p, reading: r, compat: c });
+    });
+    out.sort(function (a, b) { return b.compat.total - a.compat.total; });
+    batchRows = out;
+
+    $('batchSub').textContent =
+      '연락처의 생년월일과 내 원국을 하나씩 견줘 점수 순으로 세웠습니다. ' +
+      '태어난 시각과 이름이 없으므로 시주·성명 궁합은 빠져 있고, 그만큼 거친 비교입니다.';
+    $('batchSummary').innerHTML =
+      '<b>' + out.length + '명</b>과 비교했습니다.' +
+      (contacts.skipped.length ? ' ' + contacts.skipped.length + '명은 생일을 읽지 못해 빠졌습니다.' : '') +
+      ' 점수는 무작위로 만난 상대와 견준 백분위입니다 — 50이 평범, 80이면 상위 20%.';
+
+    if (!out.length) {
+      $('rankTable').innerHTML = '<tbody><tr><td style="color:var(--text-mute)">비교할 사람이 없습니다. 연락처 파일을 올리거나 목록을 붙여넣어 주세요.</td></tr></tbody>';
+      return;
+    }
+    var head = '<thead><tr><th class="num">#</th><th>이름</th><th>생일 · 띠</th><th>일주</th>' +
+      '<th class="num">궁합</th><th class="num">끌림</th><th class="num">안정</th><th class="num">소통</th><th class="num">지속</th>' +
+      '<th>주로 이런 이유</th><th></th></tr></thead>';
+    var body = out.map(function (row, i) {
+      var c = row.compat, r = row.reading;
+      // 용신 보완은 어느 짝에나 잘 붙는 항목이라 그것만 두 줄 나오면 구별이 안 된다.
+      // 합·충·일간처럼 그 짝에만 해당하는 항목을 먼저 보여 준다.
+      var specific = /합|충|형|띠|일간|이름|계절|여름|겨울/;
+      var pool = c.strengths.length ? c.strengths : c.frictions;
+      var picked = pool.filter(function (s) { return specific.test(s.label); })
+                       .concat(pool.filter(function (s) { return !specific.test(s.label); }))
+                       .slice(0, 2).map(function (s) { return s.label; });
+      var why = picked.length ? picked.join(' · ') : '—';
+      // 상위 세 줄이라도 점수가 낮으면 강조하지 않는다 — 15점을 초록으로
+      // 칠해 두면 잘 맞는 사람처럼 읽힌다.
+      return '<tr' + (i < 3 && c.total >= 60 ? ' class="top"' : '') + '>' +
+        '<td class="num">' + (i + 1) + '</td>' +
+        '<td><span class="who">' + esc(row.person.name) + '</span></td>' +
+        '<td class="sub2">' + row.person.year + '.' + row.person.month + '.' + row.person.day +
+          ' · ' + esc(r.pillars.year.animal) + '띠</td>' +
+        '<td class="sub2">' + esc(r.pillars.day.hanja) + ' ' + esc(r.analysis.dayMaster.elem) + '</td>' +
+        '<td class="num"><span class="mini-bar"><i style="width:' + Math.max(3, c.total) + '%"></i></span><b>' + c.total + '</b></td>' +
+        '<td class="num sub2">' + c.axes.attraction.score + '</td>' +
+        '<td class="num sub2">' + c.axes.stability.score + '</td>' +
+        '<td class="num sub2">' + c.axes.communication.score + '</td>' +
+        '<td class="num sub2">' + c.axes.endurance.score + '</td>' +
+        '<td class="rank-why">' + esc(why) + '</td>' +
+        '<td><button type="button" class="retry-btn" style="margin:0;padding:5px 10px;font-size:11.5px" data-i="' + i + '">자세히</button></td>' +
+      '</tr>';
+    }).join('');
+    $('rankTable').innerHTML = head + '<tbody>' + body + '</tbody>';
+  }
+
+  // 순위표의 "자세히" — 그 사람을 상대방 칸에 채우고 궁합 모드로 넘어간다.
+  $('rankTable').addEventListener('click', function (e) {
+    var btn = e.target.closest('button[data-i]');
+    if (!btn) return;
+    var row = batchRows[+btn.dataset.i];
+    if (!row) return;
+    var p = row.person;
+    $('p_surname').value = ''; $('p_given').value = '';
+    $('p_year').value = p.year;
+    $('p_month').value = String(p.month);
+    $('p_day').value = String(p.day);
+    $('p_noHour').checked = true;
+    $('p_noHour').dispatchEvent(new Event('change'));
+    Array.prototype.forEach.call($('mode').querySelectorAll('.chip'), function (c) {
+      c.setAttribute('aria-pressed', String(c.dataset.v === 'compat'));
+    });
+    applyMode('compat');
+    $('form').dispatchEvent(new Event('submit', { cancelable: true }));
+  });
+
   // ── 제출 ─────────────────────────────────────────────────────────────
   function showError(msg) {
     var box = $('formError');
     if (!msg) { box.classList.remove('show'); return; }
     box.textContent = msg; box.classList.add('show');
+  }
+
+  function readPartner() {
+    var noHour = $('p_noHour').checked;
+    return {
+      calendar: getPCalendar(),
+      year: parseInt($('p_year').value, 10),
+      month: parseInt($('p_month').value, 10),
+      day: parseInt($('p_day').value, 10),
+      leapMonth: $('p_leapMonth').checked && getPCalendar() === '음력',
+      hour: noHour ? null : parseInt($('p_hour').value, 10),
+      minute: noHour ? null : (parseInt($('p_minute').value, 10) || 0),
+      gender: getPGender(),
+      surname: $('p_surname').value.trim(),
+      given: $('p_given').value.trim(),
+      longitude: parseFloat($('city').value),
+      useSolarTime: $('useSolarTime').checked,
+      lateNightRule: $('lateNight').value
+    };
+  }
+
+  function checkPerson(p, who) {
+    if (!p.year || p.year < 1900 || p.year > 2100) return who + '의 태어난 해를 1900~2100 사이로 입력해 주세요.';
+    if ((p.surname && !p.given) || (!p.surname && p.given)) return who + '의 성과 이름을 함께 입력하거나, 둘 다 비워 주세요.';
+    if (p.surname && !/^[가-힣]{1,5}$/.test(p.surname + p.given)) return who + '의 이름은 한글로만 입력해 주세요.';
+    return null;
   }
 
   $('form').addEventListener('submit', function (ev) {
@@ -1069,6 +1529,7 @@
 
     var noHour = $('noHour').checked;
     var payload = {
+      mode: mode,
       calendar: getCalendar(),
       year: parseInt($('year').value, 10),
       month: parseInt($('month').value, 10),
@@ -1086,15 +1547,8 @@
       focus: getFocus()
     };
 
-    if (!payload.year || payload.year < 1900 || payload.year > 2100) {
-      return showError('태어난 해를 1900~2100 사이로 입력해 주세요.');
-    }
-    if ((payload.surname && !payload.given) || (!payload.surname && payload.given)) {
-      return showError('성과 이름을 함께 입력하거나, 둘 다 비워 주세요.');
-    }
-    if (payload.surname && !/^[가-힣]{1,5}$/.test(payload.surname + payload.given)) {
-      return showError('이름은 한글로만 입력해 주세요.');
-    }
+    var bad = checkPerson(payload, '나');
+    if (bad) return showError(bad);
     if (payload.hanja && !/^[㐀-䶿一-鿿]{1,5}$/.test(payload.hanja)) {
       return showError('한자 표기에는 한자만 입력해 주세요.');
     }
@@ -1107,6 +1561,7 @@
     }
     if (reading.error) return showError(reading.error);
 
+    // 내 사주는 어느 모드에서든 그린다. 모드를 바꿔도 이미 채워져 있도록.
     renderBoundary(reading);
     renderSummary(reading);
     renderPillars(reading);
@@ -1114,19 +1569,46 @@
     renderLuck(reading);
     renderName(reading);
 
+    var partner = null, compat = null, partnerReading = null;
+    if (mode === 'compat') {
+      partner = readPartner();
+      var badP = checkPerson(partner, '상대');
+      if (badP) return showError(badP);
+      try {
+        partnerReading = E.fullReading(partner);
+      } catch (err2) {
+        return showError('상대 사주 계산 중 오류가 났습니다: ' + err2.message);
+      }
+      if (partnerReading.error) return showError('상대: ' + partnerReading.error);
+      compat = E.compatibility(reading, partnerReading);
+      renderCompat(reading, partnerReading, compat);
+      payload.partner = partner;
+    }
+
+    if (mode === 'batch' && !contacts.people.length) {
+      return showError('비교할 사람이 없습니다. 연락처 파일을 올리거나 목록을 붙여넣어 주세요.');
+    }
+
     $('result').classList.add('show');
+    applyMode(mode);   // 모드에 맞는 패널만 펴 둔다
+
     // 차트는 결과 영역이 화면에 붙은 뒤에 그린다 — 숨어 있는 동안에는 폭이 0이라
     // viewBox 를 컨테이너에 맞출 수가 없다.
     fortuneState.reading = reading;
-    renderFortune();
+    if (mode === 'solo') renderFortune();
+    if (mode === 'batch') runBatch(reading);
+
     $('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-    lastPayload = payload;
-    streamReading(payload);
+    if (mode !== 'batch') {
+      lastPayload = payload;
+      streamReading(payload);
+    }
   });
 
   // 기본값
   $('year').value = 1990;
+  applyMode('solo');
 })();
 </script>
 </body>

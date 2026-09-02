@@ -1144,6 +1144,381 @@
     return out;
   }
 
+  // ── 궁합 ────────────────────────────────────────────────────────────────
+  //
+  // 두 사람의 원국을 네 축으로 견준다. 총점 하나만 던지면 "왜"가 사라지고,
+  // 84점과 61점의 차이가 무엇인지 아무도 알 수 없다. 그래서 축마다 어떤 항목이
+  // 몇 점을 더하고 뺐는지 그대로 들고 나간다.
+  //
+  //   끌림  — 일간·일지가 서로 당기는가 (합충)
+  //   안정  — 서로 모자란 오행을 채워 주는가, 힘의 세기가 맞물리는가
+  //   소통  — 상대가 나에게 어떤 십신인가, 이름의 소리가 어울리는가
+  //   지속  — 오래 두었을 때 갈리는 자리(충·형·해·파·원진)가 얼마나 있는가
+  //
+  // 축 점수는 50에서 시작해 항목을 더하고 뺀 뒤 0~100으로 자른다.
+  var COMPAT_AXES = ['attraction', 'stability', 'communication', 'endurance'];
+  var COMPAT_LABEL = {
+    attraction: '끌림', stability: '안정', communication: '소통', endurance: '지속'
+  };
+  var COMPAT_WEIGHT = { attraction: 0.3, stability: 0.28, communication: 0.22, endurance: 0.2 };
+
+  // 축 점수를 가중평균한 원점수는 대개 45~70 사이에 몰린다. 그 숫자를 그대로
+  // "궁합 56점"이라고 내놓으면 누구와 붙여도 비슷비슷해 보여서 비교가 안 된다.
+  // 그래서 무작위로 짝지은 48,180쌍의 원점수 분포(5% 간격 분위값)에 견주어
+  // 백분위로 환산한다. 환산 점수 70이면 "무작위로 만난 상대 100명 중 상위 30번째"
+  // 라는 뜻이지, 100점 만점에 70점이라는 뜻이 아니다.
+  var COMPAT_BASELINE = [29, 45, 48, 50, 52, 53, 54, 55, 56, 57, 57,
+                         58, 59, 60, 61, 62, 63, 64, 66, 68, 80];
+  function compatPercentile(raw) {
+    if (raw <= COMPAT_BASELINE[0]) return 0;
+    for (var i = 0; i < COMPAT_BASELINE.length - 1; i++) {
+      var lo = COMPAT_BASELINE[i], hi = COMPAT_BASELINE[i + 1];
+      if (raw <= hi) {
+        var t = hi === lo ? 0 : (raw - lo) / (hi - lo);
+        return Math.max(0, Math.min(100, Math.round((i + t) * 5)));
+      }
+    }
+    return 100;
+  }
+
+  // 상대 일간이 나에게 어떤 십신인지에 따른 소통 점수.
+  // 정(正) 계열은 결이 맞고, 편(偏) 계열은 자극이 크되 마찰도 크다.
+  var COMPAT_GOD_SCORE = {
+    정관: 9, 정인: 9, 정재: 8, 식신: 8, 비견: 4,
+    편재: 3, 편인: -2, 겁재: -4, 편관: -6, 상관: -8
+  };
+
+  // 받침 유무에 따라 조사를 고른다. "용신 수이 들어 있음" 같은 문장을 막는다.
+  function josa(word, pair) {
+    var parts = pair.split('/');
+    if (!word) return '';
+    var code = word.charCodeAt(word.length - 1) - 0xAC00;
+    var hasBatchim = code >= 0 && code <= 11171 && (code % 28) !== 0;
+    return word + (hasBatchim ? parts[0] : parts[1]);
+  }
+
+  function elementCount(reading) {
+    return reading.analysis.weighted;
+  }
+
+  function compatibility(A, B, opts) {
+    opts = opts || {};
+    var pa = A.chart.pillars, pb = B.chart.pillars;
+    var axes = {};
+    COMPAT_AXES.forEach(function (k) { axes[k] = { score: 50, items: [] }; });
+    function add(axis, delta, label) {
+      if (!delta) return;
+      axes[axis].score += delta;
+      axes[axis].items.push({ label: label, delta: Math.round(delta * 10) / 10 });
+    }
+
+    // ── 일간끼리 ──
+    var sa = pa.day.stem, sb = pb.day.stem;
+    var stemRel = stemRelation(sa, sb);
+    var ea = STEM_ELEM[sa], eb = STEM_ELEM[sb];
+    if (stemRel && stemRel.name === '천간합') {
+      add('attraction', 22, '일간 ' + STEM[sa] + '·' + STEM[sb] + ' 천간합 — 서로에게 끌리는 자리');
+      add('endurance', 8, '일간이 합을 이룸');
+    } else if (stemRel && stemRel.name === '천간충') {
+      add('attraction', -10, '일간 ' + STEM[sa] + '·' + STEM[sb] + ' 천간충 — 첫인상부터 부딪힘');
+      add('endurance', -12, '일간이 충함');
+    }
+    if (ea === eb) {
+      add('communication', 6, '일간이 같은 ' + ea + ' — 말이 잘 통함');
+      add('attraction', -4, '같은 오행이라 자극은 덜함');
+    } else if (generates(ea, eb)) {
+      add('communication', 7, ea + '이 ' + eb + '을 생함 — 내가 주는 쪽');
+      add('stability', 5, '한쪽이 기운을 대 줌');
+    } else if (generates(eb, ea)) {
+      add('communication', 7, eb + '이 ' + ea + '을 생함 — 상대가 주는 쪽');
+      add('stability', 5, '한쪽이 기운을 대 줌');
+    } else if (controls(ea, eb) || controls(eb, ea)) {
+      add('attraction', 6, ea + '과 ' + eb + '이 극 — 긴장감이 있는 조합');
+      add('communication', -6, '오행이 서로 극함');
+      add('endurance', -5, '오래 두면 눌리는 쪽이 생김');
+    }
+    var godBtoA = tenGodOfStem(sa, sb);   // 상대가 나에게
+    var godAtoB = tenGodOfStem(sb, sa);   // 내가 상대에게
+    add('communication', (COMPAT_GOD_SCORE[godBtoA] || 0) * 0.8, '상대는 나에게 ' + godBtoA);
+    add('communication', (COMPAT_GOD_SCORE[godAtoB] || 0) * 0.8, '나는 상대에게 ' + godAtoB);
+
+    // ── 일지끼리 (배우자궁) ──
+    var ba = pa.day.branch, bb = pb.day.branch;
+    branchRelations(ba, bb).forEach(function (rel) {
+      var w = { 육합: [20, 10], 삼합: [15, 8], 방합: [8, 4],
+                충: [-16, -18], 형: [-8, -12], 해: [-4, -7], 파: [-3, -5],
+                원진: [-6, -10], 자형: [-4, -6] }[rel.name];
+      if (!w) return;
+      add('attraction', w[0], '일지(배우자 자리) ' + BRANCH[ba] + '·' + BRANCH[bb] + ' ' + rel.name);
+      add('endurance', w[1], '일지 ' + rel.name);
+    });
+
+    // ── 연지끼리 (띠 궁합) ──
+    var za = pa.year.branch, zb = pb.year.branch;
+    branchRelations(za, zb).forEach(function (rel) {
+      var w = { 육합: 8, 삼합: 7, 방합: 3, 충: -7, 형: -4, 해: -2, 파: -2, 원진: -6, 자형: -2 }[rel.name];
+      if (!w) return;
+      add('endurance', w, '띠(연지) ' + BRANCH_ANIMAL[za] + '·' + BRANCH_ANIMAL[zb] + ' ' + rel.name);
+    });
+
+    // ── 오행 보완 ──
+    // 상대가 내 용신 오행을 얼마나 들고 있는가. 서로 채워 주면 함께 있을수록 편해진다.
+    function supply(me, other) {
+      var have = elementCount(other), y = me.analysis.yongsin;
+      var s = 0;
+      if (y[0] && have[y[0]] >= 1.5) s += 12;
+      else if (y[0] && have[y[0]] >= 0.8) s += 6;
+      if (y[1] && have[y[1]] >= 1.5) s += 5;
+      (me.analysis.missing || []).forEach(function (m) { if (have[m] >= 1) s += 4; });
+      var gi = ELEMS[(ELEMS.indexOf(y[0]) + 3) % 5];
+      if (have[gi] >= 3) s -= 7;
+      return s;
+    }
+    var supAB = supply(A, B), supBA = supply(B, A);
+    add('stability', supAB * 0.6, supAB >= 0
+      ? '상대가 내 용신(' + A.analysis.yongsin[0] + ')을 채워 줌'
+      : '상대에게 내 기신이 많음');
+    add('stability', supBA * 0.6, supBA >= 0
+      ? '내가 상대의 용신(' + B.analysis.yongsin[0] + ')을 채워 줌'
+      : '나에게 상대의 기신이 많음');
+
+    // ── 힘의 세기 조합 ──
+    var stA = A.analysis.strengthRatio >= 0.5, stB = B.analysis.strengthRatio >= 0.5;
+    if (stA && stB) {
+      add('stability', -8, '둘 다 일간이 강함 — 서로 물러서지 않는 조합');
+      add('endurance', -5, '주도권이 겹침');
+    } else if (!stA && !stB) {
+      add('stability', -3, '둘 다 일간이 약함 — 기댈 곳이 서로뿐');
+    } else {
+      add('stability', 9, '한쪽이 강하고 한쪽이 약함 — 역할이 갈림');
+    }
+
+    // ── 조후 (계절 균형) ──
+    var seasonA = A.analysis.season, seasonB = B.analysis.season;
+    if ((seasonA === '여름' && seasonB === '겨울') || (seasonA === '겨울' && seasonB === '여름')) {
+      add('stability', 8, '여름생과 겨울생 — 온도가 서로 맞춰짐');
+    } else if (seasonA === seasonB && (seasonA === '여름' || seasonA === '겨울')) {
+      add('stability', -6, '둘 다 ' + seasonA + '생 — 한쪽으로 치우침');
+    }
+
+    // ── 이름 ──
+    var nameNote = null;
+    if (A.name && B.name) {
+      var la = A.name.syllables[A.name.syllables.length - 1].elem;
+      var fb = B.name.syllables[0].elem;
+      var rel2;
+      if (la === fb) rel2 = '비화';
+      else if (generates(la, fb) || generates(fb, la)) rel2 = '상생';
+      else rel2 = '상극';
+      var d = { 상생: 7, 비화: 4, 상극: -6 }[rel2];
+      add('communication', d, '두 이름의 소리가 ' + la + '·' + fb + ' ' + rel2);
+      // 상대 이름이 내 용신을 불러 주는가
+      var bElems = B.name.syllables.map(function (s2) { return s2.elem; });
+      if (bElems.indexOf(A.analysis.yongsin[0]) >= 0) {
+        add('stability', 5, '상대 이름에 내 용신 ' + josa(A.analysis.yongsin[0], '이/가') + ' 들어 있음');
+      }
+      var aElems = A.name.syllables.map(function (s2) { return s2.elem; });
+      if (aElems.indexOf(B.analysis.yongsin[0]) >= 0) {
+        add('stability', 5, '내 이름에 상대 용신 ' + josa(B.analysis.yongsin[0], '이/가') + ' 들어 있음');
+      }
+      nameNote = { tailHeadRelation: rel2, aElems: aElems, bElems: bElems };
+    }
+
+    // ── 월지 (자라온 환경) ──
+    branchRelations(pa.month.branch, pb.month.branch).forEach(function (rel) {
+      if (rel.name === '충') add('endurance', -5, '월지 충 — 살아온 결이 다름');
+      if (rel.name === '육합' || rel.name === '삼합') add('endurance', 4, '월지 ' + rel.name + ' — 배경이 비슷함');
+    });
+
+    COMPAT_AXES.forEach(function (k) {
+      axes[k].score = Math.max(0, Math.min(100, Math.round(axes[k].score)));
+      axes[k].label = COMPAT_LABEL[k];
+      axes[k].items.sort(function (x, y2) { return Math.abs(y2.delta) - Math.abs(x.delta); });
+    });
+    var raw = Math.round(COMPAT_AXES.reduce(function (acc, k) {
+      return acc + axes[k].score * COMPAT_WEIGHT[k];
+    }, 0));
+    var total = compatPercentile(raw);
+
+    var all = [];
+    COMPAT_AXES.forEach(function (k) {
+      axes[k].items.forEach(function (it) { all.push({ axis: COMPAT_LABEL[k], label: it.label, delta: it.delta }); });
+    });
+    var strengths = all.filter(function (i2) { return i2.delta > 0; })
+                       .sort(function (x, y2) { return y2.delta - x.delta; }).slice(0, 5);
+    var frictions = all.filter(function (i2) { return i2.delta < 0; })
+                       .sort(function (x, y2) { return x.delta - y2.delta; }).slice(0, 5);
+
+    return {
+      total: total, raw: raw, axes: axes, strengths: strengths, frictions: frictions,
+      detail: {
+        dayStems: [STEM[sa] + '(' + STEM_H[sa] + ')', STEM[sb] + '(' + STEM_H[sb] + ')'],
+        dayStemRelation: stemRel ? stemRel.name : (ea === eb ? '같은 오행' : (generates(ea, eb) || generates(eb, ea) ? '상생' : (controls(ea, eb) || controls(eb, ea) ? '상극' : '무관'))),
+        dayBranchRelations: branchRelations(ba, bb).map(function (r) { return r.name; }),
+        zodiacRelations: branchRelations(za, zb).map(function (r) { return r.name; }),
+        zodiac: [BRANCH_ANIMAL[za], BRANCH_ANIMAL[zb]],
+        godBtoA: godBtoA, godAtoB: godAtoB,
+        strength: [A.analysis.strength, B.analysis.strength],
+        season: [seasonA, seasonB],
+        yongsin: [A.analysis.yongsin[0], B.analysis.yongsin[0]],
+        supply: { toMe: supAB, toThem: supBA },
+        name: nameNote
+      }
+    };
+  }
+
+  // ── 연락처 읽기 ─────────────────────────────────────────────────────────
+  //
+  // 카카오톡은 친구 생일을 내보내는 방법이 없다(공개 API도, 내보내기 메뉴도 없다).
+  // 대신 휴대폰·구글 연락처에서 내보낸 파일을 읽는다. 파일은 브라우저 안에서만
+  // 열리고 서버로 올라가지 않는다.
+  //
+  //   · vCard(.vcf)  — 아이폰/안드로이드/구글 연락처 공통 내보내기 형식
+  //   · CSV          — 구글 연락처, 아웃룩
+  //   · 직접 붙여넣기 — "이름 1990-05-15" 같은 줄 목록
+  function parseBirthday(raw) {
+    if (!raw) return null;
+    // "1990. 5. 15." 처럼 점과 공백이 섞인 표기도 흔하다.
+    var t = String(raw).trim().replace(/\s+/g, '').replace(/[.\/]$/, '');
+    var m;
+    // 연도가 없는 형식(--MMDD)은 사주를 세울 수 없다. 가장 먼저 걸러 낸다.
+    if (/^-{1,2}\d{2}-?\d{2}$/.test(t)) return { noYear: true };
+    // 자릿수가 고정된 형식부터 본다. 아래 두 줄의 순서가 바뀌면 930722 가
+    // 9307년 2월 2일로 읽힌다.
+    if ((m = /^(\d{4})(\d{2})(\d{2})$/.exec(t))) {
+      return { year: +m[1], month: +m[2], day: +m[3] };
+    }
+    if ((m = /^(\d{2})(\d{2})(\d{2})$/.exec(t))) {
+      var yy = +m[1];
+      var nowYY = new Date().getFullYear() % 100;
+      return { year: yy <= nowYY ? 2000 + yy : 1900 + yy,
+               month: +m[2], day: +m[3], guessedCentury: true };
+    }
+    if ((m = /^(\d{4})[-.\/](\d{1,2})[-.\/](\d{1,2})$/.exec(t))) {
+      return { year: +m[1], month: +m[2], day: +m[3] };
+    }
+    return null;
+  }
+
+  function validDate(d) {
+    if (!d || d.noYear) return false;
+    if (d.year < 1900 || d.year > 2100) return false;
+    if (d.month < 1 || d.month > 12) return false;
+    if (d.day < 1 || d.day > 31) return false;
+    return true;
+  }
+
+  function parseVCards(text) {
+    var out = [];
+    // 76자에서 접힌 줄은 다음 줄이 공백/탭으로 시작한다 — 먼저 펴 준다.
+    var lines = text.replace(/\r\n/g, '\n').replace(/\n[ \t]/g, '').split('\n');
+    var cur = null;
+    lines.forEach(function (line) {
+      if (/^BEGIN:VCARD/i.test(line)) { cur = { name: null, n: null, bday: null }; return; }
+      if (/^END:VCARD/i.test(line)) {
+        if (cur) out.push({ name: cur.name || cur.n || '(이름 없음)', bday: cur.bday });
+        cur = null; return;
+      }
+      if (!cur) return;
+      var idx = line.indexOf(':');
+      if (idx < 0) return;
+      var key = line.slice(0, idx).split(';')[0].toUpperCase();
+      var val = line.slice(idx + 1).trim();
+      if (key === 'FN') cur.name = val;
+      else if (key === 'N' && !cur.n) {
+        // vCard 의 N 은 성;이름 순서다. 한글 이름은 성+이름으로 그대로 붙이고,
+        // 로마자 이름만 이름 성 순서로 돌린다.
+        var pieces = val.split(';');
+        var family = (pieces[0] || '').trim(), given = (pieces[1] || '').trim();
+        cur.n = /^[가-힣]+$/.test(family + given)
+          ? (family + given)
+          : (given + ' ' + family).trim();
+      }
+      else if (key === 'BDAY') cur.bday = val;
+    });
+    return out;
+  }
+
+  function splitCsvLine(line) {
+    var out = [], cur = '', quoted = false;
+    for (var i = 0; i < line.length; i++) {
+      var c = line[i];
+      if (quoted) {
+        if (c === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+        else if (c === '"') quoted = false;
+        else cur += c;
+      } else if (c === '"') quoted = true;
+      else if (c === ',') { out.push(cur); cur = ''; }
+      else cur += c;
+    }
+    out.push(cur);
+    return out;
+  }
+
+  function parseCsv(text) {
+    var lines = text.replace(/\r\n/g, '\n').split('\n').filter(function (l) { return l.trim(); });
+    if (!lines.length) return [];
+    var head = splitCsvLine(lines[0]).map(function (h) { return h.trim().toLowerCase(); });
+    var find = function (words) {
+      for (var i = 0; i < head.length; i++) {
+        for (var j = 0; j < words.length; j++) if (head[i].indexOf(words[j]) >= 0) return i;
+      }
+      return -1;
+    };
+    var iBday = find(['birthday', 'birth', '생일', '생년월일']);
+    if (iBday < 0) return [];
+    var iName = find(['file as', 'display name', 'full name', '이름', '성명', 'name']);
+    var iFirst = find(['first name', 'given name']);
+    var iLast = find(['last name', 'family name']);
+
+    return lines.slice(1).map(function (l) {
+      var c = splitCsvLine(l);
+      var name = (iName >= 0 ? c[iName] : '') || '';
+      if (!name.trim() && (iFirst >= 0 || iLast >= 0)) {
+        name = ((iLast >= 0 ? c[iLast] : '') + (iFirst >= 0 ? c[iFirst] : '')).trim();
+      }
+      return { name: (name || '(이름 없음)').trim(), bday: (c[iBday] || '').trim() };
+    });
+  }
+
+  function parsePlainLines(text) {
+    return text.replace(/\r\n/g, '\n').split('\n').map(function (l) { return l.trim(); })
+      .filter(Boolean)
+      .map(function (line) {
+        // "홍길동 1990-05-15", "홍길동, 900515", "홍길동\t1990.5.15"
+        var m = /^(.*?)[\s,\t]+([\d\-./]{6,10})\s*$/.exec(line);
+        // 날짜가 없는 줄도 버리지 않고 넘긴다 — 몇 명이 왜 빠졌는지 보여 줘야
+        // 사용자가 목록을 고칠 수 있다.
+        if (!m) return { name: line.replace(/[,\t]+$/, ''), bday: null };
+        return { name: m[1].trim().replace(/[,\t]+$/, '') || '(이름 없음)', bday: m[2] };
+      });
+  }
+
+  /**
+   * 연락처 텍스트를 사람 목록으로. 형식은 내용을 보고 알아서 고른다.
+   * @returns {{people: Array, skipped: Array, total: number}}
+   */
+  function parseContacts(text) {
+    if (!text || !text.trim()) return { people: [], skipped: [], total: 0 };
+    var rows;
+    if (/BEGIN:VCARD/i.test(text)) rows = parseVCards(text);
+    else if (/^[^\n]*,[^\n]*\n/.test(text) && parseCsv(text).length) rows = parseCsv(text);
+    else rows = parsePlainLines(text);
+
+    var people = [], skipped = [];
+    rows.forEach(function (r) {
+      if (!r.bday) { skipped.push({ name: r.name, reason: '생일 없음' }); return; }
+      var d = parseBirthday(r.bday);
+      if (d && d.noYear) { skipped.push({ name: r.name, reason: '연도가 없는 생일(--MMDD)' }); return; }
+      if (!validDate(d)) { skipped.push({ name: r.name, reason: '생일 형식을 읽지 못함: ' + r.bday }); return; }
+      people.push({
+        name: r.name, year: d.year, month: d.month, day: d.day,
+        guessedCentury: !!d.guessedCentury
+      });
+    });
+    return { people: people, skipped: skipped, total: rows.length };
+  }
+
   // ── 한 번에 뽑아 쓰는 진입점 ────────────────────────────────────────────
   function fullReading(input) {
     var solar = input.calendar === '음력'
@@ -1190,7 +1565,9 @@
 
     var out = {
       solar: solar,
-      lunar: solarToLunar(solar.year, solar.month, solar.day),
+      // 여러 명을 한꺼번에 볼 때는 음력 변환과 90년치 운세 계산이 전부 낭비다.
+      // 궁합은 원국끼리 보는 것이라 둘 다 필요 없다.
+      lunar: input.skipLunar ? null : solarToLunar(solar.year, solar.month, solar.day),
       chart: chart,
       pillars: {
         year: pillarText(p.year), month: pillarText(p.month),
@@ -1204,7 +1581,7 @@
       name: name
     };
     // 운세 시기는 원국·대운이 다 나온 뒤라야 매길 수 있다.
-    out.fortune = fortuneTimeline(out, input.fortuneWindow);
+    if (!input.skipFortune) out.fortune = fortuneTimeline(out, input.fortuneWindow);
     return out;
   }
 
@@ -1223,6 +1600,8 @@
     syllableInfo: syllableInfo, suriOf: suriOf, analyzeName: analyzeName,
     branchRelations: branchRelations, stemRelation: stemRelation,
     fortuneTimeline: fortuneTimeline, DOMAIN_LABEL: DOMAIN_LABEL,
+    compatibility: compatibility, COMPAT_AXES: COMPAT_AXES, COMPAT_LABEL: COMPAT_LABEL,
+    parseContacts: parseContacts, parseBirthday: parseBirthday,
     fullReading: fullReading
   };
 });
