@@ -703,8 +703,14 @@ const SYSTEM = `당신은 한국 명리학(사주)과 성명학을 함께 보는
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return fail(res, 405, 'POST 로 요청해 주세요.');
+  // 키가 없다는 말만 하면 무엇을 해야 하는지 알 수 없다. 할 일을 그대로 적는다.
   if (!process.env.ANTHROPIC_API_KEY) {
-    return fail(res, 500, '서버에 ANTHROPIC_API_KEY 환경변수가 설정되지 않았습니다.');
+    return fail(res, 503,
+      '아직 풀이 기능이 켜지지 않았습니다. ' +
+      '사이트 주인이 Vercel → Settings → Environment Variables 에 ' +
+      'ANTHROPIC_API_KEY 를 넣고 다시 배포하면 켜집니다. ' +
+      '(console.anthropic.com 에서 발급합니다) ' +
+      '사주표·오행·대운·시기·이름·궁합 계산은 지금도 그대로 보실 수 있습니다.');
   }
 
   let body = req.body;

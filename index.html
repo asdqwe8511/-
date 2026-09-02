@@ -2482,10 +2482,14 @@
       return pump();
     }).catch(function (err) {
       box.classList.remove('typing');
+      // 429(사용량)와 503(아직 안 켜짐)은 고장이 아니다. 빨간 글씨로 띄우면
+      // 사이트가 망가진 줄 안다.
       var quota = err.status === 429;
-      status.innerHTML = '<span style="color:' + (quota ? 'var(--warn)' : 'var(--danger)') + '">' +
+      var notReady = err.status === 503;
+      status.innerHTML = '<span style="color:' +
+        (quota || notReady ? 'var(--warn)' : 'var(--danger)') + '">' +
         esc(err.message) + '</span>';
-      if (!quota) {
+      if (!quota && !notReady) {
         var btn = document.createElement('button');
         btn.className = 'retry-btn'; btn.textContent = '다시 시도';
         btn.onclick = function () { streamReading(lastPayload, r); };
