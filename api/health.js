@@ -70,7 +70,7 @@ async function pingRedis() {
 // 이 앱이 쓰는 환경변수. 이 목록에 없는 이름은 넣어도 아무 일도 일어나지 않는다.
 const WANTED = [
   'ANTHROPIC_API_KEY', 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN',
-  'YOUTUBE_API_KEY', 'SAJU_DAILY_LIMIT', 'SAJU_IP_HOURLY_LIMIT',
+  'SAJU_DAILY_LIMIT', 'SAJU_IP_HOURLY_LIMIT',
   'SAJU_IP_SALT', 'SAJU_MAX_SECONDS'
 ];
 
@@ -146,8 +146,6 @@ module.exports = async (req, res) => {
       '풀이 문장(Claude)': state(anthropic,
         'Vercel 환경변수에 ANTHROPIC_API_KEY 를 넣고 Redeploy 하세요',
         anthropic.cause || '키가 틀렸거나 만료됐을 수 있습니다'),
-      '인기영상 대시보드': has('YOUTUBE_API_KEY')
-        ? '동작' : '꺼짐 — YOUTUBE_API_KEY 를 넣고 Redeploy 하세요',
       '사용량 제한': state(redis,
         'Upstash Redis 를 붙이지 않아 인스턴스별 메모리 제한만 걸립니다(공개 사이트에는 약합니다)',
         'URL 또는 토큰이 틀렸을 수 있습니다')

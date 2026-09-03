@@ -56,7 +56,7 @@ const MIME = {
 
 // api/ 아래에서 요청 경로에 맞는 핸들러 파일을 찾는다.
 // /api/saju        → api/saju.js
-// /api/yt/videos   → api/yt/videos.js 가 없으면 api/yt/[...path].js
+// /api/a/b         → api/a/b.js 가 없으면 api/a/[...path].js
 function findHandler(pathname) {
   const rel = pathname.replace(/^\/api\/?/, '');
   const direct = path.join(ROOT, 'api', rel + '.js');
@@ -167,11 +167,9 @@ server.on('error', (e) => {
 });
 
 server.listen(PORT, () => {
-  console.log('\n  사주 앱           http://localhost:' + PORT + '/');
-  console.log('  인기영상 대시보드 http://localhost:' + PORT + '/youtube\n');
+  console.log('\n  사주 앱  http://localhost:' + PORT + '/\n');
   const missing = [];
   if (!process.env.ANTHROPIC_API_KEY) missing.push('ANTHROPIC_API_KEY (사주 해석 문장)');
-  if (!process.env.YOUTUBE_API_KEY) missing.push('YOUTUBE_API_KEY (인기영상 대시보드)');
   if (missing.length) {
     console.log('  환경변수가 없어 아래 기능은 꺼집니다:');
     missing.forEach((m) => console.log('    - ' + m));

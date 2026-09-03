@@ -1,4 +1,4 @@
-# 사주 앱 + 인기영상 대시보드
+# 사주 앱
 
 생년월일시를 넣으면 사주팔자·오행·대운·시기·이름·궁합·택일을 계산해 주는 공개
 웹 앱입니다. 계산은 전부 브라우저 안에서 끝나고, 글로 풀어 읽는 부분만 서버를
@@ -9,35 +9,25 @@
   언제든 지울 수 있습니다.
 - API 키는 서버(Vercel 환경변수)에만 있고 브라우저에는 절대 노출되지 않습니다.
 
-두 개의 페이지가 한 프로젝트에 들어 있습니다.
-
-| 경로 | 내용 |
-|---|---|
-| `/` | 사주팔자 + 이름 풀이 + 돈·건강·관계 시기 + 궁합 + 연락처 일괄 비교 |
-| `/youtube` | YouTube 국가별 인기영상 대시보드 |
-
 예전에 공유된 `/saju` 주소는 `/` 로 넘겨 줍니다(`vercel.json` 의 redirects).
+
+> 인기영상 대시보드가 같은 저장소에 있었는데, 주소가 겹쳐 따로 떼어 냈습니다.
+> 파일은 이 저장소의 이력에 남아 있습니다(`git log -- youtube.html`).
 
 ## 아키텍처
 
 ```
-index.html              사주·이름 풀이 UI 전체 (사이트 메인)
-youtube.html            인기영상 대시보드 UI 전체
+index.html              사주·이름 풀이 UI 전체
 saju-engine.js          만세력·오행·성명학·궁합·택일 계산 엔진.
                          브라우저와 서버가 같은 파일을 씁니다.
 hanja-data.js           한글 음 → 한자 후보표(KS X 1001). 이름 한자 고르기에 씁니다.
 api/saju.js             사주 해석 엔드포인트. 서버가 직접 계산한 뒤 그 결과만
                          Claude 에게 넘기고 응답을 스트리밍합니다. 사용량 제한도 여기서.
-api/yt/[...path].js     YouTube Data API 프록시.
-                         - 허용된 읽기 엔드포인트(videos/videoCategories/channels)만 전달
-                         - 성공 응답은 Vercel 엣지에서 30분간 캐시
-                         - 여기서만 YouTube API 키를 사용
-og-saju.png             사주 페이지 링크 미리보기 이미지
-og-image.png            인기영상 대시보드 링크 미리보기 이미지
+api/health.js           설정 점검. 어떤 키가 들어갔고 무엇이 켜졌는지 알려 줍니다.
+og-saju.png             링크 미리보기 이미지
 favicon.png             브라우저 탭 아이콘
 robots.txt, sitemap.xml 검색 노출
-tools/make-og-saju.py   사주 미리보기 이미지 생성
-tools/make-og.py        대시보드 미리보기 이미지·파비콘 생성
+tools/make-og-saju.py   미리보기 이미지 생성
 tools/dev-server.js     PC용 개발 서버
 tools/test-saju.js      만세력·궁합·택일·연락처 계산 점검 (218가지)
 tools/test-quota.js     사용량 제한·시간 상한·키 없을 때 안내 점검 (25가지)
@@ -47,17 +37,6 @@ tools/calibrate-compat.js   궁합 점수를 백분위로 바꾸는 기준표를
 tools/calibrate-pattern.js  드문 사주 구조가 실제로 얼마나 드문지 세어 봄
 vercel.json             깔끔한 URL, /saju → / 리다이렉트, 함수 실행 시간 제한
 ```
-
-브라우저는 `googleapis.com`을 직접 호출하지 않고 항상 `/api/yt/...`를 거칩니다.
-
-### 할당량 보호
-
-사이트가 공개되어 있으므로 프록시도 누구나 호출할 수 있습니다. 두 가지로 방어합니다.
-
-1. **엔드포인트 허용 목록** — 임의의 구글 API로 중계할 수 없습니다.
-2. **엣지 캐싱** — 성공 응답을 30분간 CDN에 캐시합니다. 방문자가 몇 명이든
-   YouTube 호출량은 거의 일정하게 유지되므로, 로그인이 있던 때보다 오히려
-   할당량을 적게 씁니다.
 
 ## PC에서 실행하기
 
@@ -84,7 +63,6 @@ API 키는 프로젝트 폴더에 `.env` 파일을 만들어 넣으면 읽어 �
 
 ```
 ANTHROPIC_API_KEY=sk-ant-...
-YOUTUBE_API_KEY=...
 ```
 
 **키가 없어도 사주표·오행·대운·시기·이름·궁합·택일·연락처 비교는 전부 동작합니다.**
@@ -130,7 +108,6 @@ vercel --prod                            # 다시 배포
 |---|---|---|
 | `ANTHROPIC_API_KEY` | 풀이 문장이 안 나옴 | console.anthropic.com |
 | `UPSTASH_REDIS_REST_URL`·`_TOKEN` | 하루 총량 제한이 안 걸림 | Vercel → Storage → Upstash Redis |
-| `YOUTUBE_API_KEY` | `/youtube` 가 안 됨 | Google Cloud Console |
 | `SAJU_MAX_SECONDS` | 60초로 봄 | 요금제 상한에 맞춰 (Hobby 60 / Pro 300) |
 | `SAJU_MODEL` | Opus 5 로 씀 | 아래 표에서 골라 넣기 |
 
@@ -269,7 +246,6 @@ Vercel 프로젝트의 **Settings → Environment Variables** 에 넣습니다.
 | 이름 | 필요한가 | 쓰는 곳 |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | 풀이 문장을 쓰려면 필수 | `/` 의 풀이 |
-| `YOUTUBE_API_KEY` | 대시보드를 쓰려면 필수 | `/youtube` |
 | `UPSTASH_REDIS_REST_URL` | 공개 운영이면 사실상 필수 | 사용량 제한 |
 | `UPSTASH_REDIS_REST_TOKEN` | 위와 한 쌍 | 사용량 제한 |
 | `SAJU_DAILY_LIMIT` | 선택 (기본 300) | 하루 총 풀이 횟수 |
@@ -397,18 +373,12 @@ node tools/test-saju.js
 ## 링크 미리보기 이미지 수정
 
 ```bash
-python tools/make-og-saju.py   # og-saju.png  (메인 = 사주 페이지)
-python tools/make-og.py        # og-image.png, favicon.png  (인기영상 대시보드)
+python tools/make-og-saju.py   # og-saju.png
 ```
 
-두 스크립트 모두 Pillow 가 필요합니다(`pip install pillow`). 한글 폰트는 윈도우·맥·리눅스
+Pillow 가 필요합니다(`pip install pillow`). 한글 폰트는 윈도우·맥·리눅스
 순서로 찾아 쓰므로 어느 PC에서 돌려도 됩니다.
 
 카카오톡·페이스북은 미리보기를 캐시하므로, 바꾼 뒤에도 예전 이미지가 보이면
 [카카오 디버거](https://developers.kakao.com/tool/debugger/sharing)에서 캐시를 초기화하거나
 링크 뒤에 `?v=3` 같은 파라미터를 붙여 공유하세요.
-
-## 참고: 유튜브 API 할당량
-
-하루 10,000 유닛입니다. 엣지 캐시 덕분에 30분에 한 번 정도만 실제 호출이
-발생하므로 일반적인 사용에서는 넉넉합니다.
