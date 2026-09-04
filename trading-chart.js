@@ -14,7 +14,22 @@
     grid: 'rgba(255,255,255,0.06)', axis: 'rgba(255,255,255,0.12)', cross: 'rgba(242,243,245,0.45)',
     buy: '#2dd4bf', sell: '#ffb347', note: '#c084fc', labelBg: '#2a2d38'
   };
+  const MARKER_COLORS = { buy: COLORS.buy, sell: COLORS.sell, note: COLORS.note, target: '#ffd166', stop: '#9298a8', expired: '#9298a8' };
   const AXIS_W = 70, AXIS_H = 24, PANE_GAP = 6, MIN_BARS = 8;
+
+  function hexToRgba(color, alpha) {
+    const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color || '');
+    if (!m) return color;
+    return 'rgba(' + parseInt(m[1], 16) + ',' + parseInt(m[2], 16) + ',' + parseInt(m[3], 16) + ',' + alpha + ')';
+  }
+  function star(ctx, cx, cy, r) {
+    for (let k = 0; k < 10; k++) {
+      const rr = k % 2 === 0 ? r : r * 0.45, a = -Math.PI / 2 + k * Math.PI / 5;
+      const x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr;
+      if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+  }
 
   function fmtPrice(v, ref) {
     if (v == null || !isFinite(v)) return '-';
@@ -204,6 +219,15 @@
         (o.levels || []).forEach(function (l) {
           if (l.price >= priceMin * 0.85 && l.price <= priceMax * 1.15) { acc.min = Math.min(acc.min, l.price); acc.max = Math.max(acc.max, l.price); }
         });
+      } else if (o.kind === 'segments') {
+        (o.segments || []).forEach(function (sg) {
+          if (sg.to < i0 || sg.from > iEnd) return;
+          if (sg.price >= priceMin * 0.7 && sg.price <= priceMax * 1.3) { acc.min = Math.min(acc.min, sg.price); acc.max = Math.max(acc.max, sg.price); }
+        });
+      } else if (o.kind === 'paths') {
+        (o.paths || []).forEach(function (pt) {
+          pt.points.forEach(function (q) { if (q.index >= i0 && q.index <= iEnd) { acc.min = Math.min(acc.min, q.price); acc.max = Math.max(acc.max, q.price); } });
+        });
       }
     });
     if (!isFinite(acc.min)) { acc.min = 0; acc.max = 1; }
@@ -334,6 +358,20 @@
     const ov = this.study.overlays || [];
 
     ov.forEach(function (o) {
+      if (o.kind !== 'zones') return;
+      ctx.font = '10px sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      (o.zones || []).forEach(function (z) {
+        if (z.to < i0 - 1 || z.from > i1 + 1) return;
+        const x0 = self._xOf(z.from) - barW / 2, x1 = self._xOf(z.to) + barW / 2;
+        ctx.fillStyle = hexToRgba(z.color, 0.10);
+        ctx.fillRect(x0, pane.top, x1 - x0, pane.height);
+        ctx.strokeStyle = hexToRgba(z.color, 0.35); ctx.setLineDash([2, 3]); ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(Math.round(x0) + 0.5, pane.top); ctx.lineTo(Math.round(x0) + 0.5, pane.top + pane.height);
+        ctx.moveTo(Math.round(x1) + 0.5, pane.top); ctx.lineTo(Math.round(x1) + 0.5, pane.top + pane.height); ctx.stroke(); ctx.setLineDash([]);
+        if (z.label && x1 - x0 > 40) { ctx.fillStyle = hexToRgba(z.color, 0.9); ctx.fillText(z.label, x0 + 3, pane.top + pane.height - 14); }
+      });
+    });
+    ov.forEach(function (o) {
       if (o.kind === 'cloud') self._drawFill(pane, o.a, o.b, o.colorUp, o.colorDown);
       else if (o.kind === 'band') {
         const fill = o.color.replace(/^#(..)(..)(..)$/, function (_, r, g, b) { return 'rgba(' + parseInt(r, 16) + ',' + parseInt(g, 16) + ',' + parseInt(b, 16) + ',0.08)'; });
@@ -384,6 +422,29 @@
           ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(self._plotW(), y); ctx.stroke(); ctx.setLineDash([]);
           ctx.fillStyle = l.color; ctx.fillText(l.label + '  ' + fmtPrice(l.price, l.price), self._plotW() - 4, y - 2);
         });
+      } else if (o.kind === 'paths') {
+        (o.paths || []).forEach(function (pt) {
+          const pts = pt.points || [];
+          if (!pts.length || pts[pts.length - 1].index < i0 - 1 || pts[0].index > i1 + 1) return;
+          ctx.strokeStyle = pt.color; ctx.lineWidth = pt.width || 1.5; ctx.setLineDash(pt.dash || []);
+          ctx.beginPath();
+          pts.forEach(function (q, k) { const x = self._xOf(q.index), y = pane.y(q.price); if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
+          ctx.stroke(); ctx.setLineDash([]);
+          ctx.fillStyle = pt.color;
+          pts.forEach(function (q) { ctx.beginPath(); ctx.arc(self._xOf(q.index), pane.y(q.price), 2.5, 0, Math.PI * 2); ctx.fill(); });
+          if (pt.label) { ctx.font = '10px sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom'; ctx.fillText(pt.label, self._xOf(pts[0].index) + 4, pane.y(pts[0].price) - 3); }
+        });
+      } else if (o.kind === 'segments') {
+        ctx.font = '10px sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        (o.segments || []).forEach(function (sg) {
+          if (sg.to < i0 - 1 || sg.from > i1 + 1) return;
+          const y = Math.round(pane.y(sg.price)) + 0.5;
+          if (y < pane.top - 2 || y > pane.top + pane.height + 2) return;
+          const x0 = Math.max(-2, self._xOf(sg.from) - barW / 2), x1 = Math.min(self._plotW() + 2, self._xOf(sg.to) + barW / 2);
+          ctx.strokeStyle = sg.color; ctx.setLineDash(sg.dash || []); ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke(); ctx.setLineDash([]);
+          if (sg.label && x1 - x0 > 24 && x1 < self._plotW() - 30) { ctx.fillStyle = sg.color; ctx.fillText(sg.label + ' ' + fmtPrice(sg.price, sg.price), x1 + 3, y); }
+        });
       }
     });
 
@@ -395,31 +456,37 @@
     const markers = this.study.markers || [];
     const size = Math.max(4, Math.min(7, barW * 0.45));
     const stackAbove = {}, stackBelow = {};
-    const showText = barW >= 28;
+    const showText = barW >= 22;
     ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
     markers.forEach((m) => {
       if (m.index < i0 || m.index > i1) return;
       const b = this.bars[m.index];
       const x = this._xOf(m.index);
-      const above = m.type === 'sell' || (m.type === 'note' && m.place === 'above');
+      const above = m.place ? m.place === 'above' : m.type === 'sell';
       const stack = above ? stackAbove : stackBelow;
       const n = stack[m.index] || 0; stack[m.index] = n + 1;
       const offset = 6 + n * (size * 2 + 3);
-      const color = m.color || (m.type === 'buy' ? COLORS.buy : m.type === 'sell' ? COLORS.sell : COLORS.note);
-      ctx.fillStyle = color;
+      const color = m.color || MARKER_COLORS[m.type] || COLORS.note;
+      ctx.fillStyle = color; ctx.strokeStyle = color; ctx.lineWidth = 2;
+      const dir = above ? -1 : 1;                       // 표시가 뻗는 방향
+      const y = above ? pane.y(b.high) - offset : pane.y(b.low) + offset;
+      const cy = y + dir * size;                         // 도형 중심
       ctx.beginPath();
-      if (above) {
-        const y = pane.y(b.high) - offset;
-        if (m.type === 'note') { ctx.arc(x, y - size / 2, size * 0.6, 0, Math.PI * 2); }
-        else { ctx.moveTo(x, y); ctx.lineTo(x - size, y - size * 1.6); ctx.lineTo(x + size, y - size * 1.6); ctx.closePath(); }
-        ctx.fill();
-        if (showText) { ctx.textBaseline = 'bottom'; ctx.fillText(m.text, x, y - size * 1.8); }
-      } else {
-        const y = pane.y(b.low) + offset;
-        if (m.type === 'note') { ctx.arc(x, y + size / 2, size * 0.6, 0, Math.PI * 2); }
-        else { ctx.moveTo(x, y); ctx.lineTo(x - size, y + size * 1.6); ctx.lineTo(x + size, y + size * 1.6); ctx.closePath(); }
-        ctx.fill();
-        if (showText) { ctx.textBaseline = 'top'; ctx.fillText(m.text, x, y + size * 1.8); }
+      if (m.type === 'buy' || m.type === 'sell') {
+        ctx.moveTo(x, y); ctx.lineTo(x - size, y + dir * size * 1.6); ctx.lineTo(x + size, y + dir * size * 1.6); ctx.closePath(); ctx.fill();
+      } else if (m.type === 'target') {                  // ★ 목표 도달
+        star(ctx, x, cy, size * 1.1); ctx.fill();
+      } else if (m.type === 'stop') {                    // ✕ 손절
+        const r = size * 0.75;
+        ctx.moveTo(x - r, cy - r); ctx.lineTo(x + r, cy + r); ctx.moveTo(x + r, cy - r); ctx.lineTo(x - r, cy + r); ctx.stroke();
+      } else if (m.type === 'expired') {                 // ○ 기간 만료
+        ctx.lineWidth = 1.5; ctx.arc(x, cy, size * 0.65, 0, Math.PI * 2); ctx.stroke();
+      } else {                                           // ● 참고
+        ctx.arc(x, cy - dir * size * 0.4, size * 0.6, 0, Math.PI * 2); ctx.fill();
+      }
+      if (showText) {
+        ctx.textBaseline = above ? 'bottom' : 'top';
+        ctx.fillText(m.text, x, y + dir * size * 2.2);
       }
     });
   };
@@ -643,5 +710,6 @@
   TradingChart.fmtVolume = fmtVolume;
   TradingChart.fmtCompact = fmtCompact;
   TradingChart.COLORS = COLORS;
+  TradingChart.MARKER_COLORS = MARKER_COLORS;
   root.TradingChart = TradingChart;
 }(typeof self !== 'undefined' ? self : this));

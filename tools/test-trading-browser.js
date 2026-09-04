@@ -60,7 +60,8 @@ async function run() {
   ok('캔버스가 있다', !!(await p.$('#chartWrap canvas')));
   const techCount = await p.evaluate(() => window.TradingEngine.TECHNIQUES.length);
   ok('기법 체크박스 수 = 기법 목록 수', (await p.$$('.tech input[type=checkbox]')).length === techCount, techCount);
-  ok('그룹 3개', (await p.$$('.tgroup')).length === 3);
+  ok('그룹 4개 (패턴·추세·모멘텀·신호)', (await p.$$('.tgroup')).length === 4);
+  ok('패턴 그룹이 맨 위', (await p.$eval('.tgroup', (el) => el.dataset.group)) === 'pattern');
   ok('기본 세트가 켜져 있다 (SMA·거래량·골든크로스)', JSON.stringify(await checked(p)) === JSON.stringify(['sma', 'volume', 'sig_macross']), await checked(p));
   ok('켜진 기법만 파라미터 입력이 보인다', await p.isVisible('.tech[data-tech="sma"] .params') && !(await p.isVisible('.tech[data-tech="rsi"] .params')));
   ok('빈 상태 안내 문구', /데이터가 없습니다/.test(await p.textContent('#status')));
@@ -99,6 +100,39 @@ async function run() {
   ok('신호 기법을 더 켜면 목록이 늘어남', rows2 > rows1, [rows1, rows2]);
   ok('그룹 머리에 켜진 개수', /3개 켜짐/.test(await p.textContent('.tgroup[data-group="trend"] summary')), await p.textContent('.tgroup[data-group="trend"] summary'));
   await shot(p, 'trading-desktop-stacked.png');
+
+  section('패턴 · 매매 전략 → 진입·목표·손절·결과');
+  // 샘플 버튼은 매번 다른 데이터를 만드니, 패턴이 들어 있는 고정 데이터로 바꿔 둔다.
+  await p.evaluate(() => window.__trading.applyBars(window.TradingEngine.generateSample(320, 7), { name: '샘플 종목', source: '고정 샘플' }));
+  await p.click('#btnClear'); await p.waitForTimeout(150);
+  await p.check('.tech input[data-tech="pat_three"]'); await p.waitForTimeout(250);
+  const stratRows = await p.$$eval('#sigBody tr', (trs) => trs.map((tr) => Array.from(tr.children).map((td) => td.textContent)));
+  ok('적삼병·흑삼병 진입 행이 목록에', stratRows.length > 0 && stratRows.every((r) => /적삼병|흑삼병/.test(r[3])), stratRows.slice(0, 2));
+  ok('목표가·손절가 칸이 채워짐', stratRows.every((r) => r[5] !== '-' && r[6] !== '-' && /\d/.test(r[5]) && /\d/.test(r[6])), stratRows[0]);
+  ok('결과 칸에 목표 도달/손절/만료/진행 중', stratRows.every((r) => /^(★|✕|○|▶) (목표 도달|손절|기간 만료|진행 중)/.test(r[7])), stratRows.map((r) => r[7]));
+  ok('요약에 목표 도달률', /전략 \d+건.*목표 도달/.test(await p.textContent('#sigSub')), await p.textContent('#sigSub'));
+  const exitInfo = await p.evaluate(() => {
+    const st = window.__trading.state.study;
+    const exits = st.markers.filter((m) => m.exit);
+    return { exits: exits.length, kinds: st.overlays.map((o) => o.kind), first: exits[0] && { index: exits[0].index, type: exits[0].type, entry: exits[0].entryIndex } };
+  });
+  ok('청산 시점 마커(★✕○)가 차트용으로 생김', exitInfo.exits > 0 && exitInfo.first && exitInfo.first.index > exitInfo.first.entry, exitInfo);
+  if (!exitInfo.first) exitInfo.first = { index: 0, entry: 0 };
+  ok('패턴 구간·목표/손절 선 overlay', exitInfo.kinds.includes('zones') && exitInfo.kinds.includes('segments'), exitInfo.kinds);
+  await p.evaluate((i) => window.__trading.chart.goTo(i), exitInfo.first.index); await p.waitForTimeout(150);
+  ok('청산 봉에 가면 범례에 결과 배지', /목표 도달|손절|기간 만료/.test(await legendText(p, 'main')), await legendText(p, 'main'));
+  await p.evaluate((i) => window.__trading.chart.goTo(i), exitInfo.first.entry); await p.waitForTimeout(150);
+  const entryLegend = await legendText(p, 'main');
+  ok('진입 봉 범례에 목표·손절·결과', /진입 · 목표 .* · 손절 .* → /.test(entryLegend), entryLegend);
+  await p.selectOption('#sigFilter', 'target'); await p.waitForTimeout(150);
+  const tgtRows = await p.$$eval('#sigBody tr', (trs) => trs.map((tr) => tr.lastElementChild.textContent));
+  ok('"목표 도달만" 필터', tgtRows.every((t) => /목표 도달/.test(t)), tgtRows);
+  await p.selectOption('#sigFilter', 'all');
+  await p.check('.tech input[data-tech="pat_cup"]'); await p.check('.tech input[data-tech="strat_bb"]'); await p.waitForTimeout(250);
+  ok('컵앤핸들·볼린저 매매를 켜도 오류 없음', errs.length === 0, errs);
+  ok('볼린저 매매는 밴드도 같이 그림', /볼린저 상/.test(await legendText(p, 'main')));
+  await shot(p, 'trading-desktop-patterns.png');
+  await p.click('#btnPreset'); await p.check('.tech input[data-tech="rsi"]'); await p.check('.tech input[data-tech="bollinger"]'); await p.check('.tech input[data-tech="ichimoku"]'); await p.check('.tech input[data-tech="sig_rsi"]'); await p.waitForTimeout(250);
 
   section('파라미터 바꾸기');
   await p.fill('.tech[data-tech="sma"] input[data-key="periods"]', '10, 50');

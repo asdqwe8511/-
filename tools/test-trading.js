@@ -225,7 +225,7 @@ section('기법 목록');
   const bars = E.generateSample(200, 11);
   const ids = new Set();
   E.TECHNIQUES.forEach((t) => {
-    ok('[' + t.id + '] 모양이 갖춰짐', typeof t.compute === 'function' && t.name && t.desc && ['trend', 'momentum', 'signal'].indexOf(t.group) >= 0 && Array.isArray(t.params));
+    ok('[' + t.id + '] 모양이 갖춰짐', typeof t.compute === 'function' && t.name && t.desc && ['pattern', 'trend', 'momentum', 'signal'].indexOf(t.group) >= 0 && Array.isArray(t.params));
     ok('[' + t.id + '] id 중복 없음', !ids.has(t.id)); ids.add(t.id);
     const r = t.compute(bars, E.normalizeParams(t, null)) || {};
     let good = true;
@@ -234,7 +234,20 @@ section('기법 목록');
       if (o.kind === 'levels' && !Array.isArray(o.levels)) good = false;
     });
     if (r.panel) r.panel.series.forEach((s) => { if (!s.values || s.values.length !== bars.length) good = false; });
-    (r.markers || []).forEach((m) => { if (!(m.index >= 0 && m.index < bars.length) || !['buy', 'sell', 'note'].includes(m.type) || !m.text) good = false; });
+    (r.markers || []).forEach((m) => { if (!(m.index >= 0 && m.index < bars.length) || !['buy', 'sell', 'note', 'target', 'stop', 'expired'].includes(m.type) || !m.text) good = false; });
+    (r.overlays || []).forEach((o) => {
+      if (o.kind === 'zones') o.zones.forEach((z) => { if (!(z.from <= z.to && z.from >= 0 && z.to < bars.length)) good = false; });
+      if (o.kind === 'segments') o.segments.forEach((sg) => { if (!(sg.from <= sg.to && isFinite(sg.price))) good = false; });
+      if (o.kind === 'paths') o.paths.forEach((pt) => { if (!pt.points.every((q) => q.index >= 0 && q.index < bars.length && isFinite(q.price))) good = false; });
+    });
+    if (t.group === 'pattern') {
+      const entries = (r.markers || []).filter((m) => m.strategy), exits = (r.markers || []).filter((m) => m.exit);
+      const okEntries = entries.every((m) => isFinite(m.entry) && isFinite(m.target) && isFinite(m.stop) && m.outcome && E.OUTCOME_TEXT[m.outcome.result]
+        && (m.side === 'long' ? m.target > m.entry && m.stop < m.entry : m.target < m.entry && m.stop > m.entry));
+      ok('[' + t.id + '] 진입마다 목표·손절이 진입가의 올바른 쪽에 있음 (' + entries.length + '건)', okEntries);
+      ok('[' + t.id + '] 청산 표시는 진입보다 뒤 봉에', exits.every((x) => x.index > x.entryIndex && x.index < bars.length));
+      ok('[' + t.id + '] 결과가 난 진입에는 청산 표시가 있음', entries.filter((m) => m.outcome.exitIndex != null).length === exits.length);
+    }
     ok('[' + t.id + '] 출력 길이·인덱스가 맞음', good);
     ok('[' + t.id + '] 그룹에 맞는 출력', t.group === 'momentum' ? !!r.panel : t.group === 'trend' ? (r.overlays || []).length > 0 : (r.markers || []).length >= 0);
   });
@@ -266,8 +279,124 @@ section('기법 목록');
   ok('골든크로스 매수 신호 1개, 상승 전환 뒤에', cross.markers.filter((m) => m.type === 'buy').length === 1 && cross.markers[0].index > 40, cross.markers);
   const gap = E.buildStudy(mk([100, 100, 110, 110, 100]), [{ id: 'sig_gap', params: { pct: 2 } }]);
   ok('갭 상승·하락 각각 1개', gap.markers.length === 2 && /갭 상승/.test(gap.markers[0].text) && /갭 하락/.test(gap.markers[1].text), gap.markers);
+  // 패턴이 켜져도 매매 신호가 같이 잘 나오는지
   const vol = E.buildStudy(mk(new Array(30).fill(10), { 29: { volume: 5000 } }), [{ id: 'sig_volume', params: { ma: 20, mult: 2.5 } }]);
   ok('거래량 급증 표시', vol.markers.length === 1 && vol.markers[0].index === 29 && /×5\.0/.test(vol.markers[0].text), vol.markers);
+}
+
+section('매매 따라가기 (목표·손절)');
+{
+  const ohlc = (rows) => rows.map((r, i) => ({ date: '2024-02-' + String(i + 1).padStart(2, '0'), open: r[0], high: r[1], low: r[2], close: r[3], volume: 1000 }));
+  const bars = ohlc([[100, 101, 99, 100], [100, 103, 99, 102], [102, 106, 101, 105], [105, 112, 104, 111], [111, 113, 108, 109]]);
+  const t = E.simulateTrade(bars, 0, 'long', 110, 95, 10);
+  ok('목표가 110 은 4번째 봉(고가 112)에서 도달', t.result === 'target' && t.exitIndex === 3 && t.exitPrice === 110 && near(t.pct, 10), t);
+  const st = E.simulateTrade(bars, 0, 'long', 120, 99.5, 10);
+  ok('손절 99.5 는 1번째 봉(저가 99)에서', st.result === 'stop' && st.exitIndex === 1 && st.exitPrice === 99.5, st);
+  const gap = E.simulateTrade(ohlc([[100, 100, 100, 100], [90, 92, 88, 91]]), 0, 'long', 120, 95, 10);
+  ok('갭으로 건너뛰면 시가에 손절', gap.result === 'stop' && gap.exitPrice === 90, gap);
+  const both = E.simulateTrade(ohlc([[100, 100, 100, 100], [100, 130, 80, 100]]), 0, 'long', 110, 90, 10);
+  ok('한 봉에서 둘 다 닿으면 손절로 침', both.result === 'stop', both);
+  const sh = E.simulateTrade(ohlc([[100, 100, 100, 100], [99, 99, 92, 93]]), 0, 'short', 95, 105, 10);
+  ok('공매도는 목표가 아래쪽', sh.result === 'target' && sh.exitPrice === 95 && near(sh.pct, 100 / 95 * 100 - 100), sh);
+  const open = E.simulateTrade(bars, 3, 'long', 130, 100, 10);
+  ok('봉이 모자라면 진행 중', open.result === 'open' && open.exitIndex === null);
+  const exp = E.simulateTrade(bars, 0, 'long', 130, 90, 3);
+  ok('보유 봉수를 넘기면 기간 만료, 그 봉 종가로', exp.result === 'expired' && exp.exitIndex === 3 && exp.exitPrice === 111, exp);
+
+  const asm = E.assembleTrades(bars, [{ index: 0, side: 'long', text: '테스트', entry: 100, target: 110, stop: 95, horizon: 10, from: 0, path: [{ index: 0, price: 100 }] }], '#ffb347');
+  ok('진입 + 청산 마커 2개', asm.markers.length === 2 && asm.markers[0].type === 'buy' && asm.markers[1].type === 'target' && asm.markers[1].exit === true && asm.markers[1].index === 3);
+  ok('목표·손절 선은 진입부터 청산까지', asm.overlays.some((o) => o.kind === 'segments' && o.segments.length === 2 && o.segments.every((sg) => sg.from === 0 && sg.to === 3)));
+  ok('윤곽선 overlay', asm.overlays.some((o) => o.kind === 'paths'));
+}
+
+section('패턴 인식');
+{
+  const ohlc = (rows) => rows.map((r, i) => ({ date: '2024-03-' + String(i + 1).padStart(2, '0'), open: r[0], high: r[1], low: r[2], close: r[3], volume: 1000 }));
+  // 적삼병: 세 양봉이 계단처럼, 시가는 전 봉 몸통 안
+  const three = ohlc([[100, 101, 99, 100], [100, 104, 99, 103], [102, 107, 101, 106], [105, 110, 104, 109], [109, 110, 108, 109]]);
+  const t3 = E.buildStudy(three, ['pat_three']).markers.filter((m) => m.strategy);
+  ok('적삼병 인식 (3번째 봉에서 진입)', t3.length === 1 && t3[0].index === 3 && /적삼병/.test(t3[0].text) && t3[0].type === 'buy', t3);
+  ok('적삼병 목표 = 진입 + 세 봉 높이(109-100), 손절 = 세 봉 최저가', t3.length === 1 && near(t3[0].target, 118) && near(t3[0].stop, 99), t3[0]);
+  const crows = ohlc([[100, 101, 99, 100], [100, 101, 96, 97], [98, 99, 93, 94], [95, 96, 90, 91]]);
+  const tc = E.buildStudy(crows, ['pat_three']).markers.filter((m) => m.strategy);
+  ok('흑삼병 인식 (매도)', tc.length === 1 && tc[0].type === 'sell' && /흑삼병/.test(tc[0].text) && tc[0].target < tc[0].entry, tc);
+  ok('양봉 셋이라도 계단이 아니면 아님', E.buildStudy(ohlc([[100, 105, 99, 104], [90, 95, 89, 94], [80, 85, 79, 84]]), ['pat_three']).markers.length === 0);
+
+  // 장악형
+  const eng = ohlc([[100, 101, 97, 98], [97, 103, 96, 102]]);
+  const te = E.buildStudy(eng, ['pat_engulf']).markers.filter((m) => m.strategy);
+  ok('상승 장악형: 손절 = 오늘 저가, 목표 = 진입 + 2×손절폭', te.length === 1 && te[0].stop === 96 && near(te[0].target, 102 + 2 * 6), te);
+
+  // 망치형: 하락 뒤 긴 아래꼬리
+  const ham = [];
+  for (let i = 0; i < 12; i++) ham.push([100 - i, 100.5 - i, 99 - i, 99.5 - i]);
+  ham.push([88, 88.5, 82, 88.3]);
+  const th = E.buildStudy(ohlc(ham), ['pat_hammer']).markers.filter((m) => m.strategy);
+  ok('망치형 인식, 손절 = 꼬리 끝(82)', th.length === 1 && /망치형/.test(th[0].text) && th[0].stop === 82, th);
+
+  // 샛별형
+  const star = ohlc([[110, 111, 104, 105], [104, 104.6, 103.5, 104.4], [104.8, 110, 104.5, 109]]);
+  const ts = E.buildStudy(star, ['pat_star']).markers.filter((m) => m.strategy);
+  ok('샛별형 인식', ts.length === 1 && /샛별형/.test(ts[0].text) && ts[0].stop === 103.5, ts);
+
+  // 컵앤핸들: 둥근 바닥 40봉 + 손잡이 8봉 + 돌파
+  const cup = [];
+  for (let i = 0; i < 6; i++) { const px = 94 + i; cup.push([px, px + 1, px - 1, px]); }        // 왼쪽 가장자리로 올라옴
+  for (let i = 0; i <= 40; i++) { const px = 100 - 20 * Math.sin(Math.PI * i / 40); cup.push([px, px + 1, px - 1, px]); }
+  for (let i = 0; i < 8; i++) { const px = 100 - 4 * Math.sin(Math.PI * i / 8); cup.push([px, px + 0.5, px - 0.5, px]); }
+  cup.push([100, 104, 99.5, 103.5]);
+  for (let i = 0; i < 5; i++) cup.push([104, 106, 103, 105]);
+  const cupBars = ohlc(cup);
+  const tcup = E.buildStudy(cupBars, [{ id: 'pat_cup', params: { minLen: 20, maxLen: 120, depth: 12 } }]);
+  const cupEntries = tcup.markers.filter((m) => m.strategy);
+  ok('컵앤핸들 돌파 인식', cupEntries.length === 1 && /컵앤핸들/.test(cupEntries[0].text), cupEntries);
+  ok('컵앤핸들 목표 = 돌파가 + 컵 깊이(≈21), 손절 = 손잡이 저점', cupEntries.length === 1 && cupEntries[0].target > cupEntries[0].entry + 18 && cupEntries[0].stop < 97 && cupEntries[0].stop > 90, cupEntries[0]);
+  ok('컵 윤곽선 5점 + 가장자리 선', tcup.overlays.some((o) => o.kind === 'paths' && o.paths[0].points.length === 5) && tcup.overlays.some((o) => o.kind === 'segments' && o.segments.some((sg) => /가장자리/.test(sg.label))));
+
+  // 쌍바닥: 바닥 둘, 사이 고점 돌파
+  const dbl = [];
+  const push = (px) => dbl.push([px, px + 0.5, px - 0.5, px]);
+  for (let i = 0; i < 10; i++) push(100 - i * 2);          // 80 까지
+  for (let i = 0; i < 10; i++) push(80 + i * 1.5);         // 93.5 까지 반등
+  for (let i = 0; i < 10; i++) push(95 - i * 1.5);         // 80.5 로 다시
+  for (let i = 0; i < 12; i++) push(81 + i * 1.6);         // 목선(≈95) 돌파
+  const tdb = E.buildStudy(ohlc(dbl), [{ id: 'pat_double', params: { n: 4, tol: 3 } }]).markers.filter((m) => m.strategy);
+  ok('쌍바닥 돌파 인식', tdb.length === 1 && /쌍바닥/.test(tdb[0].text) && tdb[0].type === 'buy', tdb);
+  ok('쌍바닥 목표 = 진입 + (목선-바닥)', tdb.length === 1 && near(tdb[0].target - tdb[0].entry, 95.5 - 80, 1), tdb[0]);
+
+  // 헤드앤숄더
+  const hs = [];
+  const seg = (from, to, n) => { for (let i = 0; i < n; i++) { const px = from + (to - from) * i / n; hs.push([px, px + 0.5, px - 0.5, px]); } };
+  seg(80, 100, 10); seg(100, 90, 8); seg(90, 115, 10); seg(115, 91, 10); seg(91, 101, 8); seg(101, 85, 12);
+  const ths = E.buildStudy(ohlc(hs), [{ id: 'pat_hs', params: { n: 4, tol: 5 } }]);
+  const hsE = ths.markers.filter((m) => m.strategy);
+  ok('헤드앤숄더 목선 이탈 인식 (매도)', hsE.length === 1 && hsE[0].type === 'sell' && /헤드앤숄더/.test(hsE[0].text), hsE);
+  ok('헤드앤숄더 손절 = 오른쪽 어깨 고가', hsE.length === 1 && near(hsE[0].stop, 101.5, 1.5), hsE[0]);
+  ok('목선은 두 점 꺾은선으로', ths.overlays.some((o) => o.kind === 'paths' && o.paths.some((pt) => pt.label === '목선' && pt.points.length === 2)));
+
+  // 박스권 돌파
+  const box = [];
+  for (let i = 0; i < 25; i++) box.push([100 + (i % 3), 102, 99, 100 + ((i + 1) % 3)]);
+  box.push([102, 108, 101.5, 107]);
+  const tb = E.buildStudy(ohlc(box), [{ id: 'strat_box', params: { n: 20, width: 10 } }]).markers.filter((m) => m.strategy);
+  ok('박스 상향 돌파: 목표 = 진입 + 박스 높이(3), 손절 = 가운데(100.5)', tb.length === 1 && near(tb[0].target, 110) && near(tb[0].stop, 100.5), tb);
+
+  // 볼린저 되돌림
+  const bbr = [];
+  for (let i = 0; i < 25; i++) bbr.push([100, 101, 99, 100 + (i % 2 ? 0.5 : -0.5)]);
+  bbr.push([99, 99, 92, 93]); bbr.push([93, 99, 92.5, 98.5]);
+  const tbb = E.buildStudy(ohlc(bbr), [{ id: 'strat_bb', params: { mode: 'revert', period: 20, mult: 2 } }]).markers.filter((m) => m.strategy);
+  ok('볼린저 하단 되돌림: 밴드 밖→안에서 매수, 손절 = 그동안 최저가(92)', tbb.length === 1 && tbb[0].type === 'buy' && tbb[0].stop === 92 && tbb[0].target > tbb[0].entry, tbb);
+
+  // 눌림목
+  const pb = [];
+  for (let i = 0; i < 70; i++) pb.push([100 + i, 101 + i, 99.5 + i, 100.6 + i]);   // 꾸준한 상승
+  const ma20 = 100.6 + 69 - 9.5;                                                    // 대략 마지막 20봉 평균
+  pb.push([170, 170.5, ma20 - 0.5, 170.3]);                                         // 단기선까지 눌렸다가 양봉
+  const tpb = E.buildStudy(ohlc(pb), ['strat_pullback']).markers.filter((m) => m.strategy);
+  ok('눌림목 매수 인식', tpb.length >= 1 && tpb[tpb.length - 1].index === 70 && /눌림목/.test(tpb[tpb.length - 1].text), tpb);
+
+  ok('패턴 그룹이 목록 첫 번째', E.GROUPS[0].id === 'pattern');
 }
 
 console.log('\n' + pass + ' 통과, ' + fail + ' 실패');

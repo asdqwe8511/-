@@ -125,6 +125,7 @@
   td.num{text-align:right; font-variant-numeric:tabular-nums;}
   .tag{display:inline-block; padding:1px 8px; border-radius:6px; font-size:12px; font-weight:700; color:#0e0f13;}
   .tag.buy{background:var(--buy);} .tag.sell{background:var(--sell);} .tag.note{background:#c084fc;}
+  .res{font-weight:600;} .res.target{color:#ffd166;} .res.stop{color:var(--text-dim);} .res.expired{color:var(--text-dim);} .res.open{color:var(--accent-2);}
   .empty{padding:18px 12px; color:var(--text-dim); font-size:13px; text-align:center;}
 
   footer{margin-top:20px; font-size:12px; color:var(--text-dim); line-height:1.6;}
@@ -208,11 +209,14 @@
         <option value="buy">매수만</option>
         <option value="sell">매도만</option>
         <option value="note">참고만</option>
+        <option value="strategy">전략(목표·손절 있는 것)만</option>
+        <option value="target">목표 도달만</option>
+        <option value="stop">손절만</option>
       </select>
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>날짜</th><th>기법</th><th>신호</th><th>내용</th><th class="num">가격</th></tr></thead>
+        <thead><tr><th>날짜</th><th>기법</th><th>신호</th><th>내용</th><th class="num">진입가</th><th class="num">목표가</th><th class="num">손절가</th><th>결과</th></tr></thead>
         <tbody id="sigBody"></tbody>
       </table>
       <div class="empty" id="sigEmpty">표시할 신호가 없습니다.</div>
@@ -221,6 +225,8 @@
 
   <footer>
     여기 나오는 선과 표시는 과거 가격을 공식대로 계산한 것일 뿐, 앞으로의 가격을 알려 주지 않습니다.
+    패턴의 목표가·손절가와 "목표 도달/손절" 결과는 지나간 봉을 따라가 본 것이라 수수료·슬리피지가 빠져 있고,
+    같은 규칙이 앞으로도 통한다는 뜻이 아닙니다.
     투자 판단과 결과는 본인의 몫입니다. 불러온 데이터는 이 브라우저 안에만 남고 서버에 저장되지 않습니다.
   </footer>
 </main>
@@ -406,8 +412,13 @@
       info.overlays.forEach((o) => main.appendChild(chip(o.name, o.value, o.color, false, o.ref)));
       info.markers.forEach((m) => {
         const s = document.createElement('span'); s.className = 'mk';
-        s.style.background = m.color || (m.type === 'buy' ? 'var(--buy)' : m.type === 'sell' ? 'var(--sell)' : '#c084fc');
-        s.textContent = (m.type === 'buy' ? '▲ ' : m.type === 'sell' ? '▼ ' : '● ') + m.text;
+        s.style.background = m.color || TC.MARKER_COLORS[m.type] || '#c084fc';
+        let text = MARK_ICON[m.type] + ' ' + m.text;
+        if (m.strategy) {
+          text += ' · 목표 ' + TC.fmtPrice(m.target, m.entry) + ' · 손절 ' + TC.fmtPrice(m.stop, m.entry);
+          if (m.outcome) text += ' → ' + outcomeText(m);
+        }
+        s.textContent = text;
         main.appendChild(s);
       });
     }
@@ -437,22 +448,49 @@
   }
 
   // ── 신호 목록 ──
+  const MARK_ICON = { buy: '▲', sell: '▼', note: '●', target: '★', stop: '✕', expired: '○', open: '▶' };
+  function outcomeText(m) {
+    const o = m.outcome; if (!o) return '';
+    const sign = o.pct >= 0 ? '+' : '';
+    const when = o.exitIndex != null && state.bars[o.exitIndex] ? state.bars[o.exitIndex].date : '';
+    return E.OUTCOME_TEXT[o.result] + (when ? ' ' + when : '') + ' (' + sign + o.pct.toFixed(1) + '%)';
+  }
   function renderSignals() {
     const body = $('#sigBody'); body.innerHTML = '';
     const filter = $('#sigFilter').value;
-    const all = state.study ? state.study.markers : [];
-    const rows = all.filter((m) => filter === 'all' || m.type === filter).slice().reverse();
+    // 청산 시점(★✕○) 표시는 차트에만 그리고, 목록에서는 진입 행의 "결과" 칸에 적는다.
+    const all = (state.study ? state.study.markers : []).filter((m) => !m.exit);
+    const rows = all.filter((m) => {
+      if (filter === 'all') return true;
+      if (filter === 'strategy') return !!m.strategy;
+      if (filter === 'target' || filter === 'stop') return m.outcome && m.outcome.result === filter;
+      return m.type === filter;
+    }).slice().reverse();
     $('#sigEmpty').style.display = rows.length ? 'none' : 'block';
     const nBuy = all.filter((m) => m.type === 'buy').length, nSell = all.filter((m) => m.type === 'sell').length, nNote = all.length - nBuy - nSell;
-    $('#sigSub').textContent = all.length ? '매수 ' + nBuy + ' · 매도 ' + nSell + ' · 참고 ' + nNote + ' (최근 순)' : '매매 신호 기법을 체크하면 여기에 날짜별로 정리됩니다.';
+    const trades = all.filter((m) => m.strategy);
+    let sub = all.length ? '매수 ' + nBuy + ' · 매도 ' + nSell + ' · 참고 ' + nNote + ' (최근 순)' : '매매 신호나 패턴 기법을 체크하면 여기에 날짜별로 정리됩니다.';
+    if (trades.length) {
+      const cnt = (r) => trades.filter((m) => m.outcome.result === r).length;
+      const decided = cnt('target') + cnt('stop');
+      sub += '  ·  전략 ' + trades.length + '건: ★ 목표 도달 ' + cnt('target') + ' · ✕ 손절 ' + cnt('stop') + ' · ○ 만료 ' + cnt('expired') + ' · 진행 중 ' + cnt('open')
+        + (decided ? ' · 목표 도달률 ' + Math.round(cnt('target') / decided * 100) + '%' : '');
+    }
+    $('#sigSub').textContent = sub;
     const frag = document.createDocumentFragment();
     rows.slice(0, 500).forEach((m) => {
       const tr = document.createElement('tr');
       const tag = m.type === 'buy' ? '매수' : m.type === 'sell' ? '매도' : '참고';
-      tr.innerHTML = '<td></td><td></td><td><span class="tag ' + m.type + '"></span></td><td></td><td class="num"></td>';
+      tr.innerHTML = '<td></td><td></td><td><span class="tag ' + m.type + '"></span></td><td></td><td class="num"></td><td class="num"></td><td class="num"></td><td></td>';
       const td = tr.children;
       td[0].textContent = m.date; td[1].textContent = m.techName; td[2].firstChild.textContent = tag;
       td[3].textContent = m.text; td[4].textContent = TC.fmtPrice(m.price, m.price);
+      if (m.strategy) {
+        td[5].textContent = TC.fmtPrice(m.target, m.entry); td[6].textContent = TC.fmtPrice(m.stop, m.entry);
+        const r = m.outcome.result;
+        td[7].innerHTML = '<span class="res ' + r + '"></span>';
+        td[7].firstChild.textContent = MARK_ICON[r] + ' ' + outcomeText(m);
+      } else { td[5].textContent = '-'; td[6].textContent = '-'; td[7].textContent = '-'; }
       tr.addEventListener('click', () => { chart.goTo(m.index); chartWrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); });
       frag.appendChild(tr);
     });

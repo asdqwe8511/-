@@ -533,11 +533,16 @@
   //     {kind:'dots',  name, color, values}
   //     {kind:'step',  name, color, values, dash}                계단선(피봇처럼 기간마다 바뀌는 값)
   //     {kind:'levels', name, levels:[{price, label, color, dash}]}  가로선
+  //     {kind:'zones', zones:[{from, to, color, label}]}             봉 구간을 옅게 칠함 (패턴 구간)
+  //     {kind:'segments', segments:[{from, to, price, color, label, dash}]}  일정 구간의 가로선 (목표가·손절가·목선)
+  //     {kind:'paths', paths:[{points:[{index, price}], color, width, dash}]}  꺾은선 (패턴 윤곽)
   //   panel
   //     {name, range:[min,max]|null, series:[{kind:'line'|'hist', name, color, values, width}],
   //      guides:[{value, label, color}]}
   //   marker
   //     {index, type:'buy'|'sell'|'note', text, price}
+  //     매매 전략의 진입 마커는 entry·target·stop·outcome 이 더 붙고,
+  //     청산 시점에는 type:'target'|'stop'|'expired', exit:true 마커가 하나 더 생긴다.
 
   const PALETTE = ['#ffb347', '#7c5cff', '#2dd4bf', '#f472b6', '#a3e635', '#38bdf8', '#fb7185', '#c084fc'];
 
@@ -550,6 +555,74 @@
     const arr = raw.split(/[,\s]+/).map(Number).filter((x) => isFinite(x) && x > 0).map((x) => Math.round(x));
     return arr.length ? arr : def.split(',').map(Number);
   };
+
+  // ── 매매 하나를 끝까지 따라가 보기 ──
+  const body = (b) => Math.abs(b.close - b.open);
+  const range = (b) => b.high - b.low;
+  const upperShadow = (b) => b.high - Math.max(b.open, b.close);
+  const lowerShadow = (b) => Math.min(b.open, b.close) - b.low;
+
+  // 진입 뒤 horizon 봉 안에서 목표가와 손절가 중 어느 쪽에 먼저 닿는지.
+  // 같은 봉에서 둘 다 닿으면 손절로 친다(보수적으로). 갭으로 건너뛰면 시가로 체결된 것으로 본다.
+  function simulateTrade(bars, i, side, target, stop, horizon) {
+    const long = side === 'long';
+    const end = Math.min(bars.length - 1, i + horizon);
+    const entry = bars[i].close;
+    const pctOf = (px) => (long ? (px / entry - 1) : (entry / px - 1)) * 100;
+    for (let k = i + 1; k <= end; k++) {
+      const b = bars[k];
+      const hitStop = long ? b.low <= stop : b.high >= stop;
+      const hitTarget = long ? b.high >= target : b.low <= target;
+      if (hitStop) {
+        const px = long ? Math.min(stop, b.open) : Math.max(stop, b.open);
+        return { result: 'stop', exitIndex: k, exitPrice: px, pct: pctOf(px), bars: k - i };
+      }
+      if (hitTarget) {
+        const px = long ? Math.max(target, b.open) : Math.min(target, b.open);
+        return { result: 'target', exitIndex: k, exitPrice: px, pct: pctOf(px), bars: k - i };
+      }
+    }
+    const lastPx = bars[end].close;
+    if (end < i + horizon) return { result: 'open', exitIndex: null, exitPrice: lastPx, pct: pctOf(lastPx), bars: end - i };
+    return { result: 'expired', exitIndex: end, exitPrice: lastPx, pct: pctOf(lastPx), bars: end - i };
+  }
+
+  const OUTCOME_TEXT = { target: '목표 도달', stop: '손절', expired: '기간 만료', open: '진행 중' };
+
+  // trades: [{index, side:'long'|'short', text, entry, target, stop, horizon, from, path, level, level2, segment}]
+  // → 진입·청산 마커와 패턴 구간·윤곽·목표/손절 선을 차트가 그릴 모양으로.
+  function assembleTrades(bars, trades, color) {
+    const markers = [], zones = [], segments = [], paths = [];
+    trades.forEach((t) => {
+      if (!(t.index >= 0 && t.index < bars.length) || !isFinite(t.target) || !isFinite(t.stop)) return;
+      const out = simulateTrade(bars, t.index, t.side, t.target, t.stop, t.horizon || 30);
+      const endIdx = out.exitIndex != null ? out.exitIndex : Math.min(bars.length - 1, t.index + (t.horizon || 30));
+      markers.push({
+        index: t.index, type: t.side === 'long' ? 'buy' : 'sell', text: t.text + ' 진입', price: t.entry,
+        entry: t.entry, target: t.target, stop: t.stop, side: t.side, outcome: out, strategy: true, color: color
+      });
+      if (out.exitIndex != null) {
+        const sign = out.pct >= 0 ? '+' : '';
+        markers.push({
+          index: out.exitIndex, type: out.result, exit: true, entryIndex: t.index,
+          text: OUTCOME_TEXT[out.result] + ' (' + t.text + ' ' + sign + out.pct.toFixed(1) + '%)', price: out.exitPrice,
+          place: (t.side === 'long') === (out.result === 'target') ? 'above' : 'below'
+        });
+      }
+      if (t.from != null && t.from < t.index) zones.push({ from: t.from, to: t.index, color: color, label: t.text });
+      segments.push({ from: t.index, to: endIdx, price: t.target, color: '#ffd166', label: '목표', dash: [4, 3] });
+      segments.push({ from: t.index, to: endIdx, price: t.stop, color: '#9298a8', label: '손절', dash: [2, 3] });
+      if (t.level) segments.push({ from: t.level.from, to: t.level.to, price: t.level.price, color: color, label: t.level.label, dash: [6, 3] });
+      if (t.level2) segments.push({ from: t.level2.from, to: t.level2.to, price: t.level2.price, color: color, label: t.level2.label, dash: [6, 3] });
+      if (t.path) paths.push({ points: t.path, color: color, width: 1.5 });
+      if (t.segment) paths.push({ points: t.segment.points, color: color, width: 1, dash: [6, 3], label: t.segment.label });
+    });
+    const overlays = [];
+    if (zones.length) overlays.push({ kind: 'zones', name: '패턴 구간', zones: zones });
+    if (paths.length) overlays.push({ kind: 'paths', name: '패턴 윤곽', paths: paths });
+    if (segments.length) overlays.push({ kind: 'segments', name: '목표·손절', segments: segments });
+    return { overlays: overlays, markers: markers };
+  }
 
   const TECHNIQUES = [
     // ── 추세 (차트 위에 겹침) ──
@@ -807,6 +880,417 @@
       }
     },
 
+    // ── 패턴 · 매매 전략 (진입 → 목표가·손절가 → 결과) ──
+    //
+    // 아래 기법들은 trade() 로 매매 하나를 만든다. 진입 봉에 ▲▼, 그 뒤로 목표가·손절가
+    // 선을 긋고, 실제로 어느 쪽에 먼저 닿았는지(목표 도달 ★ / 손절 ✕ / 기간 만료) 를
+    // 뒤 봉들을 따라가며 확인해 그 시점에도 표시를 남긴다.
+    {
+      id: 'pat_three', group: 'pattern', name: '적삼병 · 흑삼병',
+      desc: '양봉(음봉) 셋이 연달아 계단처럼 오르면(내리면) 추세 시작으로 본다. 목표 = 세 봉 높이만큼, 손절 = 첫 봉 아래(위).',
+      params: [
+        { key: 'body', label: '몸통 비율', default: 0.5, min: 0.1, max: 1, step: 0.05 },
+        { key: 'horizon', label: '보유 봉수', default: 40, min: 3, max: 400 }
+      ],
+      compute(bars, p) {
+        const minBody = num(p, 'body', 0.5), horizon = num(p, 'horizon', 40);
+        const trades = [];
+        let last = -10;
+        for (let i = 2; i < bars.length; i++) {
+          if (i - last < 3) continue;
+          const c = [bars[i - 2], bars[i - 1], bars[i]];
+          const bull = c.every((b) => b.close > b.open && body(b) >= minBody * range(b))
+            && c[1].close > c[0].close && c[2].close > c[1].close
+            && c[1].open >= c[0].open && c[1].open <= c[0].close
+            && c[2].open >= c[1].open && c[2].open <= c[1].close;
+          const bear = c.every((b) => b.close < b.open && body(b) >= minBody * range(b))
+            && c[1].close < c[0].close && c[2].close < c[1].close
+            && c[1].open <= c[0].open && c[1].open >= c[0].close
+            && c[2].open <= c[1].open && c[2].open >= c[1].close;
+          if (!bull && !bear) continue;
+          last = i;
+          const entry = c[2].close;
+          const height = Math.abs(c[2].close - c[0].open);
+          trades.push(bull
+            ? { index: i, side: 'long', text: '적삼병', entry: entry, target: entry + height, stop: Math.min(c[0].low, c[1].low, c[2].low), from: i - 2, horizon: horizon }
+            : { index: i, side: 'short', text: '흑삼병', entry: entry, target: entry - height, stop: Math.max(c[0].high, c[1].high, c[2].high), from: i - 2, horizon: horizon });
+        }
+        return assembleTrades(bars, trades, '#ffb347');
+      }
+    },
+    {
+      id: 'pat_engulf', group: 'pattern', name: '장악형 (상승·하락)',
+      desc: '오늘 봉이 어제 봉 몸통을 통째로 감싸면 방향 전환. 손절 = 오늘 봉 반대쪽 끝, 목표 = 손절폭 × 배수.',
+      params: [
+        { key: 'rr', label: '손익비', default: 2, min: 0.5, max: 10, step: 0.5 },
+        { key: 'horizon', label: '보유 봉수', default: 30, min: 3, max: 400 }
+      ],
+      compute(bars, p) {
+        const rr = num(p, 'rr', 2), horizon = num(p, 'horizon', 30);
+        const trades = [];
+        for (let i = 1; i < bars.length; i++) {
+          const a = bars[i - 1], b = bars[i];
+          if (body(b) < body(a) * 1.1 || body(b) < range(b) * 0.4) continue;
+          if (a.close < a.open && b.close > b.open && b.open <= a.close && b.close >= a.open) {
+            const stop = b.low, entry = b.close;
+            trades.push({ index: i, side: 'long', text: '상승 장악형', entry: entry, target: entry + rr * (entry - stop), stop: stop, from: i - 1, horizon: horizon });
+          } else if (a.close > a.open && b.close < b.open && b.open >= a.close && b.close <= a.open) {
+            const stop = b.high, entry = b.close;
+            trades.push({ index: i, side: 'short', text: '하락 장악형', entry: entry, target: entry - rr * (stop - entry), stop: stop, from: i - 1, horizon: horizon });
+          }
+        }
+        return assembleTrades(bars, trades, '#f472b6');
+      }
+    },
+    {
+      id: 'pat_hammer', group: 'pattern', name: '망치형 · 유성형',
+      desc: '긴 꼬리 하나짜리 봉. 하락 뒤 아래꼬리(망치형)는 매수, 상승 뒤 위꼬리(유성형)는 매도. 손절 = 꼬리 끝.',
+      params: [
+        { key: 'tail', label: '꼬리/몸통', default: 2, min: 1, max: 10, step: 0.5 },
+        { key: 'rr', label: '손익비', default: 2, min: 0.5, max: 10, step: 0.5 },
+        { key: 'horizon', label: '보유 봉수', default: 30, min: 3, max: 400 }
+      ],
+      compute(bars, p) {
+        const k = num(p, 'tail', 2), rr = num(p, 'rr', 2), horizon = num(p, 'horizon', 30);
+        const ma = sma(pluck(bars, 'close'), 10);
+        const trades = [];
+        for (let i = 1; i < bars.length; i++) {
+          const b = bars[i], bd = Math.max(body(b), range(b) * 0.03);
+          if (range(b) === 0 || ma[i - 1] == null) continue;
+          const up = upperShadow(b), lo = lowerShadow(b);
+          const downtrend = bars[i - 1].close < ma[i - 1], uptrend = bars[i - 1].close > ma[i - 1];
+          const small = Math.max(bd * 0.6, range(b) * 0.12);     // 반대쪽 꼬리는 이 정도까지만
+          if (lo >= k * bd && up <= small && downtrend) {
+            const entry = b.close, stop = b.low;
+            trades.push({ index: i, side: 'long', text: '망치형', entry: entry, target: entry + rr * (entry - stop), stop: stop, from: i, horizon: horizon });
+          } else if (up >= k * bd && lo <= small && uptrend) {
+            const entry = b.close, stop = b.high;
+            trades.push({ index: i, side: 'short', text: '유성형', entry: entry, target: entry - rr * (stop - entry), stop: stop, from: i, horizon: horizon });
+          }
+        }
+        return assembleTrades(bars, trades, '#c084fc');
+      }
+    },
+    {
+      id: 'pat_star', group: 'pattern', name: '샛별형 · 저녁별형',
+      desc: '큰 봉 → 작은 봉 → 반대 방향 큰 봉. 세 번째 봉이 첫 봉 몸통 절반을 넘어야 한다. 손절 = 세 봉의 끝.',
+      params: [
+        { key: 'rr', label: '손익비', default: 2, min: 0.5, max: 10, step: 0.5 },
+        { key: 'horizon', label: '보유 봉수', default: 30, min: 3, max: 400 }
+      ],
+      compute(bars, p) {
+        const rr = num(p, 'rr', 2), horizon = num(p, 'horizon', 30);
+        const trades = [];
+        for (let i = 2; i < bars.length; i++) {
+          const a = bars[i - 2], m = bars[i - 1], b = bars[i];
+          if (body(a) < range(a) * 0.5 || body(m) > body(a) * 0.35) continue;
+          const mid = (a.open + a.close) / 2;
+          if (a.close < a.open && b.close > b.open && Math.max(m.open, m.close) <= a.close * 1.002 && b.close > mid) {
+            const entry = b.close, stop = Math.min(a.low, m.low, b.low);
+            trades.push({ index: i, side: 'long', text: '샛별형', entry: entry, target: entry + rr * (entry - stop), stop: stop, from: i - 2, horizon: horizon });
+          } else if (a.close > a.open && b.close < b.open && Math.min(m.open, m.close) >= a.close * 0.998 && b.close < mid) {
+            const entry = b.close, stop = Math.max(a.high, m.high, b.high);
+            trades.push({ index: i, side: 'short', text: '저녁별형', entry: entry, target: entry - rr * (stop - entry), stop: stop, from: i - 2, horizon: horizon });
+          }
+        }
+        return assembleTrades(bars, trades, '#a3e635');
+      }
+    },
+    {
+      id: 'pat_cup', group: 'pattern', name: '컵앤핸들',
+      desc: '둥근 바닥(컵) 뒤 얕은 되돌림(손잡이), 그리고 컵 가장자리 돌파. 목표 = 돌파가 + 컵 깊이, 손절 = 손잡이 저점.',
+      params: [
+        { key: 'minLen', label: '컵 최소', default: 20, min: 6, max: 300 },
+        { key: 'maxLen', label: '컵 최대', default: 120, min: 10, max: 600 },
+        { key: 'depth', label: '깊이 %', default: 12, min: 3, max: 60 },
+        { key: 'horizon', label: '보유 봉수', default: 60, min: 3, max: 400 }
+      ],
+      compute(bars, p) {
+        const minLen = num(p, 'minLen', 20), maxLen = Math.max(num(p, 'maxLen', 120), minLen + 5);
+        const minDepth = num(p, 'depth', 12) / 100, horizon = num(p, 'horizon', 60);
+        const sw = swings(bars, 3);
+        const highs = pluck(bars, 'high'), lows = pluck(bars, 'low');
+        const trades = [], used = new Set();
+        for (let li = 0; li < sw.highs.length; li++) {
+          const L = sw.highs[li];
+          for (let ri = li + 1; ri < sw.highs.length; ri++) {
+            const R = sw.highs[ri];
+            const span = R - L;
+            if (span < minLen) continue;
+            if (span > maxLen) break;
+            const rim = Math.max(highs[L], highs[R]);
+            if (Math.abs(highs[L] - highs[R]) / rim > 0.06) continue;
+            // 두 가장자리 사이는 가장자리를 넘지 말아야 컵이다
+            let bottom = Infinity, bIdx = -1, broken = false;
+            for (let k = L + 1; k < R; k++) {
+              if (highs[k] > rim * 1.01) { broken = true; break; }
+              if (lows[k] < bottom) { bottom = lows[k]; bIdx = k; }
+            }
+            if (broken) continue;
+            const depth = (rim - bottom) / rim;
+            if (depth < minDepth || depth > 0.6) continue;
+            const pos = (bIdx - L) / span;
+            if (pos < 0.25 || pos > 0.75) continue;           // V 자가 아니라 둥근 바닥
+            // 손잡이: R 뒤 5~40봉 안에서 컵 위쪽 절반에 머물다가 가장자리 돌파
+            let handleLow = Infinity, hIdx = -1, breakout = -1;
+            for (let k = R + 1; k < Math.min(bars.length, R + 41); k++) {
+              if (bars[k].close > rim && k - R >= 3) { breakout = k; break; }
+              if (lows[k] < handleLow) { handleLow = lows[k]; hIdx = k; }
+              if (lows[k] < bottom + (rim - bottom) * 0.5) break;   // 너무 깊이 내려가면 손잡이가 아니다
+            }
+            if (breakout < 0 || hIdx < 0 || used.has(breakout)) continue;
+            used.add(breakout);
+            const entry = bars[breakout].close;
+            trades.push({
+              index: breakout, side: 'long', text: '컵앤핸들 돌파', entry: entry, target: entry + (rim - bottom), stop: handleLow, from: L, horizon: horizon,
+              path: [{ index: L, price: highs[L] }, { index: bIdx, price: bottom }, { index: R, price: highs[R] }, { index: hIdx, price: handleLow }, { index: breakout, price: entry }],
+              level: { from: L, to: breakout, price: rim, label: '컵 가장자리' }
+            });
+            break;
+          }
+        }
+        return assembleTrades(bars, trades, '#2dd4bf');
+      }
+    },
+    {
+      id: 'pat_double', group: 'pattern', name: '쌍바닥 · 쌍봉',
+      desc: '비슷한 높이의 바닥(꼭대기) 둘과 그 사이 반등. 사이 고점(저점)을 뚫으면 진입. 목표 = 패턴 높이만큼.',
+      params: [
+        { key: 'n', label: '스윙 봉수', default: 5, min: 2, max: 30 },
+        { key: 'tol', label: '허용 %', default: 3, min: 0.5, max: 15, step: 0.5 },
+        { key: 'horizon', label: '보유 봉수', default: 60, min: 3, max: 400 }
+      ],
+      compute(bars, p) {
+        const n = num(p, 'n', 5), tol = num(p, 'tol', 3) / 100, horizon = num(p, 'horizon', 60);
+        const sw = swings(bars, n);
+        const highs = pluck(bars, 'high'), lows = pluck(bars, 'low');
+        const trades = [], used = new Set();
+        // 쌍바닥
+        for (let a = 0; a < sw.lows.length - 1; a++) {
+          const i1 = sw.lows[a], i2 = sw.lows[a + 1];
+          if (i2 - i1 < n * 2 || i2 - i1 > 120) continue;
+          if (Math.abs(lows[i1] - lows[i2]) / lows[i1] > tol) continue;
+          let neck = -Infinity, nIdx = -1;
+          for (let k = i1 + 1; k < i2; k++) if (highs[k] > neck) { neck = highs[k]; nIdx = k; }
+          const base = Math.min(lows[i1], lows[i2]);
+          if ((neck - base) / base < 0.03) continue;
+          for (let k = i2 + 1; k < Math.min(bars.length, i2 + 60); k++) {
+            if (lows[k] < base * (1 - tol)) break;
+            if (bars[k].close > neck) {
+              if (used.has(k)) break;
+              used.add(k);
+              const entry = bars[k].close;
+              trades.push({ index: k, side: 'long', text: '쌍바닥 돌파', entry: entry, target: entry + (neck - base), stop: lows[i2], from: i1, horizon: horizon,
+                path: [{ index: i1, price: lows[i1] }, { index: nIdx, price: neck }, { index: i2, price: lows[i2] }, { index: k, price: entry }],
+                level: { from: i1, to: k, price: neck, label: '목선' } });
+              break;
+            }
+          }
+        }
+        // 쌍봉
+        for (let a = 0; a < sw.highs.length - 1; a++) {
+          const i1 = sw.highs[a], i2 = sw.highs[a + 1];
+          if (i2 - i1 < n * 2 || i2 - i1 > 120) continue;
+          if (Math.abs(highs[i1] - highs[i2]) / highs[i1] > tol) continue;
+          let neck = Infinity, nIdx = -1;
+          for (let k = i1 + 1; k < i2; k++) if (lows[k] < neck) { neck = lows[k]; nIdx = k; }
+          const top = Math.max(highs[i1], highs[i2]);
+          if ((top - neck) / top < 0.03) continue;
+          for (let k = i2 + 1; k < Math.min(bars.length, i2 + 60); k++) {
+            if (highs[k] > top * (1 + tol)) break;
+            if (bars[k].close < neck) {
+              if (used.has(k)) break;
+              used.add(k);
+              const entry = bars[k].close;
+              trades.push({ index: k, side: 'short', text: '쌍봉 이탈', entry: entry, target: entry - (top - neck), stop: highs[i2], from: i1, horizon: horizon,
+                path: [{ index: i1, price: highs[i1] }, { index: nIdx, price: neck }, { index: i2, price: highs[i2] }, { index: k, price: entry }],
+                level: { from: i1, to: k, price: neck, label: '목선' } });
+              break;
+            }
+          }
+        }
+        return assembleTrades(bars, trades, '#38bdf8');
+      }
+    },
+    {
+      id: 'pat_hs', group: 'pattern', name: '헤드앤숄더 (정·역)',
+      desc: '어깨-머리-어깨 세 봉우리와 목선. 목선을 뚫으면 진입, 목표 = 머리 높이만큼, 손절 = 오른쪽 어깨.',
+      params: [
+        { key: 'n', label: '스윙 봉수', default: 5, min: 2, max: 30 },
+        { key: 'tol', label: '어깨 허용 %', default: 5, min: 0.5, max: 20, step: 0.5 },
+        { key: 'horizon', label: '보유 봉수', default: 60, min: 3, max: 400 }
+      ],
+      compute(bars, p) {
+        const n = num(p, 'n', 5), tol = num(p, 'tol', 5) / 100, horizon = num(p, 'horizon', 60);
+        const sw = swings(bars, n);
+        const highs = pluck(bars, 'high'), lows = pluck(bars, 'low');
+        const trades = [], used = new Set();
+        const extreme = (arr, from, to, isMin) => {
+          let v = isMin ? Infinity : -Infinity, idx = -1;
+          for (let k = from + 1; k < to; k++) if (isMin ? arr[k] < v : arr[k] > v) { v = arr[k]; idx = k; }
+          return { v: v, idx: idx };
+        };
+        const scan = (peaks, isTop) => {
+          const P = isTop ? highs : lows, O = isTop ? lows : highs;
+          for (let a = 0; a + 2 < peaks.length; a++) {
+            const s1 = peaks[a], h = peaks[a + 1], s2 = peaks[a + 2];
+            if (s2 - s1 > 160) continue;
+            const higher = (x, y) => (isTop ? P[x] > P[y] : P[x] < P[y]);
+            if (!higher(h, s1) || !higher(h, s2)) continue;
+            if (Math.abs(P[h] - P[s1]) / P[h] < 0.02 || Math.abs(P[h] - P[s2]) / P[h] < 0.02) continue;
+            if (Math.abs(P[s1] - P[s2]) / P[s1] > tol) continue;
+            const n1 = extreme(O, s1, h, isTop), n2 = extreme(O, h, s2, isTop);
+            if (n1.idx < 0 || n2.idx < 0) continue;
+            const slope = (n2.v - n1.v) / (n2.idx - n1.idx);
+            const neckAt = (k) => n1.v + slope * (k - n1.idx);
+            for (let k = s2 + 1; k < Math.min(bars.length, s2 + 60); k++) {
+              if (isTop ? highs[k] > P[h] : lows[k] < P[h]) break;
+              const nk = neckAt(k);
+              if (isTop ? bars[k].close < nk : bars[k].close > nk) {
+                if (used.has(k)) break;
+                used.add(k);
+                const entry = bars[k].close, headH = Math.abs(P[h] - neckAt(h));
+                trades.push({
+                  index: k, side: isTop ? 'short' : 'long', text: isTop ? '헤드앤숄더 목선 이탈' : '역헤드앤숄더 목선 돌파', entry: entry,
+                  target: isTop ? entry - headH : entry + headH, stop: P[s2], from: s1, horizon: horizon,
+                  path: [{ index: s1, price: P[s1] }, { index: n1.idx, price: n1.v }, { index: h, price: P[h] }, { index: n2.idx, price: n2.v }, { index: s2, price: P[s2] }, { index: k, price: entry }],
+                  segment: { points: [{ index: n1.idx, price: n1.v }, { index: k, price: nk }], label: '목선' }
+                });
+                break;
+              }
+            }
+          }
+        };
+        scan(sw.highs, true); scan(sw.lows, false);
+        return assembleTrades(bars, trades, '#fb7185');
+      }
+    },
+    {
+      id: 'strat_bb', group: 'pattern', name: '볼린저 밴드 매매',
+      desc: '되돌림: 하단 밴드 밖에서 안으로 들어오면 매수, 목표 = 중심선. 돌파: 밴드가 좁아진 뒤 상단을 뚫으면 매수, 손절 = 중심선.',
+      params: [
+        { key: 'mode', label: '방식', default: 'revert', type: 'select', options: [['revert', '되돌림'], ['breakout', '스퀴즈 돌파']] },
+        { key: 'period', label: '기간', default: 20, min: 2, max: 400 },
+        { key: 'mult', label: '배수', default: 2, min: 0.5, max: 5, step: 0.1 },
+        { key: 'horizon', label: '보유 봉수', default: 30, min: 3, max: 400 }
+      ],
+      compute(bars, p) {
+        const mode = p && p.mode === 'breakout' ? 'breakout' : 'revert';
+        const period = num(p, 'period', 20), mult = num(p, 'mult', 2), horizon = num(p, 'horizon', 30);
+        const closes = pluck(bars, 'close');
+        const bb = bollinger(closes, period, mult);
+        const trades = [];
+        if (mode === 'revert') {
+          let belowFrom = -1, aboveFrom = -1;
+          for (let i = 1; i < bars.length; i++) {
+            if (bb.lower[i] == null || bb.lower[i - 1] == null) continue;
+            const c = closes[i];
+            if (c < bb.lower[i]) { if (belowFrom < 0) belowFrom = i; }
+            else if (belowFrom >= 0) {
+              let stop = Infinity; for (let k = belowFrom; k <= i; k++) stop = Math.min(stop, bars[k].low);
+              trades.push({ index: i, side: 'long', text: '볼린저 하단 되돌림', entry: c, target: bb.middle[i], stop: stop, from: belowFrom, horizon: horizon });
+              belowFrom = -1;
+            }
+            if (c > bb.upper[i]) { if (aboveFrom < 0) aboveFrom = i; }
+            else if (aboveFrom >= 0) {
+              let stop = -Infinity; for (let k = aboveFrom; k <= i; k++) stop = Math.max(stop, bars[k].high);
+              trades.push({ index: i, side: 'short', text: '볼린저 상단 되돌림', entry: c, target: bb.middle[i], stop: stop, from: aboveFrom, horizon: horizon });
+              aboveFrom = -1;
+            }
+          }
+        } else {
+          const width = bb.upper.map((u, i) => (u == null || !bb.middle[i] ? null : (u - bb.lower[i]) / bb.middle[i]));
+          const look = Math.max(period * 4, 60);
+          const minW = lowest(width.map((w) => (w == null ? Infinity : w)), look);
+          let squeezeUntil = -1;
+          for (let i = 1; i < bars.length; i++) {
+            if (width[i] == null || minW[i] == null || !isFinite(minW[i])) continue;
+            if (width[i] <= minW[i] * 1.15) squeezeUntil = i + 5;       // 최근 5봉 안에 스퀴즈가 있었다
+            if (i > squeezeUntil) continue;
+            const c = closes[i];
+            if (c > bb.upper[i] && closes[i - 1] <= bb.upper[i - 1]) {
+              const stop = bb.middle[i];
+              trades.push({ index: i, side: 'long', text: '볼린저 스퀴즈 상향 돌파', entry: c, target: c + 2 * (c - stop), stop: stop, from: Math.max(0, i - 5), horizon: horizon });
+              squeezeUntil = -1;
+            } else if (c < bb.lower[i] && closes[i - 1] >= bb.lower[i - 1]) {
+              const stop = bb.middle[i];
+              trades.push({ index: i, side: 'short', text: '볼린저 스퀴즈 하향 돌파', entry: c, target: c - 2 * (stop - c), stop: stop, from: Math.max(0, i - 5), horizon: horizon });
+              squeezeUntil = -1;
+            }
+          }
+        }
+        const r = assembleTrades(bars, trades, '#38bdf8');
+        r.overlays.unshift({ kind: 'band', name: '볼린저', upper: bb.upper, lower: bb.lower, middle: bb.middle, color: '#38bdf8' });
+        return r;
+      }
+    },
+    {
+      id: 'strat_box', group: 'pattern', name: '박스권 돌파',
+      desc: 'n일 동안 좁은 범위에 갇혀 있다가 위(아래)로 벗어나면 진입. 목표 = 박스 높이만큼, 손절 = 박스 가운데.',
+      params: [
+        { key: 'n', label: '박스 봉수', default: 20, min: 5, max: 300 },
+        { key: 'width', label: '최대 폭 %', default: 10, min: 1, max: 60 },
+        { key: 'horizon', label: '보유 봉수', default: 40, min: 3, max: 400 }
+      ],
+      compute(bars, p) {
+        const n = num(p, 'n', 20), maxW = num(p, 'width', 10) / 100, horizon = num(p, 'horizon', 40);
+        const hh = highest(pluck(bars, 'high'), n), ll = lowest(pluck(bars, 'low'), n);
+        const trades = [];
+        let cooldown = -1;
+        for (let i = n; i < bars.length; i++) {
+          const H = hh[i - 1], L = ll[i - 1];           // 오늘을 뺀 직전 n 봉의 박스
+          if (H == null || i <= cooldown) continue;
+          if ((H - L) / L > maxW) continue;
+          const c = bars[i].close;
+          if (c > H) {
+            trades.push({ index: i, side: 'long', text: '박스 상향 돌파', entry: c, target: c + (H - L), stop: (H + L) / 2, from: i - n, horizon: horizon,
+              level: { from: i - n, to: i, price: H, label: '박스 상단' }, level2: { from: i - n, to: i, price: L, label: '박스 하단' } });
+            cooldown = i + n;
+          } else if (c < L) {
+            trades.push({ index: i, side: 'short', text: '박스 하향 이탈', entry: c, target: c - (H - L), stop: (H + L) / 2, from: i - n, horizon: horizon,
+              level: { from: i - n, to: i, price: H, label: '박스 상단' }, level2: { from: i - n, to: i, price: L, label: '박스 하단' } });
+            cooldown = i + n;
+          }
+        }
+        return assembleTrades(bars, trades, '#ffb347');
+      }
+    },
+    {
+      id: 'strat_pullback', group: 'pattern', name: '이동평균 눌림목',
+      desc: '장기선 위 상승 추세에서 단기선까지 눌렸다가 양봉으로 받치면 매수. 손절 = 단기선 아래, 목표 = 손절폭 × 배수.',
+      params: [
+        { key: 'fast', label: '단기', default: 20, min: 2, max: 200 },
+        { key: 'slow', label: '장기', default: 60, min: 5, max: 400 },
+        { key: 'rr', label: '손익비', default: 2, min: 0.5, max: 10, step: 0.5 },
+        { key: 'horizon', label: '보유 봉수', default: 30, min: 3, max: 400 }
+      ],
+      compute(bars, p) {
+        const fast = num(p, 'fast', 20), slow = num(p, 'slow', 60), rr = num(p, 'rr', 2), horizon = num(p, 'horizon', 30);
+        const closes = pluck(bars, 'close');
+        const f = sma(closes, fast), s = sma(closes, slow);
+        const trades = [];
+        let cooldown = -1;
+        for (let i = 5; i < bars.length; i++) {
+          if (f[i] == null || s[i] == null || f[i - 3] == null || i <= cooldown) continue;
+          const b = bars[i];
+          const trendUp = closes[i] > s[i] && f[i] > s[i] && f[i] > f[i - 3];
+          if (!trendUp) continue;
+          let cameFromAbove = false;
+          for (let k = i - 5; k < i; k++) if (closes[k] > f[k] * 1.02) cameFromAbove = true;
+          if (!cameFromAbove) continue;
+          if (b.low <= f[i] * 1.01 && b.close > f[i] && b.close > b.open) {
+            const entry = b.close, stop = Math.min(b.low, f[i] * 0.98);
+            trades.push({ index: i, side: 'long', text: '눌림목 매수 (MA' + fast + ')', entry: entry, target: entry + rr * (entry - stop), stop: stop, from: i - 3, horizon: horizon });
+            cooldown = i + 3;
+          }
+        }
+        const r = assembleTrades(bars, trades, '#a3e635');
+        r.overlays.unshift({ kind: 'line', name: 'MA ' + fast, color: 'rgba(163,230,53,0.7)', values: f, width: 1 },
+                           { kind: 'line', name: 'MA ' + slow, color: 'rgba(124,92,255,0.7)', values: s, width: 1 });
+        return r;
+      }
+    },
+
     // ── 매매 신호 (차트 위 표시 + 아래 목록) ──
     {
       id: 'sig_macross', group: 'signal', name: '골든·데드 크로스',
@@ -949,6 +1433,7 @@
   ];
 
   const GROUPS = [
+    { id: 'pattern', name: '패턴 · 매매 전략 (진입 → 목표 · 손절)', hint: '패턴이 완성된 봉에 ▲▼ 진입 표시, 그 뒤로 목표가·손절가 선을 긋고 실제로 어디에 먼저 닿았는지(★ 목표 도달 / ✕ 손절)까지 표시합니다.' },
     { id: 'trend', name: '추세 · 차트 위에 겹침', hint: '체크하면 가격 차트 위에 선·밴드로 그려집니다.' },
     { id: 'momentum', name: '모멘텀 · 거래량 (아래 패널)', hint: '체크하면 차트 아래에 패널이 하나씩 붙습니다.' },
     { id: 'signal', name: '매매 신호', hint: '조건에 맞는 날에 ▲▼ 표시가 붙고 아래 목록에 정리됩니다.' }
@@ -1017,6 +1502,7 @@
 
   return {
     parseCsv, parseJson, parseAny, toDateKey, toNumber, matchHeader,
-    generateSample, ind, TECHNIQUES, GROUPS, techniqueById, normalizeParams, buildStudy, summarize, PALETTE
+    generateSample, ind, TECHNIQUES, GROUPS, techniqueById, normalizeParams, buildStudy, summarize, PALETTE,
+    simulateTrade, assembleTrades, OUTCOME_TEXT
   };
 }));
