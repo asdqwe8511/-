@@ -1,4 +1,4 @@
-# 사주 앱 + 인기영상 대시보드
+# 사주 앱 + 인기영상 대시보드 + 차트 기법 보기
 
 생년월일시를 넣으면 사주팔자·오행·대운·시기·이름·궁합·택일을 계산해 주는 공개
 웹 앱입니다. 계산은 전부 브라우저 안에서 끝나고, 글로 풀어 읽는 부분만 서버를
@@ -9,12 +9,13 @@
   언제든 지울 수 있습니다.
 - API 키는 서버(Vercel 환경변수)에만 있고 브라우저에는 절대 노출되지 않습니다.
 
-두 개의 페이지가 한 프로젝트에 들어 있습니다.
+세 개의 페이지가 한 프로젝트에 들어 있습니다.
 
 | 경로 | 내용 |
 |---|---|
 | `/` | 사주팔자 + 이름 풀이 + 돈·건강·관계 시기 + 궁합 + 연락처 일괄 비교 |
 | `/youtube` | YouTube 국가별 인기영상 대시보드 |
+| `/trading` | 주가 차트에 원하는 기법(이동평균·볼린저·RSI·MACD·매매 신호 …)을 체크해서 겹쳐 보기 |
 
 예전에 공유된 `/saju` 주소는 `/` 로 넘겨 줍니다(`vercel.json` 의 redirects).
 
@@ -23,11 +24,15 @@
 ```
 index.html              사주·이름 풀이 UI 전체 (사이트 메인)
 youtube.html            인기영상 대시보드 UI 전체
+trading.html            차트 기법 보기 UI 전체
+trading-engine.js       지표·매매신호 계산 엔진과 기법 목록(TECHNIQUES). 브라우저와 노드 공용.
+trading-chart.js        캔버스 봉차트(확대·이동·십자선·마커). 외부 라이브러리 없음.
 saju-engine.js          만세력·오행·성명학·궁합·택일 계산 엔진.
                          브라우저와 서버가 같은 파일을 씁니다.
 hanja-data.js           한글 음 → 한자 후보표(KS X 1001). 이름 한자 고르기에 씁니다.
 api/saju.js             사주 해석 엔드포인트. 서버가 직접 계산한 뒤 그 결과만
                          Claude 에게 넘기고 응답을 스트리밍합니다. 사용량 제한도 여기서.
+api/stock.js            종목코드로 일봉을 받아 오는 프록시(야후 파이낸스, 키 불필요, 10분 캐시).
 api/yt/[...path].js     YouTube Data API 프록시.
                          - 허용된 읽기 엔드포인트(videos/videoCategories/channels)만 전달
                          - 성공 응답은 Vercel 엣지에서 30분간 캐시
@@ -42,6 +47,8 @@ tools/dev-server.js     PC용 개발 서버
 tools/test-saju.js      만세력·궁합·택일·연락처 계산 점검 (218가지)
 tools/test-quota.js     사용량 제한·시간 상한·키 없을 때 안내 점검 (25가지)
 tools/test-browser.js   휴대폰 크기 브라우저에서 화면 점검 (117가지, playwright 필요)
+tools/test-trading.js   지표 공식·CSV 읽기·기법 목록 점검 (183가지)
+tools/test-trading-browser.js  차트 기법 화면 점검 (57가지, playwright 필요)
 tools/build-hanja.js    hanja-data.js 를 다시 만드는 스크립트
 tools/calibrate-compat.js   궁합 점수를 백분위로 바꾸는 기준표를 다시 뽑음
 tools/calibrate-pattern.js  드문 사주 구조가 실제로 얼마나 드문지 세어 봄
@@ -96,7 +103,11 @@ Claude 가 쓰는 풀이 문장만 나오지 않고, 그 자리에 무엇을 하
 npm test                     # 계산 점검 (키 없이 됩니다)
 npm i -D playwright          # 화면 점검을 하려면 한 번만
 npm run test:browser         # 개발 서버를 띄워 둔 채로
+npm run test:trading-browser # 차트 기법 화면 점검 (역시 개발 서버를 띄워 둔 채로)
 ```
+
+playwright 가 받은 브라우저 말고 시스템에 깔린 크로미움을 쓰려면
+`CHROMIUM_PATH=/경로/chrome` 을 앞에 붙입니다.
 
 ## 배포에 키 넣기
 
@@ -359,6 +370,63 @@ GitHub에 푸시하면 Vercel이 자동으로 재배포합니다.
 git add .
 git commit -m "설명"
 git push
+```
+
+## 차트 기법 보기 (`/trading`)
+
+주가 데이터를 불러오면 봉차트가 그려지고, 오른쪽 목록에서 기법을 체크하면 그 자리에서
+차트에 겹쳐집니다. 계산은 전부 브라우저 안에서 하고, 불러온 데이터와 체크 상태는
+localStorage 에만 남습니다.
+
+### 데이터를 넣는 세 가지 방법
+
+| 방법 | 설명 |
+|---|---|
+| 샘플 데이터 | 임의로 만든 320일 일봉. 기능을 먼저 만져 볼 때 |
+| 파일 열기 · 끌어다 놓기 · 붙여넣기 | CSV/TSV/JSON. 헤더는 한글(날짜·시가·고가·저가·종가·거래량)도, 영문(date·open·high·low·close·volume)도 됩니다. 증권사 CSV 처럼 `"72,000"` 같은 숫자, 내림차순 날짜, EUC-KR 인코딩, 헤더 없는 파일도 읽습니다. 날짜와 종가만 있어도 됩니다 |
+| 종목코드 불러오기 | `/api/stock` 이 야후 파이낸스에서 일봉을 받아 옵니다. 한국 종목은 6자리 코드(`005930`), 미국은 티커(`AAPL`). 키가 필요 없지만 야후 쪽이 막히면 파일로 올리면 됩니다 |
+
+### 기법 목록
+
+| 그룹 | 기법 | 표시 |
+|---|---|---|
+| 추세 (차트 위) | 단순·지수 이동평균, 볼린저 밴드, 엔벨로프, 일목균형표, 파라볼릭 SAR, 돈치안 채널, 피봇 포인트(일·주·월), 지지·저항(스윙 고점·저점) | 선·밴드·구름·점·가로선 |
+| 모멘텀·거래량 (아래 패널) | 거래량, RSI, MACD, 스토캐스틱, CCI, ATR, OBV | 패널 하나씩 추가 |
+| 매매 신호 | 골든·데드 크로스, MACD 크로스, RSI 과매수·과매도 탈출, 볼린저 밴드 이탈, 스토캐스틱 크로스, 거래량 급증, 갭 상승·하락 | 봉 위아래 ▲▼ 표시 + 아래 신호 목록(누르면 그 날로 이동) |
+
+기법마다 기간·배수 같은 파라미터를 체크박스 아래에서 바로 바꿀 수 있고, 바꾼 값과
+체크 상태는 다음에 열어도 남습니다. "기본 세트"는 SMA + 거래량 + 골든·데드 크로스입니다.
+
+### 기법을 더 넣으려면
+
+`trading-engine.js` 의 `TECHNIQUES` 배열에 항목 하나를 더하면 체크박스·파라미터 입력·
+차트 표시·신호 목록이 전부 따라옵니다. 다른 파일은 손댈 필요가 없습니다.
+
+```js
+{
+  id: 'my_rule', group: 'signal',            // trend | momentum | signal
+  name: '내 규칙', desc: '한 줄 설명',
+  params: [{ key: 'n', label: '기간', default: 20, min: 2, max: 400 }],
+  compute(bars, p) {
+    // bars: [{date, open, high, low, close, volume}], p: 정리된 파라미터
+    // ind.sma / ema / rsi / macd / bollinger / atr ... 를 그대로 쓸 수 있습니다.
+    return {
+      overlays: [{ kind: 'line', name: '내 선', color: '#ffb347', values: [...] }],
+      panel:    { name: '내 패널', range: [0, 100], series: [...], guides: [...] },
+      markers:  [{ index: 37, type: 'buy', text: '조건 충족', price: bars[37].close }]
+    };
+  }
+}
+```
+
+파일 첫머리 주석에 overlay·panel·marker 의 모양이 전부 적혀 있습니다.
+넣은 뒤에는 `node tools/test-trading.js` 가 새 항목의 출력 길이와 인덱스가 맞는지 자동으로 봅니다.
+
+### 점검
+
+```bash
+node tools/test-trading.js            # 지표 공식(Wilder RSI 예제값 등)·CSV 읽기·기법 목록
+node tools/test-trading-browser.js    # 체크하면 실제로 겹쳐지는지, 파라미터·저장·파일 업로드·휴대폰 화면
 ```
 
 ## 만세력 계산 점검
