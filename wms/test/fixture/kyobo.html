@@ -36,11 +36,11 @@
 
  <!-- 위쪽 그리드: 반품예정 목록. 자동화가 건드리면 안 되는 쪽 -->
  <div class="grid" id="grdSchd"><table><thead><tr><th><input type="checkbox"></th><th>No</th><th>예정번호</th></tr></thead>
-  <tbody></tbody></table></div>
+  <tbody id="tbSchd"></tbody></table></div>
 
  <!-- 아래쪽 그리드: 반입내역. 여기 전체를 체크해야 한다 -->
  <div class="grid" id="grdInList"><table><thead><tr><th><input type="checkbox"></th><th>No</th><th>도서명</th></tr></thead>
-  <tbody></tbody></table></div>
+  <tbody id="tbIn"></tbody></table></div>
 
  <input type="button" id="mf_wdc_main_subWindow3_wframe_btn_save" value="입고등록">
 </div>
@@ -49,6 +49,12 @@
 <script>
 (function(){
  var seq=45954285, st={boxNo:'',returned:false,inbound:false,saved:[]}; window.__mock=st;
+ // 실제 화면처럼 줄을 미리 그려 둔다. 조회해도 줄 수는 그대로고 값만 채워진다.
+ function prefill(tb, n){
+   tb.innerHTML='';
+   for(var i=0;i<n;i++) tb.insertAdjacentHTML('beforeend',
+     '<tr><td><input type="checkbox"></td><td>'+(i+1)+'</td><td class="v"></td></tr>');
+ }
  var L=function(m){document.getElementById('log').textContent+=m+'\n';};
  function $(i){return document.getElementById(i);}
 
@@ -92,7 +98,8 @@
    ['mf_wdc_main_subWindow1_wframe_ibx_boxNum','mf_wdc_main_subWindow1_wframe_ibx_rtgdSchdNum',
     'mf_wdc_main_subWindow2_wframe_ibx_saveBoxNum','mf_wdc_main_subWindow3_wframe_txt_boxNum']
      .forEach(function(i){$(i).value='';});
-   document.querySelector('#grdInList tbody').innerHTML='';
+   document.querySelectorAll('#tbIn .v').forEach(function(c){c.textContent='';});
+   document.querySelectorAll('#w3 input[type=checkbox]').forEach(function(c){c.checked=false;});
    L('초기화');
  });
 
@@ -102,19 +109,18 @@
    var v=this.value;
    if(v!==st.boxNo){ dialog('mf_wdc_main_subWindow2_wframe_alert9_wframe_btn_confirm','없는 박스번호입니다.'); return; }
    setTimeout(function(){ st.inbound=true; L('반입등록 완료: '+v);
-     dialog('mf_wdc_main_subWindow2_wframe_alert2_wframe_btn_confirm','반입등록이 완료되었습니다.'); },400);
+     dialog('mf_wdc_main_subWindow2_wframe_alert2_wframe_btn_confirm','반입등록이 완료되었습니다.'); },3500);
  });
 
  function loadRows(v){
    if(v!==st.boxNo||!st.inbound) return;
    setTimeout(function(){
-     var b=document.querySelector('#grdInList tbody');
-     b.innerHTML=['어린 왕자','데미안','토지 1권','칼의 노래','82년생 김지영']
-       .map(function(t,i){return '<tr><td><input type="checkbox"></td><td>'+(i+1)+'</td><td>'+t+'</td></tr>';}).join('');
-     var s=document.querySelector('#grdSchd tbody');
-     s.innerHTML=[1,2,3].map(function(i){return '<tr><td><input type="checkbox"></td><td>'+i+'</td><td>RT00'+i+'</td></tr>';}).join('');
-     L('반입내역 '+b.rows.length+'건 조회');
-   },500);
+     var rows=document.querySelectorAll('#tbIn tr');
+     ['어린 왕자','데미안','토지 1권','칼의 노래','82년생 김지영'].forEach(function(t,i){
+       rows[i].querySelector('.v').textContent=t;
+     });
+     L('반입내역 5건 조회');
+   }, 3000);   // 서버가 느리다
  }
  var bx=$('mf_wdc_main_subWindow3_wframe_txt_boxNum');
  bx.addEventListener('change',function(){loadRows(this.value);});
@@ -124,12 +130,16 @@
  document.querySelectorAll('.grid thead input[type=checkbox]').forEach(function(h){
    h.addEventListener('click',function(){
      var on=this.checked;
-     this.closest('.grid').querySelectorAll('tbody input[type=checkbox]').forEach(function(c){c.checked=on;});
+     this.closest('.grid').querySelectorAll('tbody tr').forEach(function(tr){
+       var has=(tr.querySelector('.v')||{}).textContent;
+       tr.querySelector('input[type=checkbox]').checked = on && !!has;
+     });
    });
  });
 
  $('mf_wdc_main_subWindow3_wframe_btn_save').addEventListener('click',function(){
-   var on=document.querySelectorAll('#grdInList tbody input[type=checkbox]:checked');
+   var on=[].slice.call(document.querySelectorAll('#tbIn tr')).filter(function(tr){
+     return tr.querySelector('input[type=checkbox]').checked && tr.querySelector('.v').textContent; });
    if(!on.length){ dialog('mf_wdc_main_subWindow3_wframe_alert9_wframe_btn_confirm','등록할 도서를 선택하세요.'); return; }
    var shelf=$('mf_wdc_main_subWindow3_wframe_txt_shelf').value;
    dialog('mf_wdc_main_subWindow3_wframe_confirm2_wframe_btn_yes','서가번호 '+shelf+' 에 등록 하시겠습니까?','yes',function(){
@@ -137,6 +147,8 @@
        dialog('alert2_wframe_btn_confirm','입고등록이 완료되었습니다.'); },300);
    });
  });
+ prefill(document.getElementById('tbIn'), 12);
+ prefill(document.getElementById('tbSchd'), 15);
 })();
 </script>
 </body></html>

@@ -235,6 +235,9 @@
       rec.on = !rec.on;
       if (rec.on && !rec.items.length) rec.t0 = Date.now();
       save();
+      /* 값 기준점을 지금 당장 잡는다. 다음 순회를 기다렸다가는, 그 사이에
+         끝난 채번 같은 것이 "원래 그 값이었다"로 잡혀 통째로 묻힌다. */
+      if (rec.on) watchValues();
       paintRec();
     };
     btnCopy.onclick = function () {

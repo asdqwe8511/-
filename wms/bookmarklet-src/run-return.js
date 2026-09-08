@@ -37,7 +37,9 @@
       /입고등록이\s*완료/,
       /서가번호\s*\d+\s*에\s*등록\s*하시겠습니까/
     ],
-    waitMs: 20000
+    waitMs: 40000,        // 한 단계를 기다려 주는 최대 시간
+    settleMs: 2500,       // 조회를 걸고 목록이 그려지기를 기다리는 시간
+    listRetryMs: 30000    // 전체선택이 걸릴 때까지 다시 눌러 보는 시간
   };
   /* ========================================================= */
 
@@ -147,24 +149,10 @@
     if (btn) throw new Error('확인창이 떠 있습니다 — "' + dialogText(btn) + '"');
   }
 
-  /* 목록이 조회됐는지, 체크가 걸렸는지를 문서 전체의 체크박스 수로 판단한다.
+  /* 전체선택이 실제로 걸렸는지는 문서 전체의 체크된 수로 센다.
      그리드 경계를 DOM 모양만 보고 알아내려 하면 옆 그리드까지 끌어오게 된다 —
      화면에 표가 둘 있는데 헤더 체크박스는 둘 다 id 가 없어서 구별되지 않는다. */
-  function countBoxes() { return document.querySelectorAll('input[type=checkbox]').length; }
   function countChecked() { return document.querySelectorAll('input[type=checkbox]:checked').length; }
-
-  /* 전체선택으로 안 걸릴 때만 쓰는 대비책. 그 체크박스와 id 가 같은 조상 아래의 줄들만 건드린다. */
-  function siblingRows(chk) {
-    var cur = chk.parentElement;
-    for (var i = 0; i < 8 && cur; i++) {
-      if (cur.id) {
-        return [].slice.call(cur.querySelectorAll('input[type=checkbox]'))
-          .filter(function (c) { return c !== chk && vis(c); });
-      }
-      cur = cur.parentElement;
-    }
-    return [];
-  }
 
   /* ---------- 요소 집어주기 ---------- */
   function pathOf(el) {
@@ -241,21 +229,18 @@
   }
 
   /* ---------- 본 작업 ---------- */
-  async function run() {
+  /* 채번 버튼은 사람이 누른다. 자동화는 번호가 찍히는 것을 보고 그 뒤를 잇는다. */
+  async function cycle(before) {
     if (!CFG.s5.chkAll) throw new Error('반입내역 전체선택 체크박스를 아직 안 정했습니다. [체크박스 지정] 을 먼저 누르세요.');
-    assertNoDialog();
 
-    say('1) 박스번호 채번');
-    click(need(CFG.tabs.ret, '반품 탭'));
-    await sleep(400);
-    var field = need(CFG.s1.boxNo, '박스번호 칸');
-    var before = field.value;
-    click(need(CFG.s1.btnSeq, '채번 버튼'));
+    say('1) 박스번호 채번 — 눌렀습니다');
     var boxNo = await waitFor(function () {
-      var v = q(CFG.s1.boxNo).value;
+      var el = q(CFG.s1.boxNo);
+      var v = el ? el.value : '';
       return (v && v !== before) ? v : false;
-    }, '박스번호 채번');
+    }, '박스번호가 찍히기');
     say('   박스번호 ' + boxNo, 'ok');
+    assertNoDialog();
 
     say('2) 반품등록');
     click(need(CFG.s2.btnSave, '반품등록 버튼'));
@@ -267,13 +252,13 @@
     var f3 = need(CFG.s3.inBoxNo, '반입박스번호 칸');
     await typeInto(f3, boxNo);
     pressEnter(f3);
+    say('   반입등록은 서버가 느립니다. 기다립니다…', 'dim');
     await handleDialog('반입등록');
 
     say('4) 박스별입고등록 — 박스번호 입력');
     click(need(CFG.tabs.boxin, '박스별입고 탭'));
     await sleep(600);
     var f4 = need(CFG.s4.boxNo, '박스번호 칸');
-    var boxesBefore = countBoxes();
     await typeInto(f4, boxNo);
     pressEnter(f4);
 
@@ -282,34 +267,44 @@
       var el = q(CFG.s5.chkAll);
       return (el && vis(el)) ? el : false;
     }, '전체선택 체크박스가 보이기');
-    // 목록이 실제로 조회될 때까지 기다린다. 체크박스는 목록이 비어 있어도 보이기 때문에,
-    // 보인다는 것만으로 누르면 빈 목록에 전체선택을 걸게 된다.
-    var added = await waitFor(function () {
-      var n = countBoxes() - boxesBefore;
-      return n > 0 ? n : false;
-    }, '반입내역이 조회되기');
-    say('   목록이 떴습니다 (체크박스 ' + added + '개 늘어남)', 'dim');
-    await sleep(400);   // 마지막 줄까지 그려지도록
-
-    /* 지난 번 체크가 남아 있으면 전체선택이 이미 켜진 채로 새 목록이 뜬다.
-       그 상태로는 눌러도 아무 일이 없으니, 껐다가 다시 켜서 새 줄까지 걸리게 한다. */
-    if (chk.checked) { click(chk); await sleep(300); }
-    var checkedBefore = countChecked();
-    click(chk);
-    await sleep(500);
-    var gained = countChecked() - checkedBefore;
-    if (gained <= 1) {
-      // 전체선택 한 번으로 안 걸리는 화면도 있어서 줄마다 눌러 본다
-      siblingRows(chk).forEach(function (cbx) { if (!cbx.checked) click(cbx); });
-      await sleep(500);
+    /* 이 화면의 그리드는 줄을 미리 만들어 두고 값만 채운다. 그래서 "체크박스가
+       늘어나면 조회된 것" 같은 신호가 오지 않는다. 조회를 기다리는 대신
+       전체선택을 눌러 보고 실제로 걸렸는지를 확인한다. 안 걸렸으면 다시 누른다. */
+    await sleep(CFG.settleMs);
+    var gained = 0;
+    var until = Date.now() + CFG.listRetryMs;
+    var tries = 0;
+    while (Date.now() < until) {
+      if (stopped) throw new Error('중단했습니다');
+      tries++;
+      // 지난 번 체크가 남아 켜져 있으면 눌러도 아무 일이 없다. 껐다가 다시 켠다.
+      if (chk.checked) { click(chk); await sleep(300); }
+      var checkedBefore = countChecked();
+      click(chk);
+      await sleep(600);
       gained = countChecked() - checkedBefore;
+      if (gained > 1) break;
+      /* 줄마다 직접 눌러 보는 대비책은 두지 않는다. 이 그리드는 줄을 미리
+         그려 두기 때문에, 아직 값이 안 들어온 빈 줄까지 전부 체크하게 된다.
+         전체선택은 값이 있는 줄만 고르므로, 될 때까지 그것만 다시 누른다. */
+      await sleep(900);
     }
-    if (gained <= 1) throw new Error('반입내역이 하나도 체크되지 않았습니다');
-    // 셀 수 있으면 실제 걸린 줄 수를 적고, 아니면 늘어난 수에서 전체선택 제 몫을 뺀다
-    var rowsOn = siblingRows(chk).filter(function (cbx) { return cbx.checked; }).length;
-    say('   ' + (rowsOn || (gained - 1)) + '건 체크', 'ok');
+    if (gained <= 1) throw new Error('반입내역이 체크되지 않았습니다 (' + tries + '번 시도). ' +
+      '목록이 비어 있거나, 지정한 전체선택 체크박스가 다른 표의 것일 수 있습니다.');
+    say('   ' + (gained - 1) + '건 체크' + (tries > 1 ? ' (' + tries + '번째 시도)' : ''), 'ok');
 
     click(need(CFG.s5.btnSave, '입고등록 버튼'));
+    // 버튼이 안 먹는 경우를 대비해 F6 도 한 번 보낸다
+    var appeared = await Promise.race([
+      waitFor(findDialog, '입고등록 확인창').then(function () { return true; }).catch(function () { return false; }),
+      sleep(3000).then(function () { return false; })
+    ]);
+    if (!appeared && !findDialog()) {
+      say('   버튼에 반응이 없어 F6 을 보냅니다', 'dim');
+      ['keydown', 'keyup'].forEach(function (t) {
+        document.dispatchEvent(new KeyboardEvent(t, { key: 'F6', code: 'F6', keyCode: 117, which: 117, bubbles: true, cancelable: true }));
+      });
+    }
     await handleDialog('입고등록 여부');
     await handleDialog('입고등록 완료');
 
@@ -323,10 +318,12 @@
     rn.focus();
     try { rn.select(); } catch (e) {}
     say('끝 — 박스 ' + boxNo + '. 반품예정번호에 커서를 뒀습니다.', 'ok');
+    say('대기 중 — 박스번호 채번을 누르면 다음 건을 이어서 돕니다.', 'ok');
   }
 
   /* ---------- 상자 ---------- */
   var box, logEl, btnGo, btnChk, btnPick, btnStop;
+  var armed = false, running = false;
   function say(msg, kind) {
     var d = document.createElement('div');
     d.style.color = kind === 'err' ? '#c00' : (kind === 'ok' ? '#0a7' : (kind === 'dim' ? '#888' : '#333'));
@@ -342,10 +339,37 @@
     return b;
   }
   function busy(on) {
-    btnGo.disabled = on;
     btnChk.disabled = on;
     btnPick.disabled = on;
     btnStop.disabled = !on;
+  }
+  function paintArm() {
+    btnGo.textContent = armed ? '■ 대기 중지' : '● 대기 시작';
+    box.style.borderColor = armed ? '#0a7' : '#06c';
+    box.querySelector('div').style.background = armed ? '#0a7' : '#06c';
+  }
+
+  /* 화면의 박스번호채번 버튼을 사람이 누르면 그때부터 자동으로 돈다.
+     붙잡기 단계에서 듣기 때문에 화면이 값을 바꾸기 전의 박스번호를 알 수 있다. */
+  function onClick(ev) {
+    if (!armed || running) return;
+    var btn = q(CFG.s1.btnSeq);
+    if (!btn) return;
+    if (ev.target !== btn && !btn.contains(ev.target)) return;
+    var el = q(CFG.s1.boxNo);
+    var before = el ? el.value : '';
+    running = true;
+    logEl.textContent = '';
+    busy(true);
+    cycle(before).catch(function (e) {
+      say('멈춤: ' + e.message, 'err');
+      say('화면을 확인하고 남은 것은 손으로 처리하세요. 앞 단계는 이미 반영됐을 수 있습니다.', 'err');
+      say('대기는 계속합니다. 다음 건은 박스번호 채번을 누르면 됩니다.', 'dim');
+    }).then(function () {
+      running = false;
+      stopped = false;
+      busy(false);
+    });
   }
   function ui() {
     var old = document.getElementById('__wmsRunBox');
@@ -364,7 +388,7 @@
     sp.setAttribute('style', 'flex:1');
     btnChk = mkBtn('점검');
     btnPick = mkBtn('체크박스 지정');
-    btnGo = mkBtn('시작');
+    btnGo = mkBtn('● 대기 시작');
     btnGo.style.fontWeight = 'bold';
     btnStop = mkBtn('중단');
     btnStop.disabled = true;
@@ -404,8 +428,20 @@
       };
     }
     btnChk.onclick = wrap(check);
-    btnGo.onclick = wrap(run);
+    btnGo.onclick = function () {
+      armed = !armed;
+      paintArm();
+      if (armed) {
+        logEl.textContent = '';
+        say('대기 중 — 화면의 [박스번호채번] 을 누르면 그때부터 자동으로 돕니다.', 'ok');
+        say('한 바퀴 돌고 반품예정번호에 커서가 오면 다시 대기합니다.', 'dim');
+      } else {
+        say('대기를 그쳤습니다.', 'err');
+      }
+    };
     btnStop.onclick = function () { stopped = true; say('중단 요청됨', 'err'); };
+    document.addEventListener('click', onClick, true);
+    paintArm();
     btnPick.onclick = function () {
       var t = q(CFG.tabs.boxin);
       if (t) { click(t); }        // 지정하려면 그 탭이 열려 있어야 한다
@@ -420,6 +456,7 @@
 
   ui();
   say('처음이면 [점검] 부터 눌러 보세요. 화면을 바꾸지 않고 자리만 확인합니다.');
+  say('[● 대기 시작] 을 누른 뒤 화면의 [박스번호채번] 을 누르면 한 바퀴 돕니다.');
   if (CFG.s5.chkAll) say('전체선택 체크박스: ' + CFG.s5.chkAll, 'dim');
   else say('반입내역 전체선택 체크박스는 id 가 없어서 한 번 지정해야 합니다 — [체크박스 지정]', 'err');
 })();

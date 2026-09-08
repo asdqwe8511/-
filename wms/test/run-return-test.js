@@ -18,10 +18,12 @@ const log = p => p.locator('#__wmsRunBox div[style*="overflow:auto"]').innerText
   await p.evaluate(code);
   if (errs.length) fail('실행 오류: ' + errs.join('\n'));
 
-  // --- 체크박스를 지정하기 전에는 시작이 막혀야 한다 ---
-  await p.locator('#__wmsRunBox button', { hasText: '시작' }).click();
-  await p.waitForTimeout(500);
+  // --- 체크박스를 지정하기 전에는 돌지 않아야 한다 ---
+  await p.locator('#__wmsRunBox button', { hasText: '대기 시작' }).click();
+  await p.locator('#mf_wdc_main_subWindow1_wframe_btn_boxNum').click();
+  await p.waitForTimeout(800);
   if (!(await log(p)).includes('전체선택 체크박스를 아직 안 정했습니다')) fail('미지정 상태로 그냥 돌아감');
+  await p.locator('#__wmsRunBox button', { hasText: '대기 중지' }).click();
 
   // --- 집어주기: 반입내역(아래) 그리드의 헤더 체크박스 ---
   await p.locator('#__wmsRunBox button', { hasText: '체크박스 지정' }).click();
@@ -38,9 +40,11 @@ const log = p => p.locator('#__wmsRunBox div[style*="overflow:auto"]').innerText
   const chk = await log(p);
   if (!chk.includes('전부 찾았습니다')) fail('점검에서 빠진 것이 있음\n' + chk);
 
-  // --- 본 작업 ---
-  await p.locator('#__wmsRunBox button', { hasText: '시작' }).click();
-  await p.waitForFunction(() => /끝 —|멈춤:/.test(document.querySelector('#__wmsRunBox').innerText), null, { timeout: 60000 });
+  // --- 본 작업: 대기를 걸고 화면의 채번 버튼을 사람이 누른다 ---
+  await p.locator('#__wmsRunBox button', { hasText: '대기 시작' }).click();
+  await p.locator('#mf_wdc_main_nameLayer_mf_wdc_main_subWindow1').click();
+  await p.locator('#mf_wdc_main_subWindow1_wframe_btn_boxNum').click();
+  await p.waitForFunction(() => /끝 —|멈춤:/.test(document.querySelector('#__wmsRunBox').innerText), null, { timeout: 120000 });
   const out = await log(p);
   if (out.includes('멈춤:')) fail('중간에 멈춤\n' + out);
 
@@ -62,13 +66,20 @@ const log = p => p.locator('#__wmsRunBox div[style*="overflow:auto"]').innerText
   const focus = await p.evaluate(() => document.activeElement && document.activeElement.id);
   if (focus !== 'mf_wdc_main_subWindow1_wframe_ibx_rtgdSchdNum') fail('커서 위치가 다름: ' + focus);
 
-  // --- 실제로는 연달아 돌린다. 두 번째도 같아야 한다. ---
-  await p.locator('#__wmsRunBox button', { hasText: '시작' }).click();
-  await p.waitForFunction(() => /끝 —|멈춤:/.test(document.querySelector('#__wmsRunBox').innerText), null, { timeout: 60000 });
+  if (!out.includes('대기 중 — 박스번호 채번')) fail('한 바퀴 뒤 다시 대기하지 않음\n' + out);
+  if (!/(^|\n)\s*5건 체크/.test(out)) fail('첫 실행의 체크 건수 보고가 틀림\n' + out);
+
+  // --- 연달아 돌린다. 대기를 다시 걸 필요 없이 채번만 누르면 돼야 한다. ---
+  await p.locator('#mf_wdc_main_subWindow1_wframe_btn_boxNum').click();
+  await p.waitForFunction(() => /끝 —|멈춤:/.test(document.querySelector('#__wmsRunBox').innerText), null, { timeout: 120000 });
   const out2 = await log(p);
   if (out2.includes('멈춤:')) fail('두 번째 실행에서 멈춤\n' + out2);
   // 보고한 건수가 실제 저장 건수와 같아야 한다
   if (!/(^|\n)\s*5건 체크/.test(out2)) fail('두 번째 실행의 체크 건수 보고가 틀림\n' + out2);
+  // 값이 안 들어온 빈 줄까지 체크하면 안 된다
+  const emptyChecked = await p.evaluate(() => [].slice.call(document.querySelectorAll('#tbIn tr'))
+    .filter(tr => tr.querySelector('input').checked && !tr.querySelector('.v').textContent).length);
+  if (emptyChecked) fail('빈 줄까지 체크됨: ' + emptyChecked + '줄');
   const saved = await p.evaluate(() => window.__mock.saved);
   if (saved.length !== 2) fail('두 번 저장돼야 하는데 ' + JSON.stringify(saved));
   if (saved[0].box === saved[1].box) fail('두 번 다 같은 박스번호: ' + JSON.stringify(saved));
