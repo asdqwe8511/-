@@ -279,7 +279,10 @@
   /* 채번처럼 서버가 값을 채워 넣는 자리는 change 가 안 뜬다.
      사람이 손대지 않았는데 값이 달라진 칸을 훑어서 따로 남긴다 —
      "채번을 누르면 여기에 이 번호가 찍힌다" 를 알아야 자동화를 짤 수 있다. */
-  var snap = {};
+  /* 값 스냅샷은 요소 자체를 열쇠로 삼는다.
+     id·name 이 없는 칸(그리드 헤더 체크박스 같은)이 여럿이면 글자만으로는
+     서로 구별되지 않아, 남의 값을 제 것으로 착각하고 바뀌었다고 잘못 적는다. */
+  var snap = new WeakMap();
   function watchValues() {
     if (!rec.on) return;
     (function walk(w, path, depth) {
@@ -291,11 +294,10 @@
         d.querySelectorAll('input,select,textarea').forEach(function (e) {
           if (e.type === 'hidden' || e.type === 'password') return;
           if (e.closest('#__wmsRecBox')) return;
-          var key = path + '|' + (e.id || e.name || desc(e));
           var v = e.type === 'checkbox' || e.type === 'radio' ? String(e.checked) : e.value;
-          if (!(key in snap)) { snap[key] = v; return; }
-          if (snap[key] === v) return;
-          snap[key] = v;
+          if (!snap.has(e)) { snap.set(e, v); return; }
+          if (snap.get(e) === v) return;
+          snap.set(e, v);
           if (d.activeElement === e) return;      // 지금 타이핑 중인 칸은 건너뛴다
           push('화면변화', path, e, v);
         });

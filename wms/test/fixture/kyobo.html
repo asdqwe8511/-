@@ -1,0 +1,142 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>통합물류WMS</title>
+<style>
+ body{font-family:"Malgun Gothic",sans-serif;font-size:13px;margin:10px}
+ .tab{display:inline-block;padding:6px 14px;border:1px solid #bbb;background:#f4f4f4;cursor:pointer}
+ .tab.on{background:#dbeafe;font-weight:bold}
+ .win{display:none;border:1px solid #ccc;padding:12px;margin-top:6px}.win.on{display:block}
+ th{background:#eee;padding:4px 8px}td{padding:3px 8px}
+ .grid{border:1px solid #ccc;margin:8px 0}
+ .dlg{position:fixed;left:50%;top:40%;transform:translate(-50%,-50%);background:#fff;border:2px solid #666;
+      padding:16px 22px;box-shadow:0 6px 24px rgba(0,0,0,.3);z-index:999}
+ #log{margin-top:10px;color:#666;font-size:12px;white-space:pre-line}
+</style></head>
+<body>
+<!-- 교보 WMS 화면 구조를 흉내 낸 목업.
+     실제 화면에서 녹화된 id 를 그대로 쓰고, 확인창도 브라우저 팝업이 아니라
+     화면 안 버튼으로 만들었다. 서버 왕복은 지연으로 흉내 낸다. -->
+<div id="mf_wdc_main_nameLayer_mf_wdc_main_subWindow1" class="tab on">도서도매반품조회/등록</div>
+<div id="mf_wdc_main_nameLayer_mf_wdc_main_subWindow2" class="tab">반출입등록</div>
+<div id="mf_wdc_main_nameLayer_mf_wdc_main_subWindow3" class="tab">박스별 입고 등록</div>
+
+<div class="win on" id="w1">
+ <table><tr><th>반품예정번호</th><td><input type="text" id="mf_wdc_main_subWindow1_wframe_ibx_rtgdSchdNum"></td>
+ <th>박스번호</th><td><input type="text" id="mf_wdc_main_subWindow1_wframe_ibx_boxNum" readonly></td></tr></table>
+ <input type="button" id="mf_wdc_main_subWindow1_wframe_btn_boxNum" value="박스번호채번">
+ <input type="button" id="mf_wdc_main_subWindow1_wframe_btn_rtgdSave" value="반품등록">
+ <input type="button" id="mf_wdc_main_subWindow1_wframe_btn_init" value="초기화">
+</div>
+
+<div class="win" id="w2">
+ <table><tr><th>반입박스번호</th><td><input type="text" id="mf_wdc_main_subWindow2_wframe_ibx_saveBoxNum"></td></tr></table>
+</div>
+
+<div class="win" id="w3">
+ <table><tr><th>박스번호</th><td><input type="text" id="mf_wdc_main_subWindow3_wframe_txt_boxNum"></td>
+ <th>서가번호</th><td><input type="text" id="mf_wdc_main_subWindow3_wframe_txt_shelf" value="790051" readonly></td></tr></table>
+
+ <!-- 위쪽 그리드: 반품예정 목록. 자동화가 건드리면 안 되는 쪽 -->
+ <div class="grid" id="grdSchd"><table><thead><tr><th><input type="checkbox"></th><th>No</th><th>예정번호</th></tr></thead>
+  <tbody></tbody></table></div>
+
+ <!-- 아래쪽 그리드: 반입내역. 여기 전체를 체크해야 한다 -->
+ <div class="grid" id="grdInList"><table><thead><tr><th><input type="checkbox"></th><th>No</th><th>도서명</th></tr></thead>
+  <tbody></tbody></table></div>
+
+ <input type="button" id="mf_wdc_main_subWindow3_wframe_btn_save" value="입고등록">
+</div>
+<div id="log"></div>
+
+<script>
+(function(){
+ var seq=45954285, st={boxNo:'',returned:false,inbound:false,saved:[]}; window.__mock=st;
+ var L=function(m){document.getElementById('log').textContent+=m+'\n';};
+ function $(i){return document.getElementById(i);}
+
+ function tab(n){
+   [1,2,3].forEach(function(k){
+     $('mf_wdc_main_nameLayer_mf_wdc_main_subWindow'+k).classList.toggle('on',k===n);
+     $('w'+k).classList.toggle('on',k===n);
+   });
+ }
+ [1,2,3].forEach(function(k){ $('mf_wdc_main_nameLayer_mf_wdc_main_subWindow'+k)
+   .addEventListener('click',function(){tab(k);}); });
+
+ // 화면 안 확인창. 실제 화면처럼 id 가 alert2/alert3/confirm2 식으로 붙는다.
+ function dialog(id, msg, kind, cb){
+   var d=document.createElement('div'); d.className='dlg';
+   var p=document.createElement('div'); p.textContent=msg; d.appendChild(p);
+   var b=document.createElement('input'); b.type='button'; b.id=id;
+   b.value = kind==='yes' ? '예' : '확인';
+   b.onclick=function(){ d.remove(); if(cb) cb(); };
+   d.appendChild(b);
+   if(kind==='yes'){ var n=document.createElement('input'); n.type='button';
+     n.id=id.replace('_btn_yes','_btn_no'); n.value='아니오';
+     n.onclick=function(){ d.remove(); }; d.appendChild(n); }
+   document.body.appendChild(d);
+ }
+
+ $('mf_wdc_main_subWindow1_wframe_btn_boxNum').addEventListener('click',function(){
+   setTimeout(function(){ st.boxNo=String(++seq);
+     $('mf_wdc_main_subWindow1_wframe_ibx_boxNum').value=st.boxNo; L('채번: '+st.boxNo); },400);
+ });
+
+ $('mf_wdc_main_subWindow1_wframe_btn_rtgdSave').addEventListener('click',function(){
+   if(!st.boxNo){ dialog('mf_wdc_main_subWindow1_wframe_alert9_wframe_btn_confirm','박스번호를 먼저 채번하세요.'); return; }
+   setTimeout(function(){ st.returned=true; L('반품등록 완료');
+     dialog('mf_wdc_main_subWindow1_wframe_alert3_wframe_btn_confirm','반품등록이 완료되었습니다.');
+     $('mf_wdc_main_subWindow1_wframe_ibx_boxNum').value=''; },300);
+ });
+
+ $('mf_wdc_main_subWindow1_wframe_btn_init').addEventListener('click',function(){
+   st.boxNo='';st.returned=false;st.inbound=false;
+   ['mf_wdc_main_subWindow1_wframe_ibx_boxNum','mf_wdc_main_subWindow1_wframe_ibx_rtgdSchdNum',
+    'mf_wdc_main_subWindow2_wframe_ibx_saveBoxNum','mf_wdc_main_subWindow3_wframe_txt_boxNum']
+     .forEach(function(i){$(i).value='';});
+   document.querySelector('#grdInList tbody').innerHTML='';
+   L('초기화');
+ });
+
+ var ib=$('mf_wdc_main_subWindow2_wframe_ibx_saveBoxNum');
+ ib.addEventListener('keydown',function(e){
+   if(e.keyCode!==13) return;
+   var v=this.value;
+   if(v!==st.boxNo){ dialog('mf_wdc_main_subWindow2_wframe_alert9_wframe_btn_confirm','없는 박스번호입니다.'); return; }
+   setTimeout(function(){ st.inbound=true; L('반입등록 완료: '+v);
+     dialog('mf_wdc_main_subWindow2_wframe_alert2_wframe_btn_confirm','반입등록이 완료되었습니다.'); },400);
+ });
+
+ function loadRows(v){
+   if(v!==st.boxNo||!st.inbound) return;
+   setTimeout(function(){
+     var b=document.querySelector('#grdInList tbody');
+     b.innerHTML=['어린 왕자','데미안','토지 1권','칼의 노래','82년생 김지영']
+       .map(function(t,i){return '<tr><td><input type="checkbox"></td><td>'+(i+1)+'</td><td>'+t+'</td></tr>';}).join('');
+     var s=document.querySelector('#grdSchd tbody');
+     s.innerHTML=[1,2,3].map(function(i){return '<tr><td><input type="checkbox"></td><td>'+i+'</td><td>RT00'+i+'</td></tr>';}).join('');
+     L('반입내역 '+b.rows.length+'건 조회');
+   },500);
+ }
+ var bx=$('mf_wdc_main_subWindow3_wframe_txt_boxNum');
+ bx.addEventListener('change',function(){loadRows(this.value);});
+ bx.addEventListener('keydown',function(e){ if(e.keyCode===13) loadRows(this.value); });
+
+ // 헤더 체크박스는 id 가 없다 — 실제 화면과 같다
+ document.querySelectorAll('.grid thead input[type=checkbox]').forEach(function(h){
+   h.addEventListener('click',function(){
+     var on=this.checked;
+     this.closest('.grid').querySelectorAll('tbody input[type=checkbox]').forEach(function(c){c.checked=on;});
+   });
+ });
+
+ $('mf_wdc_main_subWindow3_wframe_btn_save').addEventListener('click',function(){
+   var on=document.querySelectorAll('#grdInList tbody input[type=checkbox]:checked');
+   if(!on.length){ dialog('mf_wdc_main_subWindow3_wframe_alert9_wframe_btn_confirm','등록할 도서를 선택하세요.'); return; }
+   var shelf=$('mf_wdc_main_subWindow3_wframe_txt_shelf').value;
+   dialog('mf_wdc_main_subWindow3_wframe_confirm2_wframe_btn_yes','서가번호 '+shelf+' 에 등록 하시겠습니까?','yes',function(){
+     setTimeout(function(){ st.saved.push({box:st.boxNo,count:on.length}); L('입고등록 완료: '+on.length+'건');
+       dialog('alert2_wframe_btn_confirm','입고등록이 완료되었습니다.'); },300);
+   });
+ });
+})();
+</script>
+</body></html>
