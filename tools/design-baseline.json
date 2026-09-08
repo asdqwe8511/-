@@ -1,0 +1,18 @@
+{
+  "index.html": {
+    "hex-color": 29,
+    "rgba-color": 41,
+    "font-size": 188,
+    "radius": 72,
+    "shadow": 3,
+    "duration": 5
+  },
+  "youtube.html": {
+    "hex-color": 33,
+    "rgba-color": 4,
+    "font-size": 56,
+    "radius": 28,
+    "shadow": 0,
+    "duration": 4
+  }
+}

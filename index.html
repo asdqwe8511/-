@@ -26,19 +26,25 @@
 <meta name="twitter:image" content="https://delta-ten-68.vercel.app/og-saju.png?v=1">
 <link rel="canonical" href="https://delta-ten-68.vercel.app/">
 <link rel="icon" type="image/png" href="/favicon.png">
+<!-- 색·글자·간격·반경·그림자는 전부 여기서 온다. 이 파일 하나만 바꾸면
+     두 화면이 같이 따라온다. 규칙은 docs/design-system.md 참고. -->
+<link rel="stylesheet" href="/styles/tokens.css">
 <style>
   :root{
-    /* 밝은 톤. 배경은 순백이 아니라 살짝 회색을 띤 판이고, 카드가 그 위에 흰색으로
-       뜬다 — 앱스토어가 카드를 구분하는 방식이다. */
-    --bg:#f2f3f7; --panel:#ffffff; --panel-2:#f4f6f9; --panel-3:#eaedf3;
-    --border:#e4e7ee; --text:#14161c; --text-dim:#586074; --text-mute:#8b93a3;
-    --accent:#6b4eff; --accent-2:#0d9488; --danger:#dc2f52; --warn:#b4740b;
-    --shadow-sm:0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.08);
-    --shadow-md:0 4px 12px rgba(16,24,40,.07), 0 2px 4px rgba(16,24,40,.05);
+    /* 이 화면이 쓰는 짧은 이름들. 값을 여기 적지 않고 토큰을 가리키기만 한다 —
+       값을 고칠 곳은 styles/tokens.css 한 군데다. */
+    --bg:var(--color-bg); --panel:var(--color-panel);
+    --panel-2:var(--color-panel-2); --panel-3:var(--color-panel-3);
+    --border:var(--color-border); --text:var(--color-text);
+    --text-dim:var(--color-text-dim); --text-mute:var(--color-text-mute);
+    --accent:var(--color-accent); --accent-2:var(--color-accent-2);
+    --danger:var(--color-danger); --warn:var(--color-warn);
+    /* --shadow-sm / --shadow-md 는 토큰 파일이 그 이름 그대로 정의한다.
+       여기서 다시 적으면 자기 자신을 가리키게 되어 그림자가 사라진다. */
     /* 차트: 오행을 색으로 구분하지 않는다. 청↔적, 적↔황은 색각 이상에서
        구별이 안 되는 조합이라, 오행 이름은 글자로 적고 막대는 한 가지 색조로
        크기만 비교하게 한다. 용신만 다른 색 + '용신' 라벨로 표시한다. */
-    --bar:#7c5cff; --bar-strong:#2dd4bf;
+    --bar:var(--color-bar); --bar-strong:var(--color-bar-strong);
   }
   *{box-sizing:border-box; margin:0; padding:0;}
   body{

@@ -8,7 +8,8 @@
   },
   "scripts": {
     "dev": "node tools/dev-server.js",
-    "test": "node tools/test-saju.js && node tools/test-quota.js",
+    "test": "node tools/test-saju.js && node tools/test-quota.js && node tools/check-design.js",
+    "check:design": "node tools/check-design.js",
     "test:browser": "node tools/test-browser.js"
   }
 }

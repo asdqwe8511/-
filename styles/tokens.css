@@ -1,0 +1,200 @@
+/* 디자인 토큰 — 이 파일이 유일한 출처다.
+ *
+ * 규칙은 하나다: 색·글자·간격·반경·그림자·모션 값을 코드에 직접 적지 않는다.
+ * 새 화면을 만들 때도 여기 있는 var(--...) 만 쓴다. 여기 없는 값이 필요하면
+ * 먼저 이 파일에 토큰을 추가하고, 그 다음 화면에서 쓴다. 그래야 페이지가
+ * 늘어나도 두 화면이 서로 다른 회색, 서로 다른 모서리를 갖는 일이 없다.
+ *
+ * ── 값의 출처 ─────────────────────────────────────────────────────────
+ * 아래 값들은 지금 index.html / youtube.html 이 실제로 쓰고 있던 값을 그대로
+ * 옮겨 온 것이다(현행 화면과 픽셀 단위로 동일). 즉 "현재 상태를 고정한 기준선"
+ * 이지, 외부 디자인 시스템에서 받아 온 값이 아니다.
+ *
+ * 참조 디자인 시스템(https://styles.refero.design/)의 값으로 갈아끼울 때는
+ * 이 파일의 값만 바꾸면 된다. 화면 코드는 손대지 않는다.
+ * 절차는 docs/design-system.md 의 "토큰 교체" 항목 참고.
+ * ─────────────────────────────────────────────────────────────────────
+ */
+
+:root{
+  /* ── 타이포그래피 ────────────────────────────────────────────────── */
+  --font-sans: "Pretendard","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  /* 한자 글리프는 본문 폰트로 그리면 획이 뭉갠다. 큰 글자에만 따로 쓴다. */
+  --font-glyph: "Apple SD Gothic Neo","Malgun Gothic",serif;
+
+  /* 사다리는 10 → 38. 반 픽셀 단계(11.5, 12.5)는 모바일에서 한 줄에 들어가는
+     글자 수를 맞추려고 실제로 쓰고 있는 값이라 그대로 둔다. */
+  --fs-50:  10px;    /* 각주·단위 */
+  --fs-100: 11.5px;  /* 보조 라벨 */
+  --fs-200: 12.5px;  /* 본문 보조 — 가장 많이 쓰이는 크기 */
+  --fs-300: 13px;    /* 본문 */
+  --fs-400: 14px;    /* 칩·체크박스 라벨 */
+  --fs-500: 16px;    /* 입력칸. iOS 는 16px 미만 입력에 자동 확대를 건다 — 하한 */
+  --fs-600: 17px;    /* 패널 제목 */
+  --fs-700: 20px;    /* 지표 값 */
+  --fs-800: 25px;    /* 화면 제목 */
+  --fs-900: 38px;    /* 팔자 글리프 */
+
+  --lh-tight:  1.35;  /* 제목 */
+  --lh-normal: 1.55;  /* 기본 */
+  --lh-loose:  1.7;   /* 설명문·긴 문장 */
+
+  --fw-normal: 400;
+  --fw-medium: 600;
+  --fw-bold:   700;
+  --fw-black:  800;
+
+  /* ── 색 ──────────────────────────────────────────────────────────── */
+  /* 밝은 톤. 배경은 순백이 아니라 살짝 회색을 띤 판이고, 카드가 그 위에 흰색으로
+     뜬다 — 앱스토어가 카드를 구분하는 방식이다. */
+  --color-bg:        #f2f3f7;
+  --color-panel:     #ffffff;
+  --color-panel-2:   #f4f6f9;
+  --color-panel-3:   #eaedf3;
+  --color-border:    #e4e7ee;
+
+  --color-text:      #14161c;
+  --color-text-dim:  #586074;
+  --color-text-mute: #8b93a3;
+  --color-on-accent: #ffffff;
+
+  --color-accent:      #6b4eff;
+  --color-accent-deep: #553bdb;  /* 주 버튼 그라데이션의 끝 */
+  --color-accent-2:    #0d9488;
+  --color-danger:      #dc2f52;
+  --color-warn:        #b4740b;
+
+  /* 배경에 옅게 까는 같은 계열 색. rgba 를 화면 코드에 직접 적지 않기 위한 것. */
+  --color-accent-weak: rgba(107,78,255,.09);
+  --color-accent-glow: rgba(107,78,255,.12);
+  --color-danger-weak: rgba(220,47,82,.08);
+  --color-danger-line: rgba(220,47,82,.35);
+  --color-warn-weak:   rgba(180,116,11,.08);
+  --color-warn-line:   rgba(180,116,11,.30);
+
+  /* 차트: 오행을 색으로 구분하지 않는다. 청↔적, 적↔황은 색각 이상에서 구별이
+     안 되는 조합이라, 이름은 글자로 적고 막대는 한 가지 색조로 크기만 비교하게
+     한다. 강조 하나만 다른 색 + 라벨을 붙인다. */
+  --color-bar:        #7c5cff;
+  --color-bar-strong: #2dd4bf;
+
+  /* ── 간격 ────────────────────────────────────────────────────────── */
+  --space-1:  2px;
+  --space-2:  4px;
+  --space-3:  6px;
+  --space-4:  8px;
+  --space-5:  10px;
+  --space-6:  12px;
+  --space-7:  14px;
+  --space-8:  16px;
+  --space-9:  18px;
+  --space-10: 22px;
+  --space-11: 24px;
+  --space-12: 30px;
+
+  /* ── 모서리 ──────────────────────────────────────────────────────── */
+  --radius-xs:   4px;
+  --radius-sm:   6px;
+  --radius-md:   9px;   /* 작은 배지·알림 */
+  --radius-lg:   11px;  /* 입력칸 */
+  --radius-xl:   13px;  /* 지표 카드 */
+  --radius-2xl:  18px;  /* 패널 */
+  --radius-pill: 999px; /* 칩 */
+  --radius-full: 50%;
+
+  /* ── 그림자 ──────────────────────────────────────────────────────── */
+  --shadow-sm: 0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.08);
+  --shadow-md: 0 4px 12px rgba(16,24,40,.07), 0 2px 4px rgba(16,24,40,.05);
+  --shadow-lg: 0 8px 26px rgba(16,24,40,.14);  /* 하단 고정 버튼처럼 떠 있는 것 */
+
+  /* ── 모션 ────────────────────────────────────────────────────────── */
+  --dur-fast: 120ms;
+  --dur:      150ms;
+  --dur-slow: 240ms;
+  --ease:     cubic-bezier(.2,.8,.2,1);
+
+  /* ── 손가락·레이아웃 ─────────────────────────────────────────────── */
+  --tap-min:    44px;  /* 누를 수 있는 것의 최소 높이. 이 밑으로 내려가지 않는다 */
+  --tap-field:  48px;  /* 입력칸·체크 줄 */
+  --tap-cta:    56px;  /* 화면의 주 버튼 */
+  --app-width:  520px; /* 미니앱 기준 폭. 넓은 화면에서도 가운데 이 폭 */
+  --z-header:   20;
+  --z-cta:      30;
+  --z-overlay:  40;
+}
+
+/* 어두운 톤. youtube.html 이 쓰던 값이다. <html data-theme="dark"> 로 켠다.
+   시스템 설정만 보고 자동으로 뒤집지는 않는다 — 두 화면의 성격이 달라서,
+   페이지가 스스로 어느 톤인지 선언하게 두는 편이 사고가 적다. */
+[data-theme="dark"]{
+  --color-bg:        #0e0f13;
+  --color-panel:     #16181f;
+  --color-panel-2:   #1c1f28;
+  --color-panel-3:   #222634;
+  --color-border:    #2a2d38;
+
+  --color-text:      #f2f3f5;
+  --color-text-dim:  #9298a8;
+  --color-text-mute: #6f7686;
+
+  --color-accent:      #7c5cff;
+  --color-accent-deep: #5b3fe0;
+  --color-accent-2:    #2dd4bf;
+  --color-danger:      #ff5470;
+  --color-warn:        #e0a132;
+
+  --color-accent-weak: rgba(124,92,255,.12);
+  --color-accent-glow: rgba(124,92,255,.16);
+  --color-danger-weak: rgba(255,84,112,.10);
+  --color-danger-line: rgba(255,84,112,.35);
+  --color-warn-weak:   rgba(224,161,50,.10);
+  --color-warn-line:   rgba(224,161,50,.30);
+
+  /* 어두운 배경에서 검정 그림자는 보이지 않는다. 더 진하게 깐다. */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.35);
+  --shadow-md: 0 4px 12px rgba(0,0,0,.40);
+  --shadow-lg: 0 8px 26px rgba(0,0,0,.50);
+}
+
+/* ── 모두에게 적용되는 상호작용 규칙 ────────────────────────────────────
+   개별 화면이 각자 다르게 정의하지 않도록 여기서 한 번만 정한다. */
+
+/* 키보드로 이동하는 사람에게 지금 어디인지 보여 준다. 마우스 클릭으로는 뜨지
+   않게 :focus-visible 만 쓴다. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible{
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* 손가락에는 hover 가 없다. 터치 기기에서 hover 스타일이 눌린 채로 남는 것을
+   막으려고, hover 는 진짜 포인터가 있을 때만 켠다. */
+@media (hover: none){
+  :where(a, button, .chip, .top-link):hover{ filter:none; }
+}
+
+/* 움직임을 줄여 달라고 설정한 사람에게는 애니메이션을 걷어낸다.
+   완전히 0 이 아니라 1ms 로 두는 것은, transitionend 를 기다리는 코드가
+   영원히 멈추지 않게 하기 위해서다. */
+@media (prefers-reduced-motion: reduce){
+  *, *::before, *::after{
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── 이미지·영상 기본값 ──────────────────────────────────────────────
+   레이아웃이 로딩 중에 튀지 않게 하는 것이 핵심이다. 자세한 규칙은
+   docs/design-system.md 의 "이미지와 영상" 항목. */
+img, video{
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+/* 비율이 지정된 자리(썸네일 등)에서는 잘라서 채운다 — 찌그러뜨리지 않는다. */
+img[width][height], video[width][height]{ height: auto; }
+.media-fit{ width:100%; height:100%; object-fit: cover; }
+.media-16x9{ aspect-ratio: 16 / 9; }
+.media-1x1 { aspect-ratio: 1 / 1; }
+.media-4x5 { aspect-ratio: 4 / 5; }
