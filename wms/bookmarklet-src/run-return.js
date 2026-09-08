@@ -229,16 +229,10 @@
   }
 
   /* ---------- 본 작업 ---------- */
-  /* 채번 버튼은 사람이 누른다. 자동화는 번호가 찍히는 것을 보고 그 뒤를 잇는다. */
-  async function cycle(before) {
+  /* 채번 버튼은 사람이 누른다. 자동화는 번호가 찍힌 것을 보고 그 뒤를 잇는다. */
+  async function cycle(boxNo) {
     if (!CFG.s5.chkAll) throw new Error('반입내역 전체선택 체크박스를 아직 안 정했습니다. [체크박스 지정] 을 먼저 누르세요.');
-
-    say('1) 박스번호 채번 — 눌렀습니다');
-    var boxNo = await waitFor(function () {
-      var el = q(CFG.s1.boxNo);
-      var v = el ? el.value : '';
-      return (v && v !== before) ? v : false;
-    }, '박스번호가 찍히기');
+    say('1) 박스번호 채번 — 번호를 받았습니다');
     say('   박스번호 ' + boxNo, 'ok');
     assertNoDialog();
 
@@ -322,8 +316,8 @@
   }
 
   /* ---------- 상자 ---------- */
-  var box, logEl, btnGo, btnChk, btnPick, btnStop;
-  var armed = false, running = false;
+  var box, logEl, statEl, btnGo, btnChk, btnPick, btnStop;
+  var armed = false, running = false, lastBox = '';
   function say(msg, kind) {
     var d = document.createElement('div');
     d.style.color = kind === 'err' ? '#c00' : (kind === 'ok' ? '#0a7' : (kind === 'dim' ? '#888' : '#333'));
@@ -347,21 +341,44 @@
     btnGo.textContent = armed ? '■ 대기 중지' : '● 대기 시작';
     box.style.borderColor = armed ? '#0a7' : '#06c';
     box.querySelector('div').style.background = armed ? '#0a7' : '#06c';
+    status();
+  }
+  /* 아무 일도 안 일어날 때 왜 그런지 보이게 한다.
+     대기 중인지, 박스번호 칸을 제대로 보고 있는지, 지금 그 칸에 무엇이 있는지. */
+  function status() {
+    if (!statEl) return;
+    var el = q(CFG.s1.boxNo);
+    var txt;
+    if (running) { txt = '작업 중…'; }
+    else if (!armed) { txt = '대기 안 함 — [● 대기 시작] 을 누르세요'; }
+    else if (!el) { txt = '박스번호 칸을 못 찾음: ' + CFG.s1.boxNo; }
+    else { txt = '대기 중 — 박스번호 칸: ' + (el.value ? '"' + el.value + '"' : '(비어 있음)'); }
+    statEl.textContent = txt;
+    statEl.style.color = running ? '#06c' : (armed ? '#0a7' : '#888');
+    statEl.style.background = armed || running ? '#f2fbf8' : '#fafafa';
   }
 
-  /* 화면의 박스번호채번 버튼을 사람이 누르면 그때부터 자동으로 돈다.
-     붙잡기 단계에서 듣기 때문에 화면이 값을 바꾸기 전의 박스번호를 알 수 있다. */
-  function onClick(ev) {
+  /* 방아쇠는 클릭이 아니라 "박스번호 칸에 새 번호가 찍히는 것"이다.
+     클릭을 잡으려면 화면이 이벤트를 어떻게 흘리는지에 기대게 되는데,
+     번호는 어떤 경로로 눌렸든 반드시 그 칸에 들어온다. */
+  function tick() {
+    status();
     if (!armed || running) return;
-    var btn = q(CFG.s1.btnSeq);
-    if (!btn) return;
-    if (ev.target !== btn && !btn.contains(ev.target)) return;
     var el = q(CFG.s1.boxNo);
-    var before = el ? el.value : '';
+    if (!el) return;
+    var v = (el.value || '').trim();
+    if (!v) { lastBox = ''; return; }      // 초기화되면 다음 번호를 새것으로 본다
+    if (v === lastBox) return;
+    lastBox = v;
+    start(v);
+  }
+
+  function start(boxNo) {
     running = true;
     logEl.textContent = '';
     busy(true);
-    cycle(before).catch(function (e) {
+    status();
+    cycle(boxNo).catch(function (e) {
       say('멈춤: ' + e.message, 'err');
       say('화면을 확인하고 남은 것은 손으로 처리하세요. 앞 단계는 이미 반영됐을 수 있습니다.', 'err');
       say('대기는 계속합니다. 다음 건은 박스번호 채번을 누르면 됩니다.', 'dim');
@@ -369,7 +386,18 @@
       running = false;
       stopped = false;
       busy(false);
+      status();
     });
+  }
+
+  /* 클릭 자체는 방아쇠가 아니지만, 대기를 안 걸어 둔 채 채번을 누르면
+     아무 일도 안 일어난다. 그때 그냥 조용히 있지 말고 이유를 말해 준다. */
+  function onClick(ev) {
+    if (armed || running) return;
+    var btn = q(CFG.s1.btnSeq);
+    if (!btn) return;
+    if (ev.target !== btn && !btn.contains(ev.target)) return;
+    say('박스번호채번을 눌렀지만 대기 상태가 아닙니다. [● 대기 시작] 을 먼저 누르세요.', 'err');
   }
   function ui() {
     var old = document.getElementById('__wmsRunBox');
@@ -394,11 +422,13 @@
     btnStop.disabled = true;
     var btnX = mkBtn('닫기');
     btnX.onclick = function () { stopped = true; box.remove(); };
+    statEl = document.createElement('div');
+    statEl.setAttribute('style', 'padding:5px 10px;border-bottom:1px solid #eee;font-weight:bold');
     logEl = document.createElement('div');
     logEl.setAttribute('style', 'flex:1;padding:9px;overflow:auto;line-height:1.75;white-space:pre-wrap');
     bar.appendChild(ttl); bar.appendChild(sp);
     bar.appendChild(btnChk); bar.appendChild(btnPick); bar.appendChild(btnGo); bar.appendChild(btnStop); bar.appendChild(btnX);
-    box.appendChild(bar); box.appendChild(logEl);
+    box.appendChild(bar); box.appendChild(statEl); box.appendChild(logEl);
     document.body.appendChild(box);
 
     var drag = null;
@@ -433,14 +463,19 @@
       paintArm();
       if (armed) {
         logEl.textContent = '';
+        var el = q(CFG.s1.boxNo);
+        lastBox = el ? (el.value || '').trim() : '';
         say('대기 중 — 화면의 [박스번호채번] 을 누르면 그때부터 자동으로 돕니다.', 'ok');
         say('한 바퀴 돌고 반품예정번호에 커서가 오면 다시 대기합니다.', 'dim');
+        if (!el) say('박스번호 칸을 못 찾았습니다: ' + CFG.s1.boxNo + ' — [점검] 을 눌러 보세요.', 'err');
+        else if (lastBox) say('지금 박스번호 칸에 "' + lastBox + '" 이 있습니다. 채번을 다시 누르면 그때부터 돕니다.', 'dim');
       } else {
         say('대기를 그쳤습니다.', 'err');
       }
     };
     btnStop.onclick = function () { stopped = true; say('중단 요청됨', 'err'); };
     document.addEventListener('click', onClick, true);
+    setInterval(tick, 400);
     paintArm();
     btnPick.onclick = function () {
       var t = q(CFG.tabs.boxin);

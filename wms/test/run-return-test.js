@@ -18,10 +18,24 @@ const log = p => p.locator('#__wmsRunBox div[style*="overflow:auto"]').innerText
   await p.evaluate(code);
   if (errs.length) fail('실행 오류: ' + errs.join('\n'));
 
-  // --- 체크박스를 지정하기 전에는 돌지 않아야 한다 ---
-  await p.locator('#__wmsRunBox button', { hasText: '대기 시작' }).click();
+  const stat = () => p.locator('#__wmsRunBox div[style*="border-bottom"]').innerText();
+  if (!(await stat()).includes('대기 안 함')) fail('처음 상태줄이 틀림: ' + await stat());
+
+  // --- 대기를 안 걸고 채번을 누르면 이유를 말해야 한다 ---
   await p.locator('#mf_wdc_main_subWindow1_wframe_btn_boxNum').click();
-  await p.waitForTimeout(800);
+  await p.waitForTimeout(600);
+  if (!(await log(p)).includes('대기 상태가 아닙니다')) fail('대기 안 걸린 채 눌렀을 때 아무 말이 없음');
+
+  // --- 체크박스를 지정하기 전에는 돌지 않아야 한다 ---
+  // 앞서 누른 채번으로 칸에 값이 이미 있다 — 그 값으로 오작동하면 안 된다
+  await p.locator('#__wmsRunBox button', { hasText: '대기 시작' }).click();
+  if (!(await stat()).includes('대기 중')) fail('대기 상태줄이 안 뜸: ' + await stat());
+  await p.waitForTimeout(1200);
+  if ((await log(p)).includes('1) 박스번호 채번')) fail('대기를 걸자마자 이미 있던 값으로 돌아버림');
+
+  // 새로 채번하면 그때 돈다
+  await p.locator('#mf_wdc_main_subWindow1_wframe_btn_boxNum').click();
+  await p.waitForTimeout(1500);
   if (!(await log(p)).includes('전체선택 체크박스를 아직 안 정했습니다')) fail('미지정 상태로 그냥 돌아감');
   await p.locator('#__wmsRunBox button', { hasText: '대기 중지' }).click();
 
@@ -44,7 +58,11 @@ const log = p => p.locator('#__wmsRunBox div[style*="overflow:auto"]').innerText
   await p.locator('#__wmsRunBox button', { hasText: '대기 시작' }).click();
   await p.locator('#mf_wdc_main_nameLayer_mf_wdc_main_subWindow1').click();
   await p.locator('#mf_wdc_main_subWindow1_wframe_btn_boxNum').click();
-  await p.waitForFunction(() => /끝 —|멈춤:/.test(document.querySelector('#__wmsRunBox').innerText), null, { timeout: 120000 });
+  /* 로그의 '끝 —' 은 지난 회차 것이 남아 있을 수 있어 기다림의 기준으로 못 쓴다.
+     목업이 실제로 저장을 받았는지를 본다. */
+  await p.waitForFunction(() => window.__mock.saved.length >= 1 ||
+    /멈춤:/.test(document.querySelector('#__wmsRunBox').innerText), null, { timeout: 120000 });
+  await p.waitForTimeout(2000);           // 6단계 마무리까지
   const out = await log(p);
   if (out.includes('멈춤:')) fail('중간에 멈춤\n' + out);
 
@@ -71,7 +89,9 @@ const log = p => p.locator('#__wmsRunBox div[style*="overflow:auto"]').innerText
 
   // --- 연달아 돌린다. 대기를 다시 걸 필요 없이 채번만 누르면 돼야 한다. ---
   await p.locator('#mf_wdc_main_subWindow1_wframe_btn_boxNum').click();
-  await p.waitForFunction(() => /끝 —|멈춤:/.test(document.querySelector('#__wmsRunBox').innerText), null, { timeout: 120000 });
+  await p.waitForFunction(() => window.__mock.saved.length >= 2 ||
+    /멈춤:/.test(document.querySelector('#__wmsRunBox').innerText), null, { timeout: 120000 });
+  await p.waitForTimeout(2000);
   const out2 = await log(p);
   if (out2.includes('멈춤:')) fail('두 번째 실행에서 멈춤\n' + out2);
   // 보고한 건수가 실제 저장 건수와 같아야 한다
@@ -81,7 +101,7 @@ const log = p => p.locator('#__wmsRunBox div[style*="overflow:auto"]').innerText
     .filter(tr => tr.querySelector('input').checked && !tr.querySelector('.v').textContent).length);
   if (emptyChecked) fail('빈 줄까지 체크됨: ' + emptyChecked + '줄');
   const saved = await p.evaluate(() => window.__mock.saved);
-  if (saved.length !== 2) fail('두 번 저장돼야 하는데 ' + JSON.stringify(saved));
+  if (saved.length !== 2) fail('두 번 저장돼야 하는데 ' + JSON.stringify(saved) + '\n2회차 로그:\n' + out2 + '\n상태줄: ' + await stat());
   if (saved[0].box === saved[1].box) fail('두 번 다 같은 박스번호: ' + JSON.stringify(saved));
   saved.forEach(r => { if (r.count !== 5) fail('건수가 다름: ' + JSON.stringify(r)); });
 
