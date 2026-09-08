@@ -15,7 +15,8 @@ Edge에 열어 둔 WMS 화면에서 아래 반복 작업을 자동으로 돌리�
 
 | 파일 | 용도 | 상태 |
 |---|---|---|
-| `01-dump-structure.js` | 화면 구조(탭·입력창·버튼·그리드) 수집 | 완성, 검증됨 |
+| `00-mini-dump.js` | 화면 구조 — 짧은 버전, 채팅에 바로 붙여넣기 좋음 | 완성, 검증됨 |
+| `01-dump-structure.js` | 화면 구조 — 자세한 버전, JSON 출력 | 완성, 검증됨 |
 | `02-run-return.js` | 위 1~6단계 실행 | 화면 구조 확인 후 작성 |
 
 자동화 스크립트는 화면의 실제 id/name을 알아야 쓸 수 있습니다.
@@ -25,8 +26,9 @@ Edge에 열어 둔 WMS 화면에서 아래 반복 작업을 자동으로 돌리�
 
 1. Edge에서 WMS 화면을 연 채로 `F12` → **Console** 탭
 2. 콘솔에 붙여넣기가 막혀 있으면 `allow pasting` 을 입력하고 엔터
-3. `01-dump-structure.js` 내용을 **전체 선택 → 복사 → 콘솔에 붙여넣기 → 엔터**
-4. 안내대로 `copy(__WMS_DUMP_JSON)` 을 실행하면 결과가 클립보드에 담깁니다
+3. `00-mini-dump.js`(짧은 버전) 또는 `01-dump-structure.js`(자세한 버전) 내용을 **전체 선택 → 복사 → 콘솔에 붙여넣기 → 엔터**
+4. 짧은 버전은 결과가 콘솔에 바로 보이고, `copy(__D)` 로 클립보드에 담깁니다.
+   자세한 버전은 `copy(__WMS_DUMP_JSON)` 입니다
 5. 그 내용을 붙여넣어 주시면 2단계 스크립트를 작성합니다
 
 가능하면 **각 탭을 한 번씩 열어 본 뒤** 실행해 주세요.
@@ -45,6 +47,7 @@ Edge에 열어 둔 WMS 화면에서 아래 반복 작업을 자동으로 돌리�
 npm i -D playwright
 (cd wms/test/fixture && python3 -m http.server 8899 &)
 node wms/test/run-dump.js
+node wms/test/run-mini.js
 ```
 
 미리 설치된 브라우저를 쓰려면 `PW_CHROME=/opt/pw-browsers/chromium-1194/chrome-linux/chrome` 를 앞에 붙입니다.
