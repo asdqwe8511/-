@@ -15,12 +15,32 @@ Edge에 열어 둔 WMS 화면에서 아래 반복 작업을 자동으로 돌리�
 
 | 파일 | 용도 | 상태 |
 |---|---|---|
-| `00-mini-dump.js` | 화면 구조 — 짧은 버전, 채팅에 바로 붙여넣기 좋음 | 완성, 검증됨 |
+| `bookmarklet-src/dump.js` | 화면 구조 — **즐겨찾기용. 콘솔 안 씀** | 완성, 검증됨 |
+| `00-mini-dump.js` | 화면 구조 — 짧은 버전, 콘솔용 | 완성, 검증됨 |
 | `01-dump-structure.js` | 화면 구조 — 자세한 버전, JSON 출력 | 완성, 검증됨 |
 | `02-run-return.js` | 위 1~6단계 실행 | 화면 구조 확인 후 작성 |
 
 자동화 스크립트는 화면의 실제 id/name을 알아야 쓸 수 있습니다.
 그래서 먼저 `01-dump-structure.js` 로 구조를 뽑습니다.
+
+## 회사 PC에서 — 콘솔 없이 쓰기
+
+개발자 도구를 여는 게 부담스러우면 **즐겨찾기(북마클릿)** 방식을 씁니다.
+설치할 것도 없고, 콘솔에 무언가를 입력할 일도 없습니다. 즐겨찾기를 한 번 클릭하면 됩니다.
+
+만드는 법:
+
+```bash
+node wms/tools/build-bookmarklet.js wms/bookmarklet-src/dump.js
+# → wms/bookmarklet-src/dump.bookmarklet.txt (즐겨찾기 주소 한 줄)
+```
+
+쓰는 법: Edge 즐겨찾기 모음에서 우클릭 → **즐겨찾기 추가** →
+이름은 아무거나, **URL 칸에 위 한 줄을 붙여넣기** → WMS 화면에서 그 즐겨찾기 클릭.
+결과가 화면 위 상자로 뜨고 `전체 복사` 버튼이 있습니다.
+
+단, 이것도 사내 화면에서 직접 만든 스크립트를 돌리는 일입니다.
+회사 정책상 괜찮은지는 확인이 필요할 수 있습니다.
 
 ## 1단계 — 화면 구조 뽑기
 
@@ -48,6 +68,7 @@ npm i -D playwright
 (cd wms/test/fixture && python3 -m http.server 8899 &)
 node wms/test/run-dump.js
 node wms/test/run-mini.js
+node wms/test/run-bookmarklet.js
 ```
 
 미리 설치된 브라우저를 쓰려면 `PW_CHROME=/opt/pw-browsers/chromium-1194/chrome-linux/chrome` 를 앞에 붙입니다.
