@@ -9,6 +9,8 @@
   "scripts": {
     "dev": "node tools/dev-server.js",
     "test": "node tools/test-saju.js && node tools/test-quota.js",
-    "test:browser": "node tools/test-browser.js"
+    "test:browser": "node tools/test-browser.js",
+    "test:trading": "node trading/test-strategy.js",
+    "farm": "node trading/backtest.js"
   }
 }

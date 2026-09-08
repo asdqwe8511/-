@@ -46,6 +46,10 @@ tools/build-hanja.js    hanja-data.js 를 다시 만드는 스크립트
 tools/calibrate-compat.js   궁합 점수를 백분위로 바꾸는 기준표를 다시 뽑음
 tools/calibrate-pattern.js  드문 사주 구조가 실제로 얼마나 드문지 세어 봄
 vercel.json             깔끔한 URL, /saju → / 리다이렉트, 함수 실행 시간 제한
+
+trading/                사주 앱과는 별개인 부속 도구. 배포에 안 들어갑니다.
+                        무손절 농장 매매 전략 시뮬레이터. 자세한 설명은
+                        trading/README.md
 ```
 
 브라우저는 `googleapis.com`을 직접 호출하지 않고 항상 `/api/yt/...`를 거칩니다.
