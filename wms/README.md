@@ -18,7 +18,8 @@ Edge에 열어 둔 WMS 화면에서 아래 반복 작업을 자동으로 돌리�
 | `bookmarklet-src/dump.js` | 화면 구조 — **즐겨찾기용. 콘솔 안 씀** | 완성, 검증됨 |
 | `00-mini-dump.js` | 화면 구조 — 짧은 버전, 콘솔용 | 완성, 검증됨 |
 | `01-dump-structure.js` | 화면 구조 — 자세한 버전, JSON 출력 | 완성, 검증됨 |
-| `02-run-return.js` | 위 1~6단계 실행 | 화면 구조 확인 후 작성 |
+| `bookmarklet-src/record.js` | **동작 녹화** — 내가 클릭·입력한 것을 순서대로 기록 | 완성, 검증됨 |
+| `bookmarklet-src/run-return.js` | 위 1~6단계 실행 | 뼈대 완성. 선택자는 실제 화면 것으로 교체 필요 |
 
 자동화 스크립트는 화면의 실제 id/name을 알아야 쓸 수 있습니다.
 그래서 먼저 `01-dump-structure.js` 로 구조를 뽑습니다.
@@ -41,6 +42,20 @@ node wms/tools/build-bookmarklet.js wms/bookmarklet-src/dump.js
 
 단, 이것도 사내 화면에서 직접 만든 스크립트를 돌리는 일입니다.
 회사 정책상 괜찮은지는 확인이 필요할 수 있습니다.
+
+## 절차를 녹화해서 알려 주기
+
+`record.js` 로 만든 즐겨찾기를 누르고 `● 녹화` → 평소대로 작업 → `■ 정지` → `복사`.
+어떤 버튼을 눌렀고 어느 칸에 무엇을 넣었는지, 서버가 채워 준 값까지 순서대로 남습니다.
+
+```
+[00:00] top>0:mainFrame 클릭 button #btnBoxSeq "박스번호 채번"
+[00:01] top>0:mainFrame 화면변화 input/text #txtBoxNo (박스번호) = "BX26090001"
+[00:01] top>0:mainFrame 키 Enter input/text #txtInBoxNo (반입박스번호) = "BX26090001"
+```
+
+`값 가리기` 를 켜면 도서명·번호가 `●●●` 로 바뀌어 복사됩니다.
+기록은 sessionStorage 에 남아서, 화면이 새로 떠도 즐겨찾기를 다시 누르면 이어서 적습니다.
 
 ## 1단계 — 화면 구조 뽑기
 
@@ -69,6 +84,8 @@ npm i -D playwright
 node wms/test/run-dump.js
 node wms/test/run-mini.js
 node wms/test/run-bookmarklet.js
+node wms/test/record-test.js
+node wms/test/run-return-test.js
 ```
 
 미리 설치된 브라우저를 쓰려면 `PW_CHROME=/opt/pw-browsers/chromium-1194/chrome-linux/chrome` 를 앞에 붙입니다.

@@ -1,7 +1,15 @@
 <!doctype html><html lang="ko"><head><meta charset="utf-8"><title>도서도매반품</title>
-<style>.tabs li{display:inline-block;padding:4px 10px;border:1px solid #ccc}.tabs li.on{background:#def}
-.page{display:none}.page.on{display:block}th{background:#eee}</style></head>
+<style>
+ body{font-family:"Malgun Gothic",sans-serif;font-size:13px}
+ .tabs{list-style:none;padding:0;margin:0 0 8px}
+ .tabs li{display:inline-block;padding:5px 12px;border:1px solid #ccc;cursor:pointer}
+ .tabs li.on{background:#def;font-weight:bold}
+ .page{display:none;border:1px solid #ddd;padding:10px}.page.on{display:block}
+ th{background:#eee;padding:4px 8px;text-align:right}td{padding:4px 8px}
+ #log{margin-top:10px;color:#555;font-size:12px}
+</style></head>
 <body>
+<!-- 실제 WMS를 흉내 낸 목업. 서버 왕복을 흉내 내려고 일부러 지연을 뒀다. -->
 <ul class="tabs" id="tabStrip">
   <li id="tab_return" class="on" role="tab">도서도매반품조회/등록</li>
   <li id="tab_inout" role="tab">반출입등록</li>
@@ -27,14 +35,99 @@
 <div class="page" id="page_boxin">
   <table><tr>
     <th>박스번호</th><td><input type="text" id="txtBoxInNo" name="boxInNo"></td>
+    <th>거래처</th><td><input type="text" id="txtVendor" name="vendor" value="한국서적"></td>
   </tr></table>
   <div id="gridInList" class="grid">
-    <table id="tblIn"><thead><tr><th><input type="checkbox" id="chkAll"></th><th>도서명</th></tr></thead>
-    <tbody>
-      <tr><td><input type="checkbox" class="rowChk"></td><td>어린 왕자</td></tr>
-      <tr><td><input type="checkbox" class="rowChk"></td><td>데미안</td></tr>
-    </tbody></table>
+    <table id="tblIn"><thead><tr><th><input type="checkbox" id="chkAll"></th><th>도서명</th><th>수량</th></tr></thead>
+    <tbody></tbody></table>
   </div>
   <button type="button" id="btnSaveF6">등록(F6)</button>
 </div>
+<div id="log"></div>
+
+<script>
+(function(){
+ var seq = 0, state = { boxNo:'', returned:false, inbound:false, saved:[] };
+ var log = function(m){ var d=document.getElementById('log'); d.textContent += m + '\n'; };
+ window.__mock = state;
+
+ function show(id){
+   ['tab_return','tab_inout','tab_boxin'].forEach(function(t){
+     document.getElementById(t).classList.toggle('on', t===id);
+   });
+   ['page_return','page_inout','page_boxin'].forEach(function(p){
+     document.getElementById(p).classList.toggle('on', p==='page_'+id.slice(4));
+   });
+ }
+ ['tab_return','tab_inout','tab_boxin'].forEach(function(t){
+   document.getElementById(t).addEventListener('click', function(){ show(t); });
+ });
+
+ document.getElementById('btnBoxSeq').addEventListener('click', function(){
+   setTimeout(function(){                       // 서버 채번 왕복
+     state.boxNo = 'BX2609' + String(++seq).padStart(4,'0');
+     document.getElementById('txtBoxNo').value = state.boxNo;
+     log('채번 완료: ' + state.boxNo);
+   }, 400);
+ });
+
+ document.getElementById('btnReturnReg').addEventListener('click', function(){
+   if(!state.boxNo){ alert('박스번호를 먼저 채번하세요'); return; }
+   setTimeout(function(){ state.returned = true; log('반품등록 완료'); }, 300);
+ });
+
+ document.getElementById('btnReset').addEventListener('click', function(){
+   state.boxNo=''; state.returned=false; state.inbound=false;
+   document.getElementById('txtBoxNo').value='';
+   document.getElementById('txtReturnNo').value='';
+   document.getElementById('txtInBoxNo').value='';
+   document.getElementById('txtBoxInNo').value='';
+   document.querySelector('#tblIn tbody').innerHTML='';
+   document.getElementById('chkAll').checked=false;
+   log('초기화');
+ });
+
+ document.getElementById('txtInBoxNo').addEventListener('keydown', function(e){
+   if(e.key !== 'Enter' && e.keyCode !== 13) return;
+   var v = this.value;
+   if(v !== state.boxNo){ alert('없는 박스번호입니다: ' + v); return; }
+   setTimeout(function(){ state.inbound = true; log('반입 처리 완료: ' + v); }, 400);
+ });
+
+ // 박스번호를 넣으면 반입내역을 서버에서 끌어오는 흉내
+ function loadRows(v){
+   if(v !== state.boxNo || !state.inbound){ return; }
+   setTimeout(function(){
+     var body = document.querySelector('#tblIn tbody');
+     body.innerHTML = ['어린 왕자','데미안','토지 1권'].map(function(t,i){
+       return '<tr><td><input type="checkbox" class="rowChk"></td><td>'+t+'</td><td>'+(i+1)+'</td></tr>';
+     }).join('');
+     log('반입내역 ' + body.rows.length + '건 조회');
+   }, 400);
+ }
+ var bi = document.getElementById('txtBoxInNo');
+ bi.addEventListener('change', function(){ loadRows(this.value); });
+ bi.addEventListener('keydown', function(e){ if(e.keyCode===13) loadRows(this.value); });
+
+ document.getElementById('chkAll').addEventListener('click', function(){
+   var on = this.checked;
+   document.querySelectorAll('#tblIn tbody .rowChk').forEach(function(c){ c.checked = on; });
+ });
+
+ document.getElementById('btnSaveF6').addEventListener('click', function(){
+   var rows = document.querySelectorAll('#tblIn tbody tr');
+   var on = document.querySelectorAll('#tblIn tbody .rowChk:checked');
+   if(!rows.length){ alert('반입내역이 없습니다'); return; }
+   if(!on.length){ alert('등록할 도서를 선택하세요'); return; }
+   setTimeout(function(){
+     state.saved.push({ box: state.boxNo, count: on.length });
+     log('입고등록 완료: ' + on.length + '건');
+   }, 300);
+ });
+
+ document.addEventListener('keydown', function(e){
+   if(e.keyCode === 117) { e.preventDefault(); document.getElementById('btnSaveF6').click(); }  // F6
+ });
+})();
+</script>
 </body></html>
