@@ -18,8 +18,23 @@ const fs = require('fs'), path = require('path');
   if (errs.length) fail('실행 오류: ' + errs.join('\n'));
   if (!await p.locator('#__wmsRecBox').isVisible()) fail('상자가 안 뜸');
 
-  // 녹화 시작
-  await p.locator('#__wmsRecBox button', { hasText: '● 녹화' }).click();
+  // 시작 전 안내와 버튼 글자
+  const stat = () => p.locator('#__wmsRecBox div[style*="border-bottom"]').innerText();
+  if (!(await stat()).includes('녹화 시작')) fail('시작 전 안내가 없음: ' + await stat());
+
+  // 제목줄 버튼이 상자 밖으로 밀리면 안 된다
+  const boxBox = await p.locator('#__wmsRecBox').boundingBox();
+  for (const t of ['● 녹화 시작', '복사', '지우기', '닫기']) {
+    const bb = await p.locator('#__wmsRecBox button', { hasText: t }).boundingBox();
+    if (!bb) fail('버튼이 없음: ' + t);
+    if (bb.x < boxBox.x - 1 || bb.x + bb.width > boxBox.x + boxBox.width + 1) fail('버튼이 상자 밖으로 밀림: ' + t);
+    if (bb.y + bb.height > boxBox.y + boxBox.height + 1) fail('버튼이 상자 아래로 밀림: ' + t);
+  }
+
+  // 녹화 시작 — 같은 버튼이 정지로 바뀐다
+  await p.locator('#__wmsRecBox button', { hasText: '● 녹화 시작' }).click();
+  if (!(await stat()).includes('녹화 중')) fail('녹화 중 표시가 없음: ' + await stat());
+  if (await p.locator('#__wmsRecBox button', { hasText: '■ 녹화 정지' }).count() !== 1) fail('정지 버튼으로 안 바뀜');
 
   // ---- 사람이 하는 절차를 흉내 낸다 ----
   const F = p.frameLocator('#mainFrame');
@@ -46,7 +61,8 @@ const fs = require('fs'), path = require('path');
   await F.locator('#btnReset').click();
   await p.waitForTimeout(400);
 
-  await p.locator('#__wmsRecBox button', { hasText: '■ 정지' }).click();
+  await p.locator('#__wmsRecBox button', { hasText: '■ 녹화 정지' }).click();
+  if (!(await stat()).includes('정지됨')) fail('정지 표시가 없음: ' + await stat());
 
   const log = await p.locator('#__wmsRecBox div[style*="overflow:auto"]').innerText();
   const need = [

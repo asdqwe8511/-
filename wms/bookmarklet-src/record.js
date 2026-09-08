@@ -142,7 +142,7 @@
   }
 
   /* ---------- 상자 ---------- */
-  var box, listEl, btnRec, btnCopy, cbMask, cntEl;
+  var box, listEl, btnRec, btnCopy, cbMask, cntEl, statEl;
 
   function fmt(it) {
     var s = Math.floor(it.ms / 1000);
@@ -159,6 +159,7 @@
   function render() {
     if (!listEl) return;
     cntEl.textContent = rec.items.length + '건';
+    if (statEl) paintRec();
     listEl.textContent = rec.items.slice(-200).map(fmt).join('\n');
     listEl.scrollTop = listEl.scrollHeight;
   }
@@ -168,12 +169,13 @@
     if (old) old.remove();
     box = document.createElement('div');
     box.id = '__wmsRecBox';
-    box.setAttribute('style', 'position:fixed;z-index:2147483647;right:12px;bottom:12px;width:460px;height:320px;background:#fff;' +
+    box.setAttribute('style', 'position:fixed;z-index:2147483647;right:12px;bottom:12px;width:520px;height:360px;background:#fff;' +
       'border:2px solid #c33;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.35);display:flex;flex-direction:column;' +
       'font-family:"Malgun Gothic",sans-serif;font-size:12px;color:#222');
 
     var bar = document.createElement('div');
-    bar.setAttribute('style', 'padding:6px 10px;background:#c33;color:#fff;font-weight:bold;display:flex;gap:6px;align-items:center;cursor:move');
+    bar.setAttribute('style', 'padding:6px 10px;background:#c33;color:#fff;font-weight:bold;display:flex;gap:6px;' +
+      'align-items:center;flex-wrap:wrap;cursor:move');
     var ttl = document.createElement('span');
     ttl.textContent = '동작 녹화';
     cntEl = document.createElement('span');
@@ -201,12 +203,15 @@
     foot.appendChild(document.createTextNode('값 가리기 (도서명·번호를 ●●● 로 바꿔서 복사)'));
     cbMask.onchange = render;
 
+    statEl = document.createElement('div');
+    statEl.setAttribute('style', 'padding:5px 10px;border-bottom:1px solid #eee;font-weight:bold');
+
     listEl = document.createElement('div');
     listEl.setAttribute('style', 'flex:1;padding:8px;overflow:auto;white-space:pre;font-family:Consolas,monospace;font-size:11px;line-height:1.6');
 
     bar.appendChild(ttl); bar.appendChild(cntEl); bar.appendChild(sp);
     bar.appendChild(btnRec); bar.appendChild(btnCopy); bar.appendChild(btnClr); bar.appendChild(btnX);
-    box.appendChild(bar); box.appendChild(listEl); box.appendChild(foot);
+    box.appendChild(bar); box.appendChild(statEl); box.appendChild(listEl); box.appendChild(foot);
     document.body.appendChild(box);
 
     // 상자가 작업할 자리를 가리면 곤란하니 끌어서 옮길 수 있게 한다
@@ -257,9 +262,18 @@
   }
 
   function paintRec() {
-    btnRec.textContent = rec.on ? '■ 정지' : '● 녹화';
+    // 한 버튼이 시작과 정지를 겸한다. 지금 무슨 상태인지 글자로 분명히 적고,
+    // 아래 상태줄에도 같은 말을 써 둔다 — 버튼만 봐서는 헷갈린다는 이야기를 들었다.
+    btnRec.textContent = rec.on ? '■ 녹화 정지' : '● 녹화 시작';
+    btnRec.style.fontWeight = 'bold';
     box.style.borderColor = rec.on ? '#c33' : '#888';
     box.querySelector('div').style.background = rec.on ? '#c33' : '#888';
+    statEl.textContent = rec.on
+      ? '● 녹화 중 — 평소대로 작업하세요. 끝나면 [■ 녹화 정지] → [복사]'
+      : (rec.items.length ? '정지됨 — [복사] 를 누르세요. 이어서 녹화하려면 [● 녹화 시작]'
+                          : '[● 녹화 시작] 을 누르고 평소대로 반품 작업을 하세요');
+    statEl.style.color = rec.on ? '#c33' : '#555';
+    statEl.style.background = rec.on ? '#fff4f4' : '#fafafa';
   }
 
   /* 채번처럼 서버가 값을 채워 넣는 자리는 change 가 안 뜬다.
