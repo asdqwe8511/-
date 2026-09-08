@@ -42,10 +42,23 @@ const log = p => p.locator('#__wmsRunBox div[style*="overflow:auto"]').innerText
   // --- 집어주기: 반입내역(아래) 그리드의 헤더 체크박스 ---
   await p.locator('#__wmsRunBox button', { hasText: '체크박스 지정' }).click();
   await p.waitForTimeout(400);            // 지정 버튼이 해당 탭을 열어 준다
+
+  // 제 패널의 버튼을 눌러도 그것을 집으면 안 된다 (지난 판에서 실제로 그랬다)
+  await p.locator('#__wmsRunBox button', { hasText: '체크박스 지정' }).click();
+  await p.waitForTimeout(300);
+  if ((await log(p)).includes('__wmsRunBox')) fail('제 패널의 버튼을 집었음\n' + await log(p));
+
+  // 체크박스가 아닌 곳을 눌러도 집으면 안 된다
+  await p.locator('#mf_wdc_main_subWindow3_wframe_btn_save').click();
+  await p.waitForTimeout(300);
+  if (!(await log(p)).includes('여기는 체크박스가 아닙니다')) fail('체크박스가 아닌 것을 걸러내지 못함\n' + await log(p));
+  if (await p.locator('.dlg').count()) fail('지정 중에 화면 버튼이 눌려버림');
+
   await p.locator('#grdInList thead input[type=checkbox]').click();
   await p.waitForTimeout(300);
   const picked = (await log(p)).match(/전체선택 체크박스를 정했습니다: (.+)/);
   if (!picked) fail('집어주기 실패\n' + await log(p));
+  if (picked[1].includes('__wmsRunBox')) fail('집은 것이 패널 안 요소: ' + picked[1]);
   console.log('집은 선택자: ' + picked[1]);
 
   // --- 점검 ---

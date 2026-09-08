@@ -38,15 +38,26 @@
       /서가번호\s*\d+\s*에\s*등록\s*하시겠습니까/
     ],
     waitMs: 40000,        // 한 단계를 기다려 주는 최대 시간
-    settleMs: 2500,       // 조회를 걸고 목록이 그려지기를 기다리는 시간
+    settleMs: 5000,       // 조회를 걸고 목록이 그려지기를 기다리는 시간
     listRetryMs: 30000    // 전체선택이 걸릴 때까지 다시 눌러 보는 시간
   };
   /* ========================================================= */
 
   var LS = '__wmsRunCfg';
+  /* 저장된 값이라도 그대로 믿지 않는다. 지난 판에서 제 패널의 버튼을 집어 저장한
+     일이 있었고, 그걸 전체선택인 줄 알고 계속 눌러댔다. */
+  function usable(sel) {
+    if (!sel) return false;
+    if (sel.indexOf('__wmsRunBox') >= 0) return false;
+    var el;
+    try { el = document.querySelector(sel); } catch (e) { return false; }
+    return !!(el && el.type === 'checkbox');
+  }
   try {
     var saved = JSON.parse(localStorage.getItem(LS) || '{}');
-    if (saved.chkAll) CFG.s5.chkAll = saved.chkAll;
+    if (saved.chkAll) {
+      if (usable(saved.chkAll) || saved.chkAll.indexOf('__wmsRunBox') < 0) CFG.s5.chkAll = saved.chkAll;
+    }
   } catch (e) {}
   function remember() {
     try { localStorage.setItem(LS, JSON.stringify({ chkAll: CFG.s5.chkAll })); } catch (e) {}
@@ -172,25 +183,47 @@
     }
     return parts.join(' > ');
   }
+  var picking = false;
   function pick(onDone) {
-    say('박스별입고등록 탭을 열어 반입내역이 보이는 상태에서, 그 전체선택 체크박스를 클릭하세요. (Esc 로 취소)', 'ok');
-    function esc(e) { if (e.key === 'Escape') { off(); say('취소했습니다.', 'err'); } }
+    if (picking) { say('이미 지정을 기다리는 중입니다. 화면의 체크박스를 클릭하거나 Esc 를 누르세요.', 'err'); return; }
+    picking = true;
+    say('박스별입고등록 탭에서 반입내역의 전체선택 체크박스를 클릭하세요. (Esc 로 취소)', 'ok');
+    say('체크박스가 아닌 곳을 누르면 그냥 무시하고 계속 기다립니다.', 'dim');
+
+    function esc(e) { if (e.key === 'Escape') { off(); say('지정을 취소했습니다.', 'err'); } }
     function grab(e) {
+      var t = e.target;
+      /* 이 상자 안은 절대 집지 않는다. 지난 판에서 [체크박스 지정] 버튼 자신을
+         집어 저장하는 바람에, 자동화가 제 버튼을 계속 눌러댔다. */
+      if (t && t.closest && t.closest('#__wmsRunBox')) return;
       e.preventDefault();
       e.stopPropagation();
-      var sel = pathOf(e.target);
+
+      // 체크박스가 아니면 무시하고 계속 기다린다 — 잘못 집느니 기다리는 편이 낫다
+      var cb = (t && t.type === 'checkbox') ? t
+             : (t && t.querySelector ? t.querySelector('input[type=checkbox]') : null);
+      if (!cb) { say('여기는 체크박스가 아닙니다. 전체선택 체크박스를 눌러 주세요.', 'err'); return; }
+
+      var sel = pathOf(cb);
+      var back;
+      try { back = document.querySelector(sel); } catch (err) { back = null; }
+      if (back !== cb) { say('이 자리를 다시 찾을 방법을 못 만들었습니다. 다른 곳을 눌러 보세요.', 'err'); return; }
       off();
-      if (!document.querySelector(sel)) { say('이 자리를 다시 찾을 방법을 못 만들었습니다. 다른 곳을 눌러 보세요.', 'err'); return; }
       onDone(sel);
     }
     function off() {
+      picking = false;
       document.removeEventListener('click', grab, true);
       document.removeEventListener('keydown', esc, true);
       document.body.style.cursor = '';
+      if (statEl) status();
     }
     document.body.style.cursor = 'crosshair';
-    document.addEventListener('click', grab, true);
-    document.addEventListener('keydown', esc, true);
+    // 지금 이 클릭이 그대로 집히지 않도록 한 박자 뒤에 귀를 연다
+    setTimeout(function () {
+      document.addEventListener('click', grab, true);
+      document.addEventListener('keydown', esc, true);
+    }, 0);
   }
 
   /* ---------- 점검 ---------- */
@@ -257,10 +290,15 @@
     pressEnter(f4);
 
     say('5) 반입내역 전체 체크');
+    if (CFG.s5.chkAll.indexOf('__wmsRunBox') >= 0) {
+      throw new Error('지정된 것이 이 상자 안의 버튼입니다. [체크박스 지정] 으로 화면의 체크박스를 다시 골라 주세요.');
+    }
     var chk = await waitFor(function () {
       var el = q(CFG.s5.chkAll);
       return (el && vis(el)) ? el : false;
     }, '전체선택 체크박스가 보이기');
+    if (chk.type !== 'checkbox') throw new Error('지정된 것이 체크박스가 아닙니다 (' + chk.tagName.toLowerCase() + '). 다시 지정해 주세요.');
+    say('   ' + (CFG.settleMs / 1000) + '초 기다린 뒤 전체선택을 겁니다', 'dim');
     /* 이 화면의 그리드는 줄을 미리 만들어 두고 값만 채운다. 그래서 "체크박스가
        늘어나면 조회된 것" 같은 신호가 오지 않는다. 조회를 기다리는 대신
        전체선택을 눌러 보고 실제로 걸렸는지를 확인한다. 안 걸렸으면 다시 누른다. */
@@ -492,6 +530,10 @@
   ui();
   say('처음이면 [점검] 부터 눌러 보세요. 화면을 바꾸지 않고 자리만 확인합니다.');
   say('[● 대기 시작] 을 누른 뒤 화면의 [박스번호채번] 을 누르면 한 바퀴 돕니다.');
-  if (CFG.s5.chkAll) say('전체선택 체크박스: ' + CFG.s5.chkAll, 'dim');
+  if (CFG.s5.chkAll && CFG.s5.chkAll.indexOf('__wmsRunBox') >= 0) {
+    CFG.s5.chkAll = null;
+    remember();
+    say('저장돼 있던 지정이 이 상자 안의 버튼이었습니다. 지웠으니 다시 지정해 주세요.', 'err');
+  } else if (CFG.s5.chkAll) { say('전체선택 체크박스: ' + CFG.s5.chkAll, 'dim'); }
   else say('반입내역 전체선택 체크박스는 id 가 없어서 한 번 지정해야 합니다 — [체크박스 지정]', 'err');
 })();
