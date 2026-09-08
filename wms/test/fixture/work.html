@@ -1,0 +1,40 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>도서도매반품</title>
+<style>.tabs li{display:inline-block;padding:4px 10px;border:1px solid #ccc}.tabs li.on{background:#def}
+.page{display:none}.page.on{display:block}th{background:#eee}</style></head>
+<body>
+<ul class="tabs" id="tabStrip">
+  <li id="tab_return" class="on" role="tab">도서도매반품조회/등록</li>
+  <li id="tab_inout" role="tab">반출입등록</li>
+  <li id="tab_boxin" role="tab">박스별입고등록</li>
+</ul>
+
+<div class="page on" id="page_return">
+  <table><tr>
+    <th>반품예정번호</th><td><input type="text" id="txtReturnNo" name="returnNo" maxlength="20"></td>
+    <th>박스번호</th><td><input type="text" id="txtBoxNo" name="boxNo" readonly></td>
+  </tr></table>
+  <button type="button" id="btnBoxSeq">박스번호 채번</button>
+  <button type="button" id="btnReturnReg">반품등록</button>
+  <button type="button" id="btnReset">초기화</button>
+</div>
+
+<div class="page" id="page_inout">
+  <table><tr>
+    <th>반입박스번호</th><td><input type="text" id="txtInBoxNo" name="inBoxNo"></td>
+  </tr></table>
+</div>
+
+<div class="page" id="page_boxin">
+  <table><tr>
+    <th>박스번호</th><td><input type="text" id="txtBoxInNo" name="boxInNo"></td>
+  </tr></table>
+  <div id="gridInList" class="grid">
+    <table id="tblIn"><thead><tr><th><input type="checkbox" id="chkAll"></th><th>도서명</th></tr></thead>
+    <tbody>
+      <tr><td><input type="checkbox" class="rowChk"></td><td>어린 왕자</td></tr>
+      <tr><td><input type="checkbox" class="rowChk"></td><td>데미안</td></tr>
+    </tbody></table>
+  </div>
+  <button type="button" id="btnSaveF6">등록(F6)</button>
+</div>
+</body></html>
