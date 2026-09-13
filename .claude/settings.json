@@ -1,0 +1,34 @@
+{
+  "extraKnownMarketplaces": {
+    "claude-plugins-official": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/claude-plugins-official"
+      }
+    },
+    "thedotmack": {
+      "source": {
+        "source": "github",
+        "repo": "thedotmack/claude-mem"
+      }
+    },
+    "agent-browser": {
+      "source": {
+        "source": "github",
+        "repo": "vercel-labs/agent-browser"
+      }
+    },
+    "gsd-plugin": {
+      "source": {
+        "source": "github",
+        "repo": "jnuyens/gsd-plugin"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "claude-code-setup@claude-plugins-official": true,
+    "claude-mem@thedotmack": true,
+    "agent-browser@agent-browser": true,
+    "gsd@gsd-plugin": true
+  }
+}
