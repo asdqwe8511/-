@@ -1,6 +1,10 @@
-# 클로드 코드 확장 5종
+# 클로드 코드 확장 정리
 
-릴스에서 소개된 다섯 가지를 이 저장소에 맞춰 정리했습니다. 성격이 둘로 나뉩니다.
+릴스에서 소개된 것들을 이 저장소에 맞춰 정리했습니다. 처음 다섯 가지가 1~3절,
+나중에 추가한 다섯 가지가 4절입니다. 이름만 보면 다 같은 "플러그인" 같지만
+실제로는 플러그인·스킬·외부 CLI 가 섞여 있어 설치 방법이 제각각입니다.
+
+## 첫 묶음 다섯 가지
 
 | 이름 | 하는 일 | 성격 | 이 저장소에 들어온 것 |
 | --- | --- | --- | --- |
@@ -10,11 +14,13 @@
 | claude-code-setup | 코드베이스를 보고 훅·스킬·에이전트·MCP 를 추천 | 플러그인 | 설치 명령·설정 내용 (아래) |
 | task-observer | 작업을 지켜보며 스킬로 만들 거리를 기록 | 스킬 | 받아 오는 스크립트 (아래) |
 
-다섯 가지 모두 클로드 코드 설정이나 컴퓨터를 건드리는 것이라, 저장소에는 설치
-방법과 스크립트만 넣었습니다. 아래 명령을 한 번씩 실행하면 됩니다.
+(두 번째 묶음은 「4. 두 번째 묶음 다섯 가지」에 있습니다.)
 
-**이 저장소뿐 아니라 모든 프로젝트에 똑같이 적용하려면** 아래 「0. 전부 전역으로」
-를 그대로 따라 하세요. 나머지 절은 각 도구를 하나씩 설명한 것입니다.
+전부 클로드 코드 설정이나 컴퓨터를 건드리는 것이라, 저장소에는 설치 방법과
+스크립트만 넣었습니다. 아래 명령을 한 번씩 실행하면 됩니다.
+
+**모든 프로젝트에 똑같이 적용하려면** 아래 「0. 전부 전역으로」를 그대로 따라
+하세요. 나머지 절은 각 도구를 하나씩 설명한 것입니다.
 
 ---
 
@@ -42,6 +48,15 @@ mkdir -p ~/.claude/skill-observations/observation-log/archive
 # 4) 토큰 절약 도구 — 원래 프로세스 단위라 한 번 깔면 전 프로젝트에 적용된다
 npm install -g omniroute
 pip install "headroom-ai[all]"
+
+# 5) 두 번째 묶음 — 플러그인 둘, 스킬 셋 (자세한 설명은 4절)
+claude plugin marketplace add vercel-labs/agent-browser
+claude plugin install agent-browser@agent-browser --scope user
+claude plugin marketplace add jnuyens/gsd-plugin
+claude plugin install gsd@gsd-plugin --scope user
+npx skills add vercel-labs/skills --skill find-skills -g
+npx skills add https://github.com/Leonxlnx/taste-skill --skill design-taste-frontend -g
+npx skills add https://github.com/anthropics/skills --skill mcp-builder -g
 ```
 
 그리고 `~/.claude/CLAUDE.md` 에 아래를 넣으면 어느 프로젝트에서 세션을 열어도
@@ -61,8 +76,9 @@ pip install "headroom-ai[all]"
 확인:
 
 ```bash
-claude plugin list                 # 둘 다 Scope: user 로 나와야 함
+claude plugin list                 # 네 개가 Scope: user 로 나와야 함
 ls ~/.claude/skills/task-observer  # SKILL.md 가 보여야 함
+npx skills list -g                 # find-skills·taste·mcp-builder 가 보여야 함
 ```
 
 ---
@@ -177,6 +193,70 @@ OmniRoute 도 Headroom 도 `ANTHROPIC_BASE_URL` 을 자기 쪽으로 돌립니�
 
 ---
 
+## 4. 두 번째 묶음 다섯 가지
+
+나중에 추가한 것들입니다. 이쪽도 셋은 플러그인이 아니라 스킬이라, 스킬 설치
+도구(`npx skills`)로 넣습니다.
+
+| 이름 | 하는 일 | 성격 |
+| --- | --- | --- |
+| agent-browser | 에이전트가 진짜 브라우저를 몰아 화면 확인·폼 입력·스크린샷 | 플러그인 |
+| find-skills | "이런 거 되는 스킬 있나?" 하면 찾아서 깔아 줌 | 스킬 |
+| GSD | 계획 → 실행 → 검증으로 굴리는 작업 워크플로 | 플러그인 |
+| taste | 뻔한 템플릿 같은 화면이 나오지 않게 잡아 주는 프런트 디자인 | 스킬 |
+| mcp-builder | MCP 서버를 제대로 설계·구현하게 안내 | 스킬 |
+
+### 플러그인 둘
+
+```bash
+claude plugin marketplace add vercel-labs/agent-browser
+claude plugin install agent-browser@agent-browser --scope user
+
+claude plugin marketplace add jnuyens/gsd-plugin
+claude plugin install gsd@gsd-plugin --scope user
+```
+
+- `gsd-plugin` 마켓에는 `gsd` 와 `bm` 두 개가 있는데 같은 플러그인(Buildomator)에
+  명령 접두사만 다릅니다. `/gsd:` 로 쓰려면 `gsd`, `/bm:` 로 쓰려면 `bm` 을 고르세요.
+  둘 다 깔 필요는 없습니다.
+- GSD 쪽 안내문에는 설치를 `--dangerously-skip-permissions` 로 하라는 말이 있는데,
+  권한 확인을 통째로 끄는 옵션이라 권하지 않습니다. 확인 창이 몇 번 뜨더라도 그냥
+  하나씩 승인하세요. 이 플러그인은 훅과 MCP 서버까지 같이 붙습니다.
+
+### 스킬 셋
+
+`npx skills` 는 스킬을 받아서 `.claude/skills/` 에 넣어 주는 설치 도구입니다.
+`-g` 를 붙이면 홈(모든 프로젝트), 안 붙이면 지금 프로젝트에만 들어갑니다.
+
+```bash
+# 전역으로 (권장)
+npx skills add vercel-labs/skills --skill find-skills -g
+npx skills add https://github.com/Leonxlnx/taste-skill --skill design-taste-frontend -g
+npx skills add https://github.com/anthropics/skills --skill mcp-builder -g
+```
+
+확인은 `npx skills list -g`, 지우려면 `npx skills remove -g --skill <이름>`.
+
+- **find-skills** 는 폴더 이름과 설치 이름이 같습니다.
+- **taste** 는 폴더가 `taste-skill` 인데 설치 이름은 `design-taste-frontend` 입니다.
+  `--skill` 에는 설치 이름을 넣어야 합니다. 같은 저장소에 `brutalist-skill`,
+  `minimalist-skill`, `soft-skill`, `redesign-skill` 같은 결이 다른 것들도 있으니
+  필요하면 골라 넣으세요. 랜딩 페이지·포트폴리오·리디자인용이고 대시보드나
+  데이터 테이블용은 아닙니다.
+- **mcp-builder** 는 Anthropic 공식 스킬입니다. MCP 서버를 자주 만들 게 아니라면
+  비슷한 내용을 담은 공식 플러그인 `mcp-server-dev@claude-plugins-official` 로
+  갈음해도 됩니다.
+
+### 여기까지 확인한 것
+
+- `agent-browser` 마켓플레이스는 실제로 등록해서 이름이 맞는지 확인했습니다.
+- 나머지는 각 저장소의 `marketplace.json` 과 `SKILL.md` 를 직접 받아 이름을
+  대조했습니다. 플러그인 설치 자체는 이 세션 권한으로 실행하지 못해, 설치까지
+  돌려 본 것은 아닙니다.
+- `npx skills` CLI 는 이 환경에서 동작을 확인했습니다.
+
+---
+
 ## 원본 링크
 
 - OmniRoute — https://github.com/diegosouzapw/OmniRoute
@@ -184,3 +264,8 @@ OmniRoute 도 Headroom 도 `ANTHROPIC_BASE_URL` 을 자기 쪽으로 돌립니�
 - Headroom — https://github.com/headroomlabs-ai/headroom
 - claude-code-setup — https://github.com/anthropics/claude-plugins-official/tree/main/plugins/claude-code-setup
 - task-observer — https://github.com/rebelytics/one-skill-to-rule-them-all
+- agent-browser — https://github.com/vercel-labs/agent-browser
+- find-skills — https://github.com/vercel-labs/skills (`skills/find-skills`)
+- GSD / Buildomator — https://github.com/jnuyens/gsd-plugin
+- taste — https://github.com/Leonxlnx/taste-skill
+- mcp-builder — https://github.com/anthropics/skills (`skills/mcp-builder`)

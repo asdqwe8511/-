@@ -392,8 +392,10 @@ python tools/make-og.py        # og-image.png, favicon.png  (인기영상 대시
 ## 클로드 코드로 이 저장소를 열 때
 
 `claude-mem`(세션 간 기억), `claude-code-setup`(훅·스킬·에이전트·MCP 추천),
-`task-observer`(작업을 지켜보며 스킬 개선점 기록), 그리고 토큰을 아끼는
-`OmniRoute`·`Headroom` 을 쓰도록 정리해 두었습니다. 설치와 사용법은
+`task-observer`(작업을 지켜보며 스킬 개선점 기록), 토큰을 아끼는
+`OmniRoute`·`Headroom`, 그리고 `agent-browser`·`find-skills`·`GSD`·`taste`·
+`mcp-builder` 를 쓰도록 정리해 두었습니다. 이름은 다 "플러그인" 같지만 플러그인·
+스킬·외부 CLI 가 섞여 있어 설치 방법이 다릅니다. 설치와 사용법은
 [`docs/claude-code-setup.md`](docs/claude-code-setup.md) 에 있습니다.
 
 ## 참고: 유튜브 API 할당량
