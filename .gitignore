@@ -4,4 +4,4 @@ node_modules/
 .env.local
 skill-observations/
 .claude/settings.local.json
-.claude/skills/task-observer/
+.agents/

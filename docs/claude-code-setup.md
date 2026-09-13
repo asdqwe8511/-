@@ -12,7 +12,7 @@
 | claude-mem | 세션이 끝나도 작업 기억을 이어 줌 | 플러그인 | `.claude/settings.json` 에 등록됨 |
 | Headroom | 안 쓰는 출력은 버리고 필요한 것만 압축해 보냄 | 외부 CLI 래퍼 | 설치 방법만 (아래) |
 | claude-code-setup | 코드베이스를 보고 훅·스킬·에이전트·MCP 를 추천 | 플러그인 | `.claude/settings.json` 에 등록됨 |
-| task-observer | 작업을 지켜보며 스킬로 만들 거리를 기록 | 스킬 | 받아 오는 스크립트 (아래) |
+| task-observer | 작업을 지켜보며 스킬로 만들 거리를 기록 | 스킬 | `.claude/skills/` 에 포함됨 |
 
 (두 번째 묶음은 「4. 두 번째 묶음 다섯 가지」에 있습니다.)
 
@@ -35,12 +35,11 @@ claude plugin marketplace add thedotmack/claude-mem
 claude plugin install claude-code-setup@claude-plugins-official --scope user
 claude plugin install claude-mem@thedotmack --scope user
 
-# 2) task-observer 스킬 — 저장소가 아니라 홈에 둔다
-git clone --depth 1 https://github.com/rebelytics/one-skill-to-rule-them-all /tmp/oster
-mkdir -p ~/.claude/skills/task-observer
-cp -r /tmp/oster/SKILL.md /tmp/oster/LICENSE.txt \
-      /tmp/oster/references /tmp/oster/scripts ~/.claude/skills/task-observer/
-rm -rf /tmp/oster
+# 2) 스킬 넷 — 저장소가 아니라 홈에 둔다 (-g)
+npx skills add https://github.com/rebelytics/one-skill-to-rule-them-all --skill task-observer -g
+npx skills add https://github.com/vercel-labs/skills --skill find-skills -g
+npx skills add https://github.com/Leonxlnx/taste-skill --skill design-taste-frontend -g
+npx skills add https://github.com/anthropics/skills --skill mcp-builder -g
 
 # 3) 관찰 기록을 한 곳으로 모은다
 mkdir -p ~/.claude/skill-observations/observation-log/archive
@@ -49,14 +48,11 @@ mkdir -p ~/.claude/skill-observations/observation-log/archive
 npm install -g omniroute
 pip install "headroom-ai[all]"
 
-# 5) 두 번째 묶음 — 플러그인 둘, 스킬 셋 (자세한 설명은 4절)
+# 5) 두 번째 묶음의 플러그인 둘 (자세한 설명은 4절)
 claude plugin marketplace add vercel-labs/agent-browser
 claude plugin install agent-browser@agent-browser --scope user
 claude plugin marketplace add jnuyens/gsd-plugin
 claude plugin install gsd@gsd-plugin --scope user
-npx skills add vercel-labs/skills --skill find-skills -g
-npx skills add https://github.com/Leonxlnx/taste-skill --skill design-taste-frontend -g
-npx skills add https://github.com/anthropics/skills --skill mcp-builder -g
 ```
 
 그리고 `~/.claude/CLAUDE.md` 에 아래를 넣으면 어느 프로젝트에서 세션을 열어도
@@ -119,25 +115,42 @@ claude plugin install claude-mem@thedotmack --scope user
 `gsd` 는 훅과 MCP 서버까지 같이 붙는 무거운 플러그인입니다. 이 저장소를 여는
 사람 모두에게 그게 부담이면 `enabledPlugins` 에서 그 줄만 빼세요.
 
-## 2. 스킬 하나 (task-observer)
+## 2. 스킬 넷 — 저장소에 들어 있습니다
 
-마켓플레이스 플러그인이 아니라 스킬 파일이라 직접 받아야 합니다.
+`task-observer`, `find-skills`, `design-taste-frontend`(taste), `mcp-builder`
+넷이 `.claude/skills/` 에 파일로 들어 있습니다. 저장소를 받으면 그대로 잡히니
+따로 설치할 게 없습니다.
+
+| 폴더 | 하는 일 | 원본 |
+| --- | --- | --- |
+| `task-observer` | 작업을 지켜보며 스킬로 만들 거리를 기록 | rebelytics/one-skill-to-rule-them-all |
+| `find-skills` | "이런 거 되는 스킬 있나?" 하면 찾아서 깔아 줌 | vercel-labs/skills |
+| `design-taste-frontend` | 뻔한 템플릿 같은 화면이 안 나오게 잡아 줌 | Leonxlnx/taste-skill |
+| `mcp-builder` | MCP 서버를 제대로 설계·구현하게 안내 | anthropics/skills |
+
+받아 온 버전은 `skills-lock.json` 에 해시로 박혀 있습니다. 원본 저장소의
+로고 이미지(3MB)는 빼고 넣었습니다.
+
+### 최신으로 올리기
 
 ```bash
-tools/update-task-observer.sh
+npx skills add https://github.com/rebelytics/one-skill-to-rule-them-all --skill task-observer --agent claude-code --copy
 ```
 
-`.claude/skills/task-observer/` 에 받아 놓고, 클로드 코드를 다시 열면 잡힙니다.
-같은 명령으로 최신 상태로 올릴 수도 있습니다. 남의 저장소 코드라 여기에
-커밋하지 않고 `.gitignore` 에 올려 두었으니, 이 저장소를 받은 사람은 각자 한 번
-실행해야 합니다.
+`--skill` 과 주소만 바꿔서 넷 다 같은 방식으로 올립니다. 덮어쓰기가 되니 같은
+명령을 다시 돌리면 됩니다. 올린 뒤에는 바뀐 파일을 커밋하세요.
 
-이 저장소 하나에만 쓸 때 이야기입니다. 여러 프로젝트에서 쓸 거면 처음부터
-홈에 까는 쪽(위 「0. 전부 전역으로」)이 낫습니다. 이미 받아 놨다면 옮기면 됩니다.
+### 다른 프로젝트에서도 쓰려면
+
+`-g` 를 붙여 홈에 깔면 어느 프로젝트에서든 잡힙니다 (위 「0. 전부 전역으로」).
 
 ```bash
-cp -r .claude/skills/task-observer ~/.claude/skills/task-observer
+npx skills add https://github.com/rebelytics/one-skill-to-rule-them-all --skill task-observer -g
 ```
+
+**주의**: `npx skills experimental_install` 로 `skills-lock.json` 을 복원하는
+방법도 있는데, 실제로 돌려 보니 잠금 파일에 적힌 것 중 하나만 받고 엉뚱한
+폴더(`.agents/`)에 넣었습니다. 이름 그대로 실험 기능이니 위의 `add` 를 쓰세요.
 
 ### 알아 둘 점
 
@@ -227,17 +240,18 @@ claude plugin install gsd@gsd-plugin --scope user
 
 ### 스킬 셋
 
-`npx skills` 는 스킬을 받아서 `.claude/skills/` 에 넣어 주는 설치 도구입니다.
-`-g` 를 붙이면 홈(모든 프로젝트), 안 붙이면 지금 프로젝트에만 들어갑니다.
+이 저장소에는 이미 들어 있습니다(2절). 다른 프로젝트에서도 쓰려면 홈에 깔면
+됩니다.
 
 ```bash
-# 전역으로 (권장)
-npx skills add vercel-labs/skills --skill find-skills -g
+npx skills add https://github.com/vercel-labs/skills --skill find-skills -g
 npx skills add https://github.com/Leonxlnx/taste-skill --skill design-taste-frontend -g
 npx skills add https://github.com/anthropics/skills --skill mcp-builder -g
 ```
 
-확인은 `npx skills list -g`, 지우려면 `npx skills remove -g --skill <이름>`.
+`npx skills` 는 스킬을 받아 `.claude/skills/` 에 넣어 주는 도구입니다. `-g` 를
+붙이면 홈(모든 프로젝트), 안 붙이면 지금 프로젝트에만 들어갑니다. 확인은
+`npx skills list -g`, 지우려면 `npx skills remove -g --skill <이름>`.
 
 - **find-skills** 는 폴더 이름과 설치 이름이 같습니다.
 - **taste** 는 폴더가 `taste-skill` 인데 설치 이름은 `design-taste-frontend` 입니다.
