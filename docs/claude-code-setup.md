@@ -115,10 +115,9 @@ claude plugin install claude-mem@thedotmack --scope user
 `gsd` 는 훅과 MCP 서버까지 같이 붙는 무거운 플러그인입니다. 이 저장소를 여는
 사람 모두에게 그게 부담이면 `enabledPlugins` 에서 그 줄만 빼세요.
 
-## 2. 스킬 넷 — 저장소에 들어 있습니다
+## 2. 스킬 일곱 — 저장소에 들어 있습니다
 
-`task-observer`, `find-skills`, `design-taste-frontend`(taste), `mcp-builder`
-넷이 `.claude/skills/` 에 파일로 들어 있습니다. 저장소를 받으면 그대로 잡히니
+`.claude/skills/` 에 파일로 들어 있습니다. 저장소를 받으면 그대로 잡히니
 따로 설치할 게 없습니다.
 
 | 폴더 | 하는 일 | 원본 |
@@ -127,9 +126,23 @@ claude plugin install claude-mem@thedotmack --scope user
 | `find-skills` | "이런 거 되는 스킬 있나?" 하면 찾아서 깔아 줌 | vercel-labs/skills |
 | `design-taste-frontend` | 뻔한 템플릿 같은 화면이 안 나오게 잡아 줌 | Leonxlnx/taste-skill |
 | `mcp-builder` | MCP 서버를 제대로 설계·구현하게 안내 | anthropics/skills |
+| `reels-scripting` | 참고 릴스를 분석해 내 릴스 대본으로 | charlie947/social-media-skills |
+| `hook-generator` | 훅(도입부) 여섯 가지 뽑기 | charlie947/social-media-skills |
+| `post-scorer` | 글 초안을 내 과거 성과 기준으로 채점 | charlie947/social-media-skills |
 
 받아 온 버전은 `skills-lock.json` 에 해시로 박혀 있습니다. 원본 저장소의
 로고 이미지(3MB)는 빼고 넣었습니다.
+
+### SNS 스킬 셋을 쓰기 전에 알아 둘 것
+
+- **`reels-scripting` 은 외부 키 두 개가 있어야 돕니다** — `APIFY_API_TOKEN`
+  (릴스 영상 스크래핑), `GOOGLE_AI_API_KEY`(Gemini 로 전사·구조 분석). 둘 다
+  유료 서비스이고, 키 없이는 1단계에서 멈춥니다.
+- **`hook-generator` 와 `post-scorer` 는 링크드인 기준으로 쓰여 있습니다.**
+  훅은 영어 40자 두 줄 공식, 채점은 내 링크드인 과거 글을 긁어 와 비교하는
+  방식입니다. 인스타그램·한국어에 그대로 맞지는 않습니다.
+- 셋 다 SKILL.md 첫머리에 "로드되면 바로 1단계로 가라"가 박혀 있습니다.
+  설명 없이 곧장 실행하는 성격이니, 원치 않으면 폴더를 지우세요.
 
 ### 최신으로 올리기
 
@@ -137,7 +150,7 @@ claude plugin install claude-mem@thedotmack --scope user
 npx skills add https://github.com/rebelytics/one-skill-to-rule-them-all --skill task-observer --agent claude-code --copy
 ```
 
-`--skill` 과 주소만 바꿔서 넷 다 같은 방식으로 올립니다. 덮어쓰기가 되니 같은
+`--skill` 과 주소만 바꿔서 일곱 다 같은 방식으로 올립니다. 덮어쓰기가 되니 같은
 명령을 다시 돌리면 됩니다. 올린 뒤에는 바뀐 파일을 커밋하세요.
 
 ### 다른 프로젝트에서도 쓰려면
