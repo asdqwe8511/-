@@ -7,9 +7,13 @@
 ## 세션 시작할 때
 
 첫 도구 호출 전에 `task-observer` 스킬을 켜세요. 작업을 지켜보다가 스킬로 만들
-만한 것들을 `skill-observations/log.md` 에 쌓습니다. 스킬이 안 잡히면
-`tools/update-task-observer.sh` 로 한 번 받으면 됩니다. 전체 도구 구성은
-`docs/claude-code-setup.md` 를 보세요.
+만한 것들을 기록합니다. 기록은 프로젝트마다 흩어지지 않게
+`~/.claude/skill-observations/` 한 곳에 쌓습니다.
+
+스킬이 안 잡히면 `tools/update-task-observer.sh` 로 이 저장소에만 받거나,
+`docs/claude-code-setup.md` 의 「0. 전부 전역으로」 대로 홈에 깔아 모든 프로젝트에서
+쓰면 됩니다. 나머지 도구(claude-mem·claude-code-setup·OmniRoute·Headroom) 구성도
+같은 문서에 있습니다.
 
 ## 손대는 순서
 
