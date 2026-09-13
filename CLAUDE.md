@@ -10,10 +10,11 @@
 만한 것들을 기록합니다. 기록은 프로젝트마다 흩어지지 않게
 `~/.claude/skill-observations/` 한 곳에 쌓습니다.
 
-스킬이 안 잡히면 `tools/update-task-observer.sh` 로 이 저장소에만 받거나,
-`docs/claude-code-setup.md` 의 「0. 전부 전역으로」 대로 홈에 깔아 모든 프로젝트에서
-쓰면 됩니다. 나머지 도구(claude-mem·claude-code-setup·OmniRoute·Headroom) 구성도
-같은 문서에 있습니다.
+스킬은 `.claude/skills/` 에 파일로 들어 있어 저장소를 받으면 그대로 잡힙니다
+(`task-observer`, `find-skills`, `design-taste-frontend`, `mcp-builder`).
+플러그인 넷도 `.claude/settings.json` 에 등록돼 있어 폴더를 신뢰하겠다고 한 번
+답하면 붙습니다. 갱신하는 법과 나머지 도구 구성은 `docs/claude-code-setup.md`
+를 보세요.
 
 ## 손대는 순서
 
