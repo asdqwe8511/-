@@ -3,6 +3,9 @@
   "functions": {
     "api/saju.js": {
       "maxDuration": 60
+    },
+    "api/filecoin-news.js": {
+      "maxDuration": 60
     }
   },
   "redirects": [
@@ -10,6 +13,12 @@
       "source": "/saju",
       "destination": "/",
       "permanent": true
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/filecoin-news",
+      "schedule": "0 0 * * *"
     }
   ]
 }

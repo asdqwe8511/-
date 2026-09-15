@@ -256,9 +256,46 @@ Vercel 프로젝트의 **Settings → Environment Variables** 에 넣습니다.
 | `SAJU_DAILY_LIMIT` | 선택 (기본 300) | 하루 총 풀이 횟수 |
 | `SAJU_IP_HOURLY_LIMIT` | 선택 (기본 10) | 한 사람이 한 시간에 부를 수 있는 횟수 |
 | `SAJU_IP_SALT` | 선택 | IP 해시에 섞는 값 |
+| `TELEGRAM_BOT_TOKEN` | 파일코인 알림을 쓰려면 필수 | `/api/filecoin-news` |
+| `TELEGRAM_CHAT_ID` | 위와 한 쌍 | `/api/filecoin-news` |
+| `CRON_SECRET` | 알림을 쓰면 권장 | `/api/filecoin-news` 접근 제한 |
 
 키가 하나도 없어도 **사주표·오행·대운·시기·이름·궁합·연락처 비교는 전부 동작합니다.**
 계산이 브라우저에서 끝나기 때문입니다. 풀이 문장 자리에만 안내가 뜹니다.
+
+## 파일코인 뉴스 알림 (텔레그램)
+
+`/api/filecoin-news` 가 파일코인 관련 글을 모아 텔레그램으로 보냅니다.
+`vercel.json` 의 `crons` 가 **매일 09:00(KST)** 에 이 주소를 부릅니다.
+
+모으는 곳 — 구글뉴스(한국어·영어), Filecoin 공식 블로그, `r/filecoin`, 레딧 전체검색.
+제목이 같은 글은 하나로 묶고, 한 번 보낸 글은 Redis 에 2주간 기억해 다시 보내지 않습니다.
+(Redis 가 없으면 중복 제거만 꺼지고 알림은 그대로 갑니다.)
+
+X(트위터)는 넣지 않았습니다. 공식 API 가 유료고 대체 인스턴스는 수시로 죽어,
+크론이 조용히 빈 결과를 내기 때문입니다.
+
+### 준비
+
+1. 텔레그램에서 `@BotFather` 에게 `/newbot` → 토큰을 받습니다.
+2. 만든 봇에게 아무 메시지나 한 통 보냅니다.
+3. `https://api.telegram.org/bot<토큰>/getUpdates` 를 브라우저로 열어
+   `result[0].message.chat.id` 를 확인합니다.
+4. 두 값과 `CRON_SECRET`(아무 긴 문자열)을 Vercel 환경변수에 넣고 Redeploy 합니다.
+
+### 확인
+
+```
+/api/filecoin-news?key=<CRON_SECRET>&dry=1     모으기만 하고 전송 안 함
+/api/filecoin-news?key=<CRON_SECRET>&test=1    연결 확인용 메시지 1통
+/api/filecoin-news?key=<CRON_SECRET>&hours=72  시간창 바꿔서 전송
+```
+
+`dry=1` 을 먼저 열어 보세요. 응답의 `sources[]` 에 출처별 성공·실패와 건수가
+들어 있어서, 피드 주소가 죽으면 빈 결과가 아니라 실패로 드러납니다.
+
+주기를 바꾸려면 `vercel.json` 의 `crons[].schedule` 을 고칩니다(UTC 기준).
+Vercel Hobby 요금제는 **하루 한 번**까지만 됩니다.
 
 ## 토스 미니앱(앱인토스)에 올릴 때
 
