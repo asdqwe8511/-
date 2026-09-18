@@ -374,13 +374,6 @@
     padding:12px 14px; border-radius:10px; background:var(--panel-2); border:1px solid var(--border);
   }
   .share-note b{color:var(--text-dim);}
-  .invite-banner{
-    max-width:1080px; margin:0 auto 4px; padding:14px 18px; border-radius:12px;
-    background:rgba(13,148,136,.08); border:1px solid rgba(13,148,136,.30);
-    color:#0f766e; font-size:13.5px; line-height:1.75;
-  }
-  .invite-banner b{color:#134e4a;}
-  .invite-banner.bad{background:rgba(220,47,82,.07); border-color:rgba(220,47,82,.30); color:var(--danger);}
 
   /* 여러 명 비교 */
   .batch-summary{font-size:13px; color:var(--text-dim); margin-bottom:14px; line-height:1.8;}
@@ -956,7 +949,6 @@
   </div>
 
   <div class="container">
-    <div id="inviteNotice"></div>
     <div id="savedMe"></div>
     <div id="todayCard"></div>
 
@@ -1357,8 +1349,8 @@
       <button type="button" class="list-row" data-go="share">
         <span class="list-icon">🔗</span>
         <span class="list-body">
-          <span class="list-title">궁합 링크 보내기</span>
-          <span class="list-desc">내 사주를 담은 링크로 상대가 바로 확인</span>
+          <span class="list-title">앱 공유하기</span>
+          <span class="list-desc">주소만 보냅니다 — 내 사주는 담기지 않습니다</span>
         </span>
         <span class="list-arrow">›</span>
       </button>
@@ -1408,31 +1400,18 @@
       </div>
     </section>
 <section class="panel" id="sharePanel" hidden>
-      <h2>궁합 링크 보내기</h2>
-      <p class="sub">내 사주를 담은 링크를 만들어 상대에게 보내면, 상대가 자기 생년월일만 넣고
-        바로 궁합을 볼 수 있습니다. 카카오톡·문자 어디에 붙여넣어도 됩니다.</p>
-
-      <label class="check" style="margin-bottom:12px">
-        <input type="checkbox" id="shareIncludeName" checked> 이름도 함께 담기
-        <span class="hint" style="margin-left:4px">— 빼면 생년월일시만 담깁니다</span>
-      </label>
+      <h2>앱 공유하기</h2>
+      <p class="sub">이 앱의 주소를 그대로 보냅니다. 카카오톡·문자 어디에 붙여넣어도 되고,
+        받는 사람은 빈 화면부터 시작해 자기 사주를 새로 입력합니다.</p>
 
       <div class="share-row">
-        <button type="button" class="submit share-make" id="makeLink">링크 만들기</button>
+        <input type="text" id="shareUrl" readonly>
+        <button type="button" class="btn-sm" id="copyLink">복사</button>
+        <button type="button" class="btn-sm" id="shareLink" hidden>공유</button>
       </div>
-
-      <div id="shareOut" hidden>
-        <div class="share-row" style="margin-top:12px">
-          <input type="text" id="shareUrl" readonly>
-          <button type="button" class="btn-sm" id="copyLink">복사</button>
-          <button type="button" class="btn-sm" id="shareLink" hidden>공유</button>
-        </div>
-        <div class="share-note">
-          <b>링크의 # 뒤 내용은 서버로 전송되지 않습니다.</b> 브라우저가 프래그먼트를 서버에 보내지 않기 때문에,
-          내 생년월일은 링크를 여는 사람의 브라우저 안에서만 풀립니다. 다만 <b>링크를 받은 사람은
-          내 생년월일과 이름을 볼 수 있고, 서버에 저장하지 않으므로 한 번 보낸 링크는 회수할 수 없습니다.</b>
-          아는 사람에게만 보내 주세요.
-        </div>
+      <div class="share-note">
+        <b>주소에는 아무 개인정보도 담기지 않습니다.</b> 누가 열어도 남의 생년월일이나
+        이름이 미리 채워지지 않고, 매번 자기 사주를 새로 봅니다.
       </div>
     </section>
 
@@ -1469,8 +1448,9 @@
         서버로 가지 않습니다.</p>
       <p><b>풀이 문장을 만들 때만</b> 생년월일과 이름이 서버를 거쳐 Anthropic(Claude API)으로
         전달됩니다. 저희 서버에는 저장하지 않고, 계정도 만들지 않습니다.</p>
-      <p>연락처 파일은 <b>브라우저 밖으로 나가지 않습니다.</b> 궁합 링크의 사주는 주소의
-        <code>#</code> 뒤에 담기는데, 브라우저는 그 부분을 서버로 보내지 않습니다.</p>
+      <p>연락처 파일은 <b>브라우저 밖으로 나가지 않습니다.</b> 앱을 공유하는 링크에는
+        <b>개인정보가 전혀 담기지 않습니다</b> — 이 앱의 주소만 담겨 있고, 여는 사람은
+        매번 자기 정보를 새로 입력합니다.</p>
       <p>남용을 막기 위해 <b>IP를 해시한 값과 호출 횟수만</b> 최대 이틀간 보관합니다.
         IP 자체는 저장하지 않습니다.</p>
     </div>
@@ -2842,73 +2822,14 @@
     $('batchResult').scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 
-  // ── 궁합 링크 ────────────────────────────────────────────────────────
+  // ── 앱 공유하기 ──────────────────────────────────────────────────────
   //
-  // 내 사주를 URL 의 프래그먼트(#)에 담는다. 브라우저는 # 뒤를 서버로 보내지
-  // 않으므로, 링크가 우리 서버를 지나가도 생년월일은 로그에 남지 않는다.
-  function toBase64Url(str) {
-    var bytes = new TextEncoder().encode(str), bin = '';
-    for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  }
-  function fromBase64Url(s) {
-    var b = s.replace(/-/g, '+').replace(/_/g, '/');
-    while (b.length % 4) b += '=';
-    var bin = atob(b), bytes = new Uint8Array(bin.length);
-    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    return new TextDecoder().decode(bytes);
-  }
-  function packPerson(p, withName) {
-    var o = { c: p.calendar === '음력' ? 1 : 0, y: p.year, m: p.month, d: p.day,
-              g: p.gender === '여' ? 1 : 0 };
-    if (p.leapMonth) o.l = 1;
-    if (p.hour !== null && p.hour !== undefined) { o.h = p.hour; if (p.minute) o.i = p.minute; }
-    if (withName && p.surname) { o.s = p.surname; o.n = p.given; }
-    if (p.longitude && Math.abs(p.longitude - 126.98) > 0.01) o.o = Math.round(p.longitude * 100) / 100;
-    if (p.lateNightRule === '자정') o.r = 1;
-    if (p.useSolarTime === false) o.t = 0;
-    return o;
-  }
-  function unpackPerson(o) {
-    if (!o || typeof o !== 'object') return null;
-    var p = {
-      calendar: o.c ? '음력' : '양력',
-      year: parseInt(o.y, 10), month: parseInt(o.m, 10), day: parseInt(o.d, 10),
-      leapMonth: !!o.l,
-      hour: (o.h === undefined || o.h === null) ? null : parseInt(o.h, 10),
-      minute: o.i ? parseInt(o.i, 10) : 0,
-      gender: o.g ? '여' : '남',
-      surname: typeof o.s === 'string' ? o.s : '',
-      given: typeof o.n === 'string' ? o.n : '',
-      longitude: typeof o.o === 'number' ? o.o : 126.98,
-      lateNightRule: o.r ? '자정' : '야자시',
-      useSolarTime: o.t !== 0
-    };
-    // 링크는 남이 만들어 보낸 값이다. 폼에 넣기 전에 형식을 확인한다.
-    if (!(p.year >= 1900 && p.year <= 2100)) return null;
-    if (!(p.month >= 1 && p.month <= 12) || !(p.day >= 1 && p.day <= 31)) return null;
-    if (p.hour !== null && !(p.hour >= 0 && p.hour <= 23)) return null;
-    if (!(p.minute >= 0 && p.minute <= 59)) p.minute = 0;
-    if (!(p.longitude >= 124 && p.longitude <= 132)) p.longitude = 126.98;
-    var nameOk = /^[가-힣]{1,5}$/;
-    if (p.surname && !(nameOk.test(p.surname) && nameOk.test(p.given))) { p.surname = ''; p.given = ''; }
-    return p;
-  }
-
-  $('makeLink').addEventListener('click', function () {
-    if (!savedMe) {
-      $('shareOut').hidden = true;
-      $('parseStatus').innerHTML = '';
-      switchTab('tabMe');
-      return;
-    }
-    var packed = packPerson(savedMe, $('shareIncludeName').checked);
-    var link = location.origin + location.pathname + '#invite=' + toBase64Url(JSON.stringify(packed));
-    $('shareUrl').value = link;
-    $('shareOut').hidden = false;
-    if (navigator.share) $('shareLink').hidden = false;
-    $('shareUrl').focus(); $('shareUrl').select();
-  });
+  // 예전엔 내 사주를 URL 의 프래그먼트(#)에 실어 보냈다. 받는 사람 화면에
+  // 남의 생년월일이 그대로 채워지는 게 부담스럽다는 의견이 있어, 지금은
+  // 주소만 보낸다 — 개인정보가 전혀 실리지 않고, 열 때마다 새로 입력한다.
+  var APP_SHARE_URL = location.origin + location.pathname;
+  $('shareUrl').value = APP_SHARE_URL;
+  if (navigator.share) $('shareLink').hidden = false;
   $('copyLink').addEventListener('click', function () {
     var input = $('shareUrl'), btn = this;
     var done = function () { btn.textContent = '복사됨'; setTimeout(function () { btn.textContent = '복사'; }, 1600); };
@@ -2918,43 +2839,9 @@
   });
   $('shareLink').addEventListener('click', function () {
     if (!navigator.share) return;
-    navigator.share({ title: '궁합 보기', text: '우리 궁합 한번 볼래?', url: $('shareUrl').value })
+    navigator.share({ title: '사주·이름 풀이', text: '내 사주와 이름, 한번 봐 봐', url: APP_SHARE_URL })
       .catch(function () {});
   });
-
-  // 초대 링크로 들어온 경우: 보낸 사람을 상대 칸에 채우고 궁합 탭으로 연다.
-  function consumeInvite() {
-    var m = /[#&]invite=([A-Za-z0-9_-]+)/.exec(location.hash || '');
-    if (!m) return;
-    var person = null;
-    try { person = unpackPerson(JSON.parse(fromBase64Url(m[1]))); } catch (e) { person = null; }
-    if (!person) {
-      $('inviteNotice').innerHTML =
-        '<div class="invite-banner bad">궁합 링크를 읽지 못했습니다. 링크가 중간에 잘렸을 수 있습니다 — 보낸 사람에게 다시 받아 주세요.</div>';
-      return;
-    }
-    $('p_surname').value = person.surname;
-    $('p_given').value = person.given;
-    $('p_year').value = person.year;
-    $('p_month').value = String(person.month);
-    $('p_day').value = String(person.day);
-    $('p_leapMonth').checked = person.leapMonth;
-    $('p_noHour').checked = (person.hour === null);
-    $('p_noHour').dispatchEvent(new Event('change'));
-    if (person.hour !== null) { $('p_hour').value = String(person.hour); $('p_minute').value = String(person.minute); }
-    setChip('p_gender', person.gender);
-    setChip('p_calendar', person.calendar);
-    $('p_leapWrap').hidden = (person.calendar !== '음력');
-
-    var who = person.surname ? esc(person.surname + person.given) + '님' : '';
-    $('inviteNotice').innerHTML =
-      '<div class="invite-banner">' + (who ? '<b>' + who + '</b>이 보낸 궁합 링크입니다. ' : '<b>궁합 링크</b>로 들어오셨습니다. ') +
-      (savedMe
-        ? '궁합 탭에서 바로 확인하실 수 있습니다.'
-        : '먼저 <b>내 사주</b>를 넣어 주세요. 그러면 바로 궁합이 나옵니다.') +
-      '</div>';
-    if (savedMe) switchTab('tabCompat');
-  }
 
   // ── 제출 ─────────────────────────────────────────────────────────────
   function showError(msg) {
@@ -3529,7 +3416,6 @@
   refreshCompatTab();
   refreshMoreTab();
   switchTab('tabMe');
-  consumeInvite();
 })();
 </script>
 </body>
