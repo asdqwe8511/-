@@ -374,3 +374,12 @@ Pillow 가 필요합니다(`pip install pillow`). 한글 폰트는 윈도우·�
 카카오톡·페이스북은 미리보기를 캐시하므로, 바꾼 뒤에도 예전 이미지가 보이면
 [카카오 디버거](https://developers.kakao.com/tool/debugger/sharing)에서 캐시를 초기화하거나
 링크 뒤에 `?v=3` 같은 파라미터를 붙여 공유하세요.
+
+## 클로드 코드로 이 저장소를 열 때
+
+`claude-mem`(세션 간 기억), `claude-code-setup`(훅·스킬·에이전트·MCP 추천),
+`task-observer`(작업을 지켜보며 스킬 개선점 기록), 토큰을 아끼는
+`OmniRoute`·`Headroom`, 그리고 `agent-browser`·`find-skills`·`GSD`·`taste`·
+`mcp-builder` 를 쓰도록 정리해 두었습니다. 이름은 다 "플러그인" 같지만 플러그인·
+스킬·외부 CLI 가 섞여 있어 설치 방법이 다릅니다. 설치와 사용법은
+[`docs/claude-code-setup.md`](docs/claude-code-setup.md) 에 있습니다.
