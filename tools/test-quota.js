@@ -90,10 +90,104 @@ const ok=(l,c,x)=>{ c?pass++:fail++; console.log((c?'  ✓ ':'  ✗ ')+l+(c?'':'
   const noKeyRes = mkRes();
   await noKeyH({ method:'POST', headers:{'x-forwarded-for':'10.10.10.10'}, body: me }, noKeyRes);
   ok('503 으로 답한다(고장 아님)', noKeyRes.status_ === 503, noKeyRes.status_);
-  ok('어디에 넣는지 알려 준다', /Environment Variables/.test(noKeyRes.body), noKeyRes.body.slice(0, 80));
-  ok('어디서 발급하는지 알려 준다', /console\.anthropic\.com/.test(noKeyRes.body), true);
+  ok('다시 배포해야 한다고 알려 준다', /Redeploy|다시 배포/.test(noKeyRes.body), noKeyRes.body.slice(0, 80));
+  ok('어디를 보면 되는지 알려 준다', /\/api\/health/.test(noKeyRes.body), true);
   ok('계산은 그대로 된다고 알려 준다', /계산은 지금도 그대로/.test(noKeyRes.body), true);
   process.env.ANTHROPIC_API_KEY = savedKey;
+
+  console.log('\n모델마다 맞는 모양으로 보내는가');
+  // 이름만 바꾸고 나머지를 그대로 두면 400 이 난다. Haiku 4.5 는 adaptive 사고를
+  // 안 받고, effort 를 보내면 오류가 난다.
+  let sentParams = null;
+  class Spy { constructor(){ this.messages = { stream: (p2) => { sentParams = p2; return {
+    abort(){},
+    async *[Symbol.asyncIterator](){ yield {type:'content_block_delta',delta:{type:'text_delta',text:'ok'}}; },
+    finalMessage: async () => ({ stop_reason:'end_turn' }) }; } }; } }
+  const MODEL_CASES = [
+    ['claude-opus-5',    'adaptive', true],
+    ['claude-sonnet-5',  'adaptive', true],
+    ['claude-haiku-4-5', 'enabled',  false]
+  ];
+  for (const [model, wantThinking, wantEffort] of MODEL_CASES) {
+    require.cache[sdkPath].exports = { default: Spy };
+    process.env.SAJU_MODEL = model;
+    delete require.cache[require.resolve(HANDLER)];
+    const mh = require(HANDLER);
+    sentParams = null;
+    const mres = mkRes();
+    await mh({ method:'POST', headers:{'x-forwarded-for':'14.14.14.14'}, body: me }, mres);
+    ok(model + ' — 그 모델로 보냄', sentParams && sentParams.model === model,
+       sentParams && sentParams.model);
+    ok(model + ' — 사고 방식 ' + wantThinking,
+       sentParams && sentParams.thinking && sentParams.thinking.type === wantThinking,
+       sentParams && JSON.stringify(sentParams.thinking));
+    ok(model + ' — effort ' + (wantEffort ? '보냄' : '안 보냄'),
+       Boolean(sentParams && sentParams.output_config) === wantEffort,
+       sentParams && JSON.stringify(sentParams.output_config));
+    if (wantThinking === 'enabled') {
+      ok(model + ' — 사고 예산이 max_tokens 보다 작음',
+         sentParams.thinking.budget_tokens >= 1024 &&
+         sentParams.thinking.budget_tokens < sentParams.max_tokens,
+         sentParams.thinking.budget_tokens + ' / ' + sentParams.max_tokens);
+    }
+  }
+  // 모르는 이름이면 멈추지 말고 기본값으로.
+  process.env.SAJU_MODEL = '없는모델';
+  delete require.cache[require.resolve(HANDLER)];
+  const fbH = require(HANDLER);
+  ok('모르는 이름은 기본값으로', fbH.MODEL === 'claude-opus-5', fbH.MODEL);
+  delete process.env.SAJU_MODEL;
+
+  console.log('\n공백이 딸려 온 키도 통하는가');
+  // 붙여넣다 보면 값 앞뒤에 공백이나 따옴표가 딸려 온다. 그대로 두면 인증이
+  // 실패하는데 원인이 보이지 않으므로 다듬어 쓴다.
+  let sawKey = null;
+  class Peek { constructor(o){ sawKey = o && o.apiKey; this.messages = { stream: () => ({
+    abort(){},
+    async *[Symbol.asyncIterator](){ yield {type:'content_block_delta',delta:{type:'text_delta',text:'ok'}}; },
+    finalMessage: async () => ({ stop_reason:'end_turn' }) }) }; } }
+  require.cache[sdkPath].exports = { default: Peek };
+  process.env.ANTHROPIC_API_KEY = '  "sk-ant-test-0123456789"  ';
+  delete require.cache[require.resolve(HANDLER)];
+  const trimH = require(HANDLER);
+  const trimRes = mkRes();
+  await trimH({ method:'POST', headers:{'x-forwarded-for':'11.11.11.11'}, body: me }, trimRes);
+  ok('200 으로 나감', trimRes.status_ === 200, trimRes.status_);
+  ok('공백과 따옴표를 떼고 넘김', sawKey === 'sk-ant-test-0123456789', JSON.stringify(sawKey));
+
+  console.log('\n공백만 든 키는 없는 것으로 본다');
+  process.env.ANTHROPIC_API_KEY = '   ';
+  delete require.cache[require.resolve(HANDLER)];
+  const blankH = require(HANDLER);
+  const blankRes = mkRes();
+  await blankH({ method:'POST', headers:{'x-forwarded-for':'12.12.12.12'}, body: me }, blankRes);
+  ok('503 으로 안내', blankRes.status_ === 503, blankRes.status_);
+  process.env.ANTHROPIC_API_KEY = 'sk-ant-fake';
+
+  console.log('\nAPI 오류를 방문자 말로 옮기는가');
+  // API 응답을 그대로 보여 주면 request_id 같은 내부 값이 노출되고, 읽는 사람은
+  // 무엇을 해야 할지도 알 수 없다.
+  const CASES = [
+    ['잔액 부족', 400, 'Your credit balance is too low to access the Anthropic API.',
+     /잠시 멈춰 있습니다/, 503],
+    ['키 오류', 401, 'invalid x-api-key', /설정에 문제가 있습니다/, 503],
+    ['혼잡', 529, 'Overloaded', /요청이 몰려/, 503],
+    ['시간 초과', 0, 'socket hang up', /연결이 끊겼습니다/, 504]
+  ];
+  for (const [label, st, raw, want, wantStatus] of CASES) {
+    class Boom { constructor(){ this.messages = { stream: () => {
+      const err = new Error(raw); err.status = st; throw err; } }; } }
+    require.cache[sdkPath].exports = { default: Boom };
+    delete require.cache[require.resolve(HANDLER)];
+    const boomH = require(HANDLER);
+    const boomRes = mkRes();
+    await boomH({ method:'POST', headers:{'x-forwarded-for':'13.13.13.13'}, body: me }, boomRes);
+    ok(label + ' — 알맞은 상태(' + wantStatus + ')', boomRes.status_ === wantStatus, boomRes.status_);
+    ok(label + ' — 쉬운 말로 바꿔 줌', want.test(boomRes.body), boomRes.body.slice(0, 60));
+    ok(label + ' — 원문을 노출하지 않음',
+       !/request_id|invalid_request_error|x-api-key|credit balance/i.test(boomRes.body),
+       boomRes.body.slice(0, 60));
+  }
 
   console.log('\n오래 걸리는 풀이는 스스로 멈추는가');
   // 플랫폼이 끊기 전에 우리가 먼저 멈춰야 한다. 그냥 두면 문장 한가운데서

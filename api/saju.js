@@ -11,7 +11,34 @@ const AnthropicModule = require('@anthropic-ai/sdk');
 const Anthropic = AnthropicModule.default || AnthropicModule;
 const SajuEngine = require('../saju-engine.js');
 
-const MODEL = 'claude-opus-5';
+// 어떤 모델로 풀이를 쓸지. SAJU_MODEL 환경변수로 바꿀 수 있게 둔다 — 값과
+// 품질을 견주어 보려면 코드를 고치지 않고 갈아 끼울 수 있어야 한다.
+//
+// 모델마다 요청 모양이 다르다. 이름만 바꾸고 나머지를 그대로 두면 400 이 난다.
+//   · Opus 5 / Sonnet 5 — 사고 과정은 adaptive, effort 로 깊이를 조절한다.
+//   · Haiku 4.5        — adaptive 를 안 받는다. budget_tokens 로 켜야 하고,
+//                        effort 를 보내면 오류가 난다. 문맥도 200K 로 좁다.
+const MODEL_TUNING = {
+  'claude-opus-5':    { thinking: { type: 'adaptive' }, effort: 'medium', label: 'Opus 5' },
+  'claude-sonnet-5':  { thinking: { type: 'adaptive' }, effort: 'medium', label: 'Sonnet 5' },
+  'claude-haiku-4-5': { thinking: { type: 'enabled', budget_tokens: 4000 }, effort: null,
+                        label: 'Haiku 4.5' }
+};
+const DEFAULT_MODEL = 'claude-opus-5';
+
+function pickModel() {
+  const want = String(process.env.SAJU_MODEL || '').trim();
+  if (!want) return DEFAULT_MODEL;
+  if (MODEL_TUNING[want]) return want;
+  // 모르는 이름이면 멈추지 말고 기본값으로 돈다. 오타 하나로 사이트가
+  // 통째로 안 되는 것보다는 낫고, 로그에 남으니 찾을 수 있다.
+  console.error('[saju] SAJU_MODEL 값을 모르겠습니다: ' + want +
+    ' — 쓸 수 있는 것: ' + Object.keys(MODEL_TUNING).join(', ') +
+    '. 기본값 ' + DEFAULT_MODEL + ' 으로 돕니다.');
+  return DEFAULT_MODEL;
+}
+const MODEL = pickModel();
+const TUNING = MODEL_TUNING[MODEL];
 
 // ── 사용량 제한 ────────────────────────────────────────────────────────────
 //
@@ -701,16 +728,48 @@ const SYSTEM = `당신은 한국 명리학(사주)과 성명학을 함께 보는
 표와 목록을 뺀 전체 3000~4000자. 길게 늘여 쓰면 끝까지 못 나갑니다.
 다만 이 사람이 특히 궁금해하는 것에 해당하는 절 하나만 두 배로 씁니다.`;
 
+// Anthropic 이 돌려주는 오류를 방문자가 읽을 수 있는 말로 옮긴다.
+// 원문은 서버 로그에만 남기고 화면에는 내보내지 않는다.
+function explainApiError(e) {
+  const raw = String((e && e.message) || '');
+  const status = (e && (e.status || e.statusCode)) || 0;
+  const owner = ' 사이트 주인이 확인해야 하는 문제라, 잠시 뒤 다시 열어 봐 주세요.';
+
+  // 잔액 부족·결제 문제. 방문자가 할 수 있는 일이 없으므로 자세히 말하지 않는다.
+  if (/credit balance|billing|quota|payment/i.test(raw)) {
+    return { status: 503, reason: '잔액/결제',
+      message: '풀이 기능이 잠시 멈춰 있습니다.' + owner +
+        ' 사주표·오행·대운·시기·이름·궁합·택일 계산은 지금도 그대로 보실 수 있습니다.' };
+  }
+  // 키가 틀렸거나 권한이 없음.
+  if (status === 401 || status === 403 || /authentication|api key|permission/i.test(raw)) {
+    return { status: 503, reason: '인증',
+      message: '풀이 기능 설정에 문제가 있습니다.' + owner +
+        ' 아래 계산 결과는 그대로 보실 수 있습니다.' };
+  }
+  // 몰려서 밀린 경우. 이건 기다리면 풀린다.
+  if (status === 429 || status === 529 || /rate limit|overloaded/i.test(raw)) {
+    return { status: 503, reason: '혼잡',
+      message: '지금 요청이 몰려 잠시 밀렸습니다. 1~2분 뒤에 다시 눌러 주세요.' };
+  }
+  if (/timeout|ETIMEDOUT|ECONNRESET|socket hang up/i.test(raw)) {
+    return { status: 504, reason: '시간초과',
+      message: '풀이를 받아 오다 연결이 끊겼습니다. 다시 눌러 주세요.' };
+  }
+  return { status: 502, reason: '알수없음',
+    message: '풀이를 만들지 못했습니다. 잠시 뒤 다시 눌러 주세요.' };
+}
+
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return fail(res, 405, 'POST 로 요청해 주세요.');
   // 키가 없다는 말만 하면 무엇을 해야 하는지 알 수 없다. 할 일을 그대로 적는다.
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!String(process.env.ANTHROPIC_API_KEY || '').trim()) {
     return fail(res, 503,
       '아직 풀이 기능이 켜지지 않았습니다. ' +
-      '사이트 주인이 Vercel → Settings → Environment Variables 에 ' +
-      'ANTHROPIC_API_KEY 를 넣고 다시 배포하면 켜집니다. ' +
-      '(console.anthropic.com 에서 발급합니다) ' +
-      '사주표·오행·대운·시기·이름·궁합 계산은 지금도 그대로 보실 수 있습니다.');
+      '사이트 주인이 Vercel 환경변수에 ANTHROPIC_API_KEY 를 넣고 ' +
+      '다시 배포(Redeploy)하면 켜집니다 — 넣기만 하고 다시 배포하지 않으면 적용되지 않습니다. ' +
+      '무엇이 걸렸는지는 /api/health 를 열면 짚어 줍니다. ' +
+      '사주표·오행·대운·시기·이름·궁합·택일 계산은 지금도 그대로 보실 수 있습니다.');
   }
 
   let body = req.body;
@@ -772,14 +831,19 @@ ${describe(reading, input)}
   const BUDGET_MS = (Number(process.env.SAJU_MAX_SECONDS) || 60) * 1000 - 4000;
   const startedAt = Date.now();
 
-  const client = new Anthropic();
+  // 붙여넣다 보면 값 앞뒤에 공백이나 따옴표가 딸려 온다. 그대로 두면 인증이
+  // 실패하는데 원인이 보이지 않으므로, 여기서 다듬어 쓴다.
+  const client = new Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY.trim().replace(/^["']|["']$/g, '')
+  });
   try {
     const stream = client.messages.stream({
       model: MODEL,
       max_tokens: 12000,
       system: system,
-      thinking: { type: 'adaptive' },
-      output_config: { effort: 'medium' },
+      thinking: TUNING.thinking,
+      // effort 를 받지 않는 모델에 보내면 오류가 난다. 있을 때만 싣는다.
+      ...(TUNING.effort ? { output_config: { effort: TUNING.effort } } : {}),
       messages: [{ role: 'user', content: userMessage }]
     });
 
@@ -808,8 +872,22 @@ ${describe(reading, input)}
     }
     res.end();
   } catch (e) {
-    const msg = '\n\n[오류] 해석을 생성하지 못했습니다: ' + (e && e.message ? e.message : '알 수 없는 오류');
-    if (res.headersSent) { res.write(msg); res.end(); }
-    else fail(res, 502, msg.trim());
+    // 방문자에게 API 응답을 그대로 보여 주면 안 된다. request_id 같은 내부 값이
+    // 그대로 노출되고, 읽는 사람은 무엇을 해야 할지도 알 수 없다. 사이트 주인이
+    // 손볼 일과 잠시 뒤 다시 하면 되는 일을 갈라서 말한다.
+    const friendly = explainApiError(e);
+    console.error('[saju] 풀이 실패:', friendly.reason, '—',
+      (e && e.message ? String(e.message) : '알 수 없는 오류').slice(0, 300));
+    if (res.headersSent) {
+      res.write('\n\n---\n\n*' + friendly.message + '*');
+      res.end();
+    } else {
+      fail(res, friendly.status, friendly.message);
+    }
   }
 };
+
+// /api/health 가 지금 어떤 모델로 도는지 보여 줄 수 있게 내보낸다.
+module.exports.MODEL = MODEL;
+module.exports.MODEL_LABEL = TUNING.label;
+module.exports.MODEL_CHOICES = Object.keys(MODEL_TUNING);

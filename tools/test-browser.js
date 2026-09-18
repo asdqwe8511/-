@@ -267,8 +267,9 @@ async function run() {
   await p.click('#batchBtn'); await p.waitForTimeout(900);
   ok('순위 3행', (await p.$$('#rankTable tbody tr')).length === 3);
   await p.click('[data-go="share"]'); await p.waitForTimeout(300);
-  await p.click('#makeLink'); await p.waitForTimeout(300);
-  ok('링크는 # 뒤에 담긴다', (await p.inputValue('#shareUrl')).includes('#invite='));
+  var shareUrl = await p.inputValue('#shareUrl');
+  ok('링크에 개인정보용 조각(#)이 없다', !shareUrl.includes('#'));
+  ok('링크가 앱 주소 그대로다', shareUrl === (await p.evaluate('location.origin + location.pathname')));
 
   section('글로 풀어 읽기');
   await p.click('#tabbar button[data-tab="tabMe"]'); await p.waitForTimeout(300);
