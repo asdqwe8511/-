@@ -9,7 +9,7 @@
 | 이름 | 하는 일 | 성격 | 이 저장소에 들어온 것 |
 | --- | --- | --- | --- |
 | OmniRoute | 무료 API 게이트웨이로 요청을 돌려 토큰을 아낌 | 외부 CLI | 설치 방법만 (아래) |
-| claude-mem | 세션이 끝나도 작업 기억을 이어 줌 | 플러그인 | `.claude/settings.json` 에 등록됨 |
+| claude-mem | 세션이 끝나도 작업 기억을 이어 줌 | 플러그인 | 설치 방법만 (아래) — 로컬 서버를 계속 띄우는 게 부담이라 자동 등록에서 뺐습니다 |
 | Headroom | 안 쓰는 출력은 버리고 필요한 것만 압축해 보냄 | 외부 CLI 래퍼 | 설치 방법만 (아래) |
 | claude-code-setup | 코드베이스를 보고 훅·스킬·에이전트·MCP 를 추천 | 플러그인 | `.claude/settings.json` 에 등록됨 |
 | task-observer | 작업을 지켜보며 스킬로 만들 거리를 기록 | 스킬 | `.claude/skills/` 에 포함됨 |
@@ -29,11 +29,11 @@
 컴퓨터에서 한 번만 실행하면 어느 폴더에서 클로드 코드를 켜도 같은 구성이 됩니다.
 
 ```bash
-# 1) 플러그인 둘 — --scope user 가 핵심. 모든 프로젝트에 붙는다.
+# 1) 플러그인 하나 — --scope user 가 핵심. 모든 프로젝트에 붙는다.
+#    (claude-mem 은 로컬 서버를 계속 띄우는 부담 때문에 여기서 뺐습니다. 1절 끝의
+#    「claude-mem — 넣기 전에 알아 둘 것」을 읽고 원하면 따로 까세요.)
 claude plugin marketplace add anthropics/claude-plugins-official
-claude plugin marketplace add thedotmack/claude-mem
 claude plugin install claude-code-setup@claude-plugins-official --scope user
-claude plugin install claude-mem@thedotmack --scope user
 
 # 2) 스킬 넷 — 저장소가 아니라 홈에 둔다 (-g)
 npx skills add https://github.com/rebelytics/one-skill-to-rule-them-all --skill task-observer -g
@@ -72,22 +72,20 @@ claude plugin install gsd@gsd-plugin --scope user
 확인:
 
 ```bash
-claude plugin list                 # 네 개가 Scope: user 로 나와야 함
+claude plugin list                 # 세 개가 Scope: user 로 나와야 함
 ls ~/.claude/skills/task-observer  # SKILL.md 가 보여야 함
 npx skills list -g                 # find-skills·taste·mcp-builder 가 보여야 함
 ```
 
 ---
 
-## 1. 플러그인 두 개 (claude-mem · claude-code-setup)
+## 1. 플러그인 하나 (claude-code-setup)
 
 내 컴퓨터 전체에 깔기:
 
 ```bash
 claude plugin marketplace add anthropics/claude-plugins-official
-claude plugin marketplace add thedotmack/claude-mem
 claude plugin install claude-code-setup@claude-plugins-official --scope user
-claude plugin install claude-mem@thedotmack --scope user
 ```
 
 클로드 코드 안에서는 앞에 `/` 를 붙여 `/plugin install ...` 로도 됩니다.
@@ -96,11 +94,10 @@ claude plugin install claude-mem@thedotmack --scope user
 ### 이 저장소를 여는 사람에게는 이미 붙어 있습니다
 
 `.claude/settings.json` 이 저장소에 들어 있어서, 이 저장소를 받아 클로드 코드를
-열고 폴더를 신뢰하겠다고 한 번 답하면 플러그인 넷이 자동으로 붙습니다. 따로
+열고 폴더를 신뢰하겠다고 한 번 답하면 플러그인 셋이 자동으로 붙습니다. 따로
 설치할 필요가 없습니다.
 
 - `claude-code-setup@claude-plugins-official`
-- `claude-mem@thedotmack`
 - `agent-browser@agent-browser`
 - `gsd@gsd-plugin`
 
@@ -114,6 +111,40 @@ claude plugin install claude-mem@thedotmack --scope user
 
 `gsd` 는 훅과 MCP 서버까지 같이 붙는 무거운 플러그인입니다. 이 저장소를 여는
 사람 모두에게 그게 부담이면 `enabledPlugins` 에서 그 줄만 빼세요.
+
+### claude-mem — 넣기 전에 알아 둘 것
+
+처음엔 이 저장소에도 자동으로 붙게 해 놨는데, 로컬 서버를 계속 띄운다는 걸
+알고 나서 뺐습니다.
+
+**직접 확인한 내용**: claude-mem 은 `SessionStart` 훅에서 `worker-service.cjs
+--daemon` 을 백그라운드로 띄웁니다. 클로드 코드를 켤 때마다, 묻지 않고,
+`127.0.0.1:37700`(포트는 사용자마다 조금씩 다름)에 HTTP 서버 + 웹 뷰어가
+뜹니다. 세션을 끝내도 그 프로세스는 안 죽습니다 — 다음에 클로드 코드를 켤 때
+"이미 떠 있다"고 뜨는 이유입니다. 여기에 MCP 서버 하나와 벡터 검색용
+Chroma 프로세스까지 같이 뜹니다. 안 쓰겠다고 끄는 설정 값(`CLAUDE_MEM_*`
+환경변수 약 100개를 다 뒤졌지만 "워커 자동 시작을 끈다"에 해당하는 항목은
+없었습니다)이 없습니다 — 애초에 이 플러그인 자체가 그 서버를 백엔드로 씁니다.
+
+**그래서**: 기억 기능이 꼭 필요한 게 아니면 이 저장소에도, 다른 프로젝트에도
+안 까는 쪽을 권합니다. 그래도 쓰고 싶으면:
+
+```bash
+claude plugin marketplace add thedotmack/claude-mem
+claude plugin install claude-mem@thedotmack --scope user
+```
+
+**이미 깔았고 서버가 자동으로 뜨는 걸 멈추고 싶다면**, 껐다 켜는 설정이
+아니라 플러그인 자체를 끄거나 지워야 합니다:
+
+```bash
+claude plugin disable claude-mem@thedotmack      # 잠깐 꺼 두기 — 데이터는 남음
+claude plugin uninstall claude-mem@thedotmack    # 완전히 지우기
+```
+
+Node.js 20 이상이 필요하고, 설치·삭제 뒤에는 클로드 코드를 한 번 재시작해야
+훅이 반영됩니다. 기억에 남기고 싶지 않은 내용은 `<private>` 태그로 감싸면
+빠집니다. `npm i -g claude-mem` 만 하면 훅이 안 걸리니 플러그인으로 까세요.
 
 ## 2. 스킬 일곱 — 저장소에 들어 있습니다
 
@@ -167,9 +198,6 @@ npx skills add https://github.com/rebelytics/one-skill-to-rule-them-all --skill 
 
 ### 알아 둘 점
 
-- **claude-mem** 은 Node.js 20 이상이 필요하고, 설치 뒤 클로드 코드를 한 번
-  재시작해야 훅이 붙습니다. 기억에 남기고 싶지 않은 내용은 `<private>` 태그로
-  감싸면 빠집니다. `npm i -g claude-mem` 만 하면 훅이 안 걸리니 플러그인으로 까세요.
 - **claude-code-setup** 은 읽기 전용입니다. 파일을 고치지 않고 추천만 합니다.
 - **task-observer** 는 첫 도구 호출 전에 켜져야 제 몫을 합니다. 그래서 루트
   `CLAUDE.md` 에 켜라는 문장을 넣어 뒀고, 모든 프로젝트에서 켜지게 하려면 같은
