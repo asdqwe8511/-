@@ -12,9 +12,10 @@
 
 스킬은 `.claude/skills/` 에 파일로 들어 있어 저장소를 받으면 그대로 잡힙니다
 (`task-observer`, `find-skills`, `design-taste-frontend`, `mcp-builder`).
-플러그인 넷도 `.claude/settings.json` 에 등록돼 있어 폴더를 신뢰하겠다고 한 번
-답하면 붙습니다. 갱신하는 법과 나머지 도구 구성은 `docs/claude-code-setup.md`
-를 보세요.
+플러그인 셋도 `.claude/settings.json` 에 등록돼 있어 폴더를 신뢰하겠다고 한 번
+답하면 붙습니다. claude-mem 은 로컬 서버를 계속 띄워서 일부러 자동 등록에서
+뺐습니다 — 갱신하는 법과 나머지 도구 구성은 `docs/claude-code-setup.md` 를
+보세요.
 
 ## 손대는 순서
 
