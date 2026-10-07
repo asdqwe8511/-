@@ -23,9 +23,8 @@ class Engine {
       if (a.type === 'ENTER') {
         if (b.openCount() >= cfg.maxOpen) continue;
         const p = b.open(sym, a.side, a.level, cfg.seed / cfg.entryDivisor, now);
-        if (p) Object.assign(st, { phase: 'OPEN', side: a.side, entry: p.entry, openedAt: now });
-      } else if (a.type === 'REDUCE') b.reduce(sym, price, a.fraction, now, a.reason);
-      else if (a.type === 'CLOSE') {
+        if (p) Object.assign(st, { phase: 'OPEN', side: a.side, entry: p.entry, peak: p.entry, openedAt: now });
+      } else if (a.type === 'CLOSE') {
         b.close(sym, price, now, a.reason);
         this.st[sym] = { ...newState(), cooldownUntil: now + cfg.cooldownMs };
       }

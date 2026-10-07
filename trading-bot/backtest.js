@@ -40,7 +40,7 @@ function report(r, cfg) {
   let peak = cfg.seed, mdd = 0;
   for (const c of r.curve) { peak = Math.max(peak, c.equity); mdd = Math.max(mdd, 1 - c.equity / peak); }
   console.log(`시드 ${cfg.seed} → 종료 자산 ${r.equity.toFixed(2)} (${((r.equity / cfg.seed - 1) * 100).toFixed(1)}%)`);
-  console.log(`진입 ${cnt('open')}  익절(50%) ${cnt('take-profit')}  스탑 ${cnt('stop')}  청산 ${cnt('liquidated')}  최대낙폭 ${(mdd * 100).toFixed(1)}%`);
+  console.log(`진입 ${cnt('open')}  스탑 ${cnt('stop')}  청산 ${cnt('liquidated')}  최대낙폭 ${(mdd * 100).toFixed(1)}%`);
   console.log(`미청산 포지션 ${Object.keys(r.broker.pos).length}개 (평가손익 포함)`);
 }
 

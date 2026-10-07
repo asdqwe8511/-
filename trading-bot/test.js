@@ -22,7 +22,7 @@ const LV = (s, r) => ({ support: s && { price: s }, resistance: r && { price: r 
   assert(lv.resistance && lv.resistance.price > 105 && lv.resistance.price < 115, 'resistance');
 }
 
-// 2) 롱: 지지선 터치 진입 → 스탑 없음 → +10%에 50% 익절 + 본전 스탑 → 1일 1회 스탑 상향 → 스탑 체결
+// 2) 롱: 지지선 터치 진입 → 스탑 없음 → +10%에 손절선만 이익 50% 지점에 설정(물량 유지) → 1일 1회 상향 → 체결
 {
   const { b, e } = mk();
   e.setLevels('X', LV(100, 120));
@@ -32,15 +32,14 @@ const LV = (s, r) => ({ support: s && { price: s }, resistance: r && { price: r 
   assert.strictEqual(e.st.X.stop, undefined, 'no stop at first entry');
   e.onPrice('X', 95, H); assert(b.pos.X, 'still held below entry without stop');
   const entry = p.entry, q0 = p.qty;
-  e.onPrice('X', entry * 1.101, 2 * H);
-  assert(Math.abs(b.pos.X.qty - q0 / 2) < 1e-9, '50% closed');
-  assert.strictEqual(e.st.X.stop, entry, 'stop at breakeven');
-  e.setLevels('X', LV(105, 130));
-  e.onPrice('X', entry * 1.2, 3 * H); assert.strictEqual(e.st.X.stop, entry, 'no update inside 24h');
-  e.onPrice('X', entry * 1.2, 2 * H + DAY + 1); assert.strictEqual(e.st.X.stop, 105, 'daily update');
-  e.setLevels('X', LV(101, 130));
-  e.onPrice('X', entry * 1.2, 2 * H + 2 * DAY + 2); assert.strictEqual(e.st.X.stop, 105, 'never loosens');
-  e.onPrice('X', 104, 2 * H + 2 * DAY + 3); assert(!b.pos.X, 'stopped out');
+  e.onPrice('X', entry * 1.10, 2 * H);
+  assert.strictEqual(b.pos.X.qty, q0, 'no partial close');
+  assert(Math.abs(e.st.X.stop - entry * 1.05) < 1e-9, 'stop at half of profit (+5%)');
+  e.onPrice('X', entry * 1.30, 3 * H); assert(Math.abs(e.st.X.stop - entry * 1.05) < 1e-9, 'no update inside 24h');
+  e.onPrice('X', entry * 1.30, 2 * H + DAY + 1); assert(Math.abs(e.st.X.stop - entry * 1.15) < 1e-9, 'daily update to +15%');
+  e.onPrice('X', entry * 1.20, 2 * H + 2 * DAY); assert(Math.abs(e.st.X.stop - entry * 1.15) < 1e-9, 'never loosens');
+  e.onPrice('X', entry * 1.14, 2 * H + 2 * DAY + 1); assert(!b.pos.X, 'stopped out');
+  assert(b.trades.at(-1).pnl > 0, 'profit locked');
 }
 
 // 3) 숏 대칭, 4) 스탑 없는 첫 진입은 청산까지 감, 5) 동시 포지션 상한
