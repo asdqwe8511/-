@@ -51,7 +51,7 @@ if (require.main === module) (async () => {
   const list = (await api.tickers()).sort((a, b) => b.turnover - a.turnover).slice(0, n);
   const series = {};
   for (const { symbol } of list) {
-    series[symbol] = { daily: await api.klines(symbol, 'D', 400), hourly: await api.klines(symbol, '60', 1000) };
+    series[symbol] = { daily: await api.klines(symbol, 'D', 1000), hourly: await api.klines(symbol, '60', 1000) };
     process.stdout.write('.');
   }
   console.log();

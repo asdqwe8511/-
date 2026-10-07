@@ -12,7 +12,7 @@ async function get(path, params) {
 
 // interval: 'D' | '60' | ... 오래된 순으로 반환
 async function klines(symbol, interval, limit = 1000) {
-  const rows = await get('kline', { symbol, interval, limit });
+  const rows = await get('kline', { symbol, interval, limit: Math.min(limit, 1000) });
   return rows.reverse().map(([t, o, h, l, c, v]) => ({ t: +t, o: +o, h: +h, l: +l, c: +c, v: +v }));
 }
 
