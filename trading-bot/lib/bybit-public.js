@@ -1,6 +1,8 @@
 'use strict';
 // 키가 필요 없는 공개 시세 API만 쓴다. (주문 API는 아직 없음)
-const BASE = 'https://api.bybit.com/v5/market';
+let BASE = 'https://api.bybit.com/v5/market';
+// 테스트넷에서는 시세도 테스트넷 것을 써야 가격이 맞는다.
+const setEnv = (env) => { BASE = `https://${env === 'mainnet' ? 'api' : 'api-testnet'}.bybit.com/v5/market`; };
 
 async function get(path, params) {
   const url = `${BASE}/${path}?${new URLSearchParams({ category: 'linear', ...params })}`;
@@ -22,4 +24,4 @@ async function tickers() {
     .map((x) => ({ symbol: x.symbol, price: +x.lastPrice, turnover: +x.turnover24h }));
 }
 
-module.exports = { klines, tickers };
+module.exports = { klines, tickers, setEnv };

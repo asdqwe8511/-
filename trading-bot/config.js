@@ -12,6 +12,8 @@ module.exports = {
   // 지지/저항 탐색(일봉)
   // lookback: 일봉 전체(Bybit 한 번에 최대 1000개 ≈ 2.7년). maxDist 100% = 거리 제한 사실상 없음
   levels: { pivotWing: 3, clusterTol: 0.01, minGap: 0.01, maxDist: 1.0, lookback: 1000 },
+  minTurnover24h: 1e6,    // 실주문: 24h 거래대금(USDT) 이 이보다 작은 코인은 제외 (스탑·청산 슬리피지 방어)
+  pollMs: 10000,          // 실주문: 포지션 감시 주기
   // 모의 체결
   fee: 0.00055,           // 테이커 수수료(편도)
   mmr: 0.005,             // 유지증거금률(청산가 계산용 근사)

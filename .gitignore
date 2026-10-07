@@ -6,3 +6,5 @@ skill-observations/
 .claude/settings.local.json
 .agents/
 trading-bot/paper-state.json
+trading-bot/live-state.json
+trading-bot/STOP
