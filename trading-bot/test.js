@@ -57,6 +57,16 @@ const LV = (s, r) => ({ support: s && { price: s }, resistance: r && { price: r 
   assert(b.openCount() <= cfg.maxOpen && b.openCount() >= cfg.maxOpen - 1, 'cap (수수료 때문에 마지막 1칸은 증거금 부족할 수 있음)');
 }
 
+// 5-2) 코인당 트리거는 롱 1 + 숏 1, 진입하면 0
+{
+  const { e } = mk();
+  e.setLevels('T', LV(100, 120));
+  const tr = e.triggers('T');
+  assert.deepStrictEqual(tr.map((x) => x.side), ['long', 'short']);
+  e.onPrice('T', 99, 0);
+  assert.strictEqual(e.triggers('T').length, 0, 'no pending triggers while in position');
+}
+
 // 6) 백테스트 배선 (합성 데이터)
 {
   const daily = [], hourly = [];

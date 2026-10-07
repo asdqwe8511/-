@@ -18,7 +18,7 @@ async function klines(symbol, interval, limit = 1000) {
 
 async function tickers() {
   const rows = await get('tickers', {});
-  return rows.filter((x) => x.symbol.endsWith('USDT'))
+  return rows.filter((x) => /^[A-Z0-9]+USDT$/.test(x.symbol)) // USDT 정산 무기한만 (USDC·만기물 제외)
     .map((x) => ({ symbol: x.symbol, price: +x.lastPrice, turnover: +x.turnover24h }));
 }
 

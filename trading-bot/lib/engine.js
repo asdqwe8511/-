@@ -11,6 +11,12 @@ class Engine {
     this.log = [];
   }
   setLevels(sym, lv) { this.levels[sym] = lv; }
+  // 코인당 대기 트리거는 롱(지지선) 1개 + 숏(저항선) 1개뿐. 포지션이 있으면 0개. 하루 1회 갱신 때 교체된다.
+  triggers(sym) {
+    const lv = this.levels[sym], st = this.state(sym);
+    if (st.phase !== 'WATCH' || !lv) return [];
+    return [lv.support && { side: 'long', price: lv.support.price }, lv.resistance && { side: 'short', price: lv.resistance.price }].filter(Boolean);
+  }
   state(sym) { return (this.st[sym] ||= newState()); }
 
   onPrice(sym, price, now) {
