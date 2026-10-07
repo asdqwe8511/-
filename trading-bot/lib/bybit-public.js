@@ -2,7 +2,8 @@
 // 키가 필요 없는 공개 시세 API만 쓴다. (주문 API는 아직 없음)
 let BASE = 'https://api.bybit.com/v5/market';
 // 테스트넷에서는 시세도 테스트넷 것을 써야 가격이 맞는다.
-const setEnv = (env) => { BASE = `https://${env === 'mainnet' ? 'api' : 'api-testnet'}.bybit.com/v5/market`; };
+// 데모(연습모드)는 실제 시세를 쓰므로 공개 시세는 메인넷 것을 읽는다.
+const setEnv = (env) => { BASE = `https://${env === 'testnet' ? 'api-testnet' : 'api'}.bybit.com/v5/market`; };
 
 async function get(path, params) {
   const url = `${BASE}/${path}?${new URLSearchParams({ category: 'linear', ...params })}`;

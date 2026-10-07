@@ -40,12 +40,23 @@ Bybit 공개 API(`api.bybit.com`)에 접속되는 환경에서 돌려야 합니�
 - 백테스트는 1시간봉 안에서 시가→저/고→종가 순서로 가정하고, 트리거는 선 가격에 슬리피지만 얹어 체결합니다. 실제보다 낙관적일 수 있습니다.
 - 지지/저항 방식(반등 진입)은 추세장에서 선이 뚫리면 계속 불리합니다. 백테스트로 먼저 확인하세요.
 
+## 단계별 적용 (연습모드 → 소액)
+
+1. **백테스트**: `node trading-bot/backtest.js 30`
+2. **연습모드(Bybit Demo Trading)**: 실제 시세에 가상 자금. Bybit 로그인 후 Demo Trading 으로 전환해서 그 모드에서 API 키를 발급받고(실계좌 키와 다름), 가상 자금을 충전합니다.
+   `BYBIT_ENV=demo LIVE_ORDERS=1 node trading-bot/live-bot.js`
+   최소 1~2주 돌리며 진입·손절선 설정·청산이 의도대로인지, 로그와 Bybit 화면이 일치하는지 봅니다.
+3. **소액 메인넷**: 시드를 잃어도 되는 금액으로 줄입니다. 코드 수정 없이 환경변수로 바꿉니다.
+   `SEED=200 BYBIT_ENV=mainnet BYBIT_MAINNET_CONFIRM=I-ACCEPT-REAL-MONEY-RISK LIVE_ORDERS=1 node trading-bot/live-bot.js`
+   시드가 작으면 1/10 증거금×5배가 코인별 최소 주문금액·최소 수량에 못 미쳐 그 코인은 건너뜁니다(로그에 `skip` 으로 남음). 예를 들어 시드 200이면 진입 명목금액은 100 USDT 입니다.
+
 ## 실주문 (`live-bot.js`)
 
 ```bash
 export BYBIT_API_KEY=... BYBIT_API_SECRET=...          # 거래 권한만, 출금 권한 끄기, 전용 서브계정 권장
 node trading-bot/live-bot.js                            # 테스트넷 + 드라이런(주문 안 냄, 트리거 계산만 로그)
 LIVE_ORDERS=1 node trading-bot/live-bot.js              # 테스트넷에 실제 주문
+# 연습모드: BYBIT_ENV=demo LIVE_ORDERS=1 node trading-bot/live-bot.js
 # 메인넷: BYBIT_ENV=mainnet BYBIT_MAINNET_CONFIRM=I-ACCEPT-REAL-MONEY-RISK LIVE_ORDERS=1 node trading-bot/live-bot.js
 touch trading-bot/STOP                                  # 중단: 대기 트리거 전부 철회하고 종료 (열린 포지션은 그대로)
 ```

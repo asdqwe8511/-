@@ -2,7 +2,7 @@
 // Bybit v5 서명 REST 클라이언트. 키는 생성자로만 받고 로그에 찍지 않는다.
 const crypto = require('crypto');
 
-const HOSTS = { testnet: 'https://api-testnet.bybit.com', mainnet: 'https://api.bybit.com' };
+const HOSTS = { demo: 'https://api-demo.bybit.com', testnet: 'https://api-testnet.bybit.com', mainnet: 'https://api.bybit.com' };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 class BybitError extends Error {
@@ -11,7 +11,7 @@ class BybitError extends Error {
 
 class Client {
   constructor({ env = 'testnet', key, secret, minGapMs = 120, recvWindow = 5000, fetchImpl = fetch }) {
-    if (!HOSTS[env]) throw new Error(`env must be testnet|mainnet, got ${env}`);
+    if (!HOSTS[env]) throw new Error(`env must be demo|testnet|mainnet, got ${env}`);
     if (env === 'mainnet' && process.env.BYBIT_MAINNET_CONFIRM !== 'I-ACCEPT-REAL-MONEY-RISK')
       throw new Error('mainnet 은 BYBIT_MAINNET_CONFIRM=I-ACCEPT-REAL-MONEY-RISK 가 있어야 연결됩니다');
     Object.assign(this, { env, key, secret, minGapMs, recvWindow, fetchImpl, host: HOSTS[env], nextAt: 0 });

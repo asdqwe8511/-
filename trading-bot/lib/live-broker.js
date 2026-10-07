@@ -20,7 +20,7 @@ class LiveBroker {
   }
 
   async init() {
-    const rows = await this.c.paged('/v5/market/instruments-info', { category: 'linear', limit: '1000' }, false);
+    const rows = await this.c.paged('/v5/market/instruments-info', { category: 'linear', limit: '1000' }, false);  // demo 서버도 이 공개 API 를 제공하지만 실패하면 메인넷 값으로 대체해야 할 수 있음(테스트넷에서 확인)
     for (const r of rows) {
       if (r.status !== 'Trading' || r.contractType !== 'LinearPerpetual' || r.quoteCoin !== 'USDT' || r.settleCoin !== 'USDT') continue;
       this.inst.set(r.symbol, {
