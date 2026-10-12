@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>서점 좌표 채우기</title>
+<style>
+body{font:15px/1.5 system-ui,sans-serif;max-width:760px;margin:24px auto;padding:0 16px;color:#222}
+button{padding:8px 14px;margin-right:6px}progress{width:100%;height:18px}
+#log{height:240px;overflow:auto;background:#f6f6f6;padding:8px;font-size:13px;white-space:pre-wrap}
+</style></head><body>
+<h1>서점 좌표 채우기</h1>
+<p>키 없이 OpenStreetMap(Nominatim)으로 주소를 위도·경도로 바꿉니다. 이 PC의 브라우저에서 직접 실행되며 파일은 외부로 올라가지 않습니다(주소 문자열만 조회용으로 전송).</p>
+<p><input type="file" id="f" accept=".xlsx"> <button id="go" disabled>시작</button> <button id="stop" disabled>중지</button> <button id="dl" disabled>엑셀 내려받기</button></p>
+<progress id="p" value="0" max="1"></progress>
+<p id="st">서점목록_정리.xlsx 를 선택하세요.</p>
+<div id="log"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+let rows = [], running = false;
+const log = m => { $('log').textContent += m + '\n'; $('log').scrollTop = 1e9; };
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function nominatim(q) {
+  const u = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=kr&accept-language=ko&q=' + encodeURIComponent(q);
+  const r = await fetch(u);
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const j = await r.json();
+  return j[0] ? [(+j[0].lat).toFixed(6), (+j[0].lon).toFixed(6)] : null;
+}
+// 정확 → 건물번호 뺀 도로명(근사) 순으로 시도
+async function lookup(addr) {
+  let hit = await nominatim(addr);
+  if (hit) return [...hit, '정확'];
+  await sleep(1100);
+  const road = addr.replace(/\s\d+(-\d+)?$/, '');
+  if (road !== addr) { hit = await nominatim(road); if (hit) return [...hit, '근사(도로명)']; }
+  return null;
+}
+function show() {
+  const done = rows.filter(r => r['위도']).length, tried = rows.filter(r => r._t).length;
+  $('p').max = rows.length; $('p').value = tried;
+  $('st').textContent = `처리 ${tried}/${rows.length} · 좌표 채움 ${done}`;
+}
+$('f').onchange = async e => {
+  const wb = XLSX.read(await e.target.files[0].arrayBuffer());
+  rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {defval: ''});
+  if (!rows.length || !('검색용주소' in rows[0])) { $('st').textContent = '검색용주소 열이 있는 서점목록_정리.xlsx 를 선택하세요.'; return; }
+  if (!('정확도' in rows[0])) rows.forEach(r => r['정확도'] = '');
+  $('go').disabled = false; $('dl').disabled = false; show();
+};
+$('go').onclick = async () => {
+  running = true; $('go').disabled = true; $('stop').disabled = false;
+  for (const r of rows) {
+    if (!running) break;
+    if (r._t || r['위도']) continue;
+    try {
+      const h = r['검색용주소'] ? await lookup(r['검색용주소']) : null;
+      if (h) { r['위도'] = h[0]; r['경도'] = h[1]; r['정확도'] = h[2]; }
+      else { r['정확도'] = '실패'; log('실패: ' + r['상호'] + ' | ' + r['검색용주소']); }
+      r._t = 1;
+    } catch (err) { log('오류(' + err.message + ') — 10초 대기 후 재시도'); await sleep(10000); continue; }
+    show(); await sleep(1100); // 사용 정책: 초당 1건 이하
+  }
+  running = false; $('go').disabled = false; $('stop').disabled = true; show(); log('중지/완료');
+};
+$('stop').onclick = () => { running = false; };
+$('dl').onclick = () => {
+  const out = rows.map(({_t, ...r}) => r);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(out), '서점목록');
+  XLSX.writeFile(wb, '서점목록_좌표.xlsx');
+};
+</script></body></html>
