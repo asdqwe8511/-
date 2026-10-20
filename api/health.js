@@ -71,7 +71,8 @@ async function pingRedis() {
 const WANTED = [
   'ANTHROPIC_API_KEY', 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN',
   'SAJU_DAILY_LIMIT', 'SAJU_IP_HOURLY_LIMIT',
-  'SAJU_IP_SALT', 'SAJU_MAX_SECONDS'
+  'SAJU_IP_SALT', 'SAJU_MAX_SECONDS',
+  'BLOG_MODEL', 'BLOG_DAILY_LIMIT', 'BLOG_IP_HOURLY_LIMIT', 'BLOG_MAX_SECONDS'
 ];
 
 // 키가 안 보일 때 원인은 몇 가지뿐이다. 어느 것인지 짚어 주지 않으면 쓰는 사람은

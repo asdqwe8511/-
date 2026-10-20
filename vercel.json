@@ -3,6 +3,9 @@
   "functions": {
     "api/saju.js": {
       "maxDuration": 60
+    },
+    "api/blog.js": {
+      "maxDuration": 60
     }
   },
   "redirects": [
