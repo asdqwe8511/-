@@ -5,3 +5,4 @@ node_modules/
 skill-observations/
 .claude/settings.local.json
 .agents/
+blog-drafts/
