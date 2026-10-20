@@ -265,7 +265,12 @@
       if (!isHeic(file)) throw new Error(file.name);
       setStatus('status1', 'HEIC 사진을 JPG 로 바꾸는 중… (처음 한 번은 몇 초 걸려요)');
       var conv = await loadHeicConverter();
-      var out = await conv({ blob: file, toType: 'image/jpeg', quality: 0.9 });
+      var out;
+      try { out = await conv({ blob: file, toType: 'image/jpeg', quality: 0.9 }); }
+      catch(he) {
+        // 변환기가 못 읽는 HEIC 가 있다(최신 아이폰 HDR 사진 등). 이유를 화면에 보여 준다.
+        var err = new Error('HEIC 변환 실패'); err.detail = (he && (he.message || he.code)) || String(he); throw err;
+      }
       d = await decode(Array.isArray(out) ? out[0] : out);
       setStatus('status1', '');
     }
@@ -297,7 +302,7 @@
     if (files.length > room) setStatus('status1', '사진은 ' + MAX_IMAGES + '장까지입니다. 앞의 ' + room + '장만 넣었어요.', true);
     for (var f of files.slice(0, room)) {
       try { images.push(await shrink(f)); }
-      catch(e) { setStatus('status1', '이 사진은 열 수 없습니다: ' + f.name + ' (JPG·PNG로 바꿔 올려 주세요)', true); }
+      catch(e) { setStatus('status1', '이 사진은 열 수 없습니다: ' + f.name + ' (JPG·PNG로 바꿔 올려 주세요)' + (e && e.detail ? ' [' + e.detail + ']' : ''), true); }
     }
     renderThumbs();
   }
