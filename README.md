@@ -23,6 +23,9 @@ saju-engine.js          만세력·오행·성명학·궁합·택일 계산 엔�
 hanja-data.js           한글 음 → 한자 후보표(KS X 1001). 이름 한자 고르기에 씁니다.
 api/saju.js             사주 해석 엔드포인트. 서버가 직접 계산한 뒤 그 결과만
                          Claude 에게 넘기고 응답을 스트리밍합니다. 사용량 제한도 여기서.
+blog.html              네이버 블로그 글쓰기 도우미 UI(/blog). 사진 → 초안 → 내 생각 반영 재작성.
+api/blog.js             블로그 초안·재작성 엔드포인트. 사진은 저장·로그하지 않고
+                         모델에 넘긴 뒤 버립니다. 사용량 제한은 사주와 따로 셉니다.
 api/health.js           설정 점검. 어떤 키가 들어갔고 무엇이 켜졌는지 알려 줍니다.
 og-saju.png             링크 미리보기 이미지
 favicon.png             브라우저 탭 아이콘
@@ -30,6 +33,7 @@ robots.txt, sitemap.xml 검색 노출
 tools/make-og-saju.py   미리보기 이미지 생성
 tools/dev-server.js     PC용 개발 서버
 tools/test-saju.js      만세력·궁합·택일·연락처 계산 점검 (218가지)
+tools/test-blog.js      블로그 도우미 검증·사용량 제한·프롬프트 점검 (23가지)
 tools/test-quota.js     사용량 제한·시간 상한·키 없을 때 안내 점검 (25가지)
 tools/test-browser.js   휴대폰 크기 브라우저에서 화면 점검 (117가지, playwright 필요)
 tools/build-hanja.js    hanja-data.js 를 다시 만드는 스크립트
@@ -243,6 +247,9 @@ Vercel 프로젝트의 **Settings → Environment Variables** 에 넣습니다.
 | `SAJU_DAILY_LIMIT` | 선택 (기본 300) | 하루 총 풀이 횟수 |
 | `SAJU_IP_HOURLY_LIMIT` | 선택 (기본 10) | 한 사람이 한 시간에 부를 수 있는 횟수 |
 | `SAJU_IP_SALT` | 선택 | IP 해시에 섞는 값 |
+| `BLOG_MODEL` | 선택 (기본 claude-sonnet-5) | `/blog` 가 쓰는 모델 |
+| `BLOG_DAILY_LIMIT` | 선택 (기본 200) | `/blog` 하루 총 호출 수 |
+| `BLOG_IP_HOURLY_LIMIT` | 선택 (기본 20) | `/blog` 한 사람이 한 시간에 부를 수 있는 횟수 |
 
 키가 하나도 없어도 **사주표·오행·대운·시기·이름·궁합·연락처 비교는 전부 동작합니다.**
 계산이 브라우저에서 끝나기 때문입니다. 풀이 문장 자리에만 안내가 뜹니다.

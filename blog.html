@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#f2f3f7">
+<meta name="robots" content="noindex">
+<title>블로그 글쓰기 도우미</title>
+<meta name="description" content="사진을 올리면 네이버 블로그 초안을 쓰고, 내 생각을 넣으면 그 생각을 녹여 다시 써 줍니다.">
+<link rel="icon" type="image/png" href="/favicon.png">
+<style>
+  :root{
+    --bg:#f2f3f7; --panel:#ffffff; --panel-2:#f4f6f9; --border:#e4e7ee;
+    --text:#14161c; --text-dim:#586074; --text-mute:#8b93a3;
+    --accent:#03a94d; --accent-ink:#ffffff; --danger:#dc2f52;
+    --shadow:0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.08);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#101216; --panel:#1a1d23; --panel-2:#22262e; --border:#2d323c;
+      --text:#eceef2; --text-dim:#a3abbb; --text-mute:#7b8394;
+      --accent:#2fc16f; --accent-ink:#06210f; --danger:#ff6b86;
+      --shadow:none;
+    }
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+    line-height:1.55; overflow-x:hidden; -webkit-text-size-adjust:100%;
+    padding-bottom:calc(32px + env(safe-area-inset-bottom));
+  }
+  header{
+    padding:calc(14px + env(safe-area-inset-top)) 16px 12px;
+    background:var(--panel); border-bottom:1px solid var(--border);
+  }
+  header h1{font-size:18px;}
+  header p{font-size:13px; color:var(--text-dim); margin-top:2px;}
+  main{max-width:680px; margin:0 auto; padding:16px;}
+
+  section{
+    background:var(--panel); border:1px solid var(--border); border-radius:14px;
+    box-shadow:var(--shadow); padding:16px; margin-bottom:14px;
+  }
+  .step{display:flex; align-items:center; gap:8px; margin-bottom:12px;}
+  .step b{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:24px; height:24px; border-radius:50%; font-size:13px;
+    background:var(--accent); color:var(--accent-ink);
+  }
+  .step h2{font-size:16px;}
+  .hint{font-size:13px; color:var(--text-dim); margin-bottom:10px;}
+
+  label{display:block; font-size:13px; font-weight:600; margin:12px 0 6px;}
+  label:first-of-type{margin-top:0;}
+  input[type=text], select, textarea{
+    width:100%; font:inherit; font-size:16px; color:var(--text);
+    background:var(--panel-2); border:1px solid var(--border); border-radius:10px;
+    padding:11px 12px; min-height:46px; -webkit-appearance:none; appearance:none;
+  }
+  textarea{min-height:110px; resize:vertical; line-height:1.6;}
+  #post{min-height:340px;}
+  input:focus, select:focus, textarea:focus{outline:2px solid var(--accent); outline-offset:-1px;}
+  .row{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  @media (max-width:380px){ .row{grid-template-columns:1fr;} }
+
+  .drop{
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+    border:2px dashed var(--border); border-radius:12px; padding:20px 12px;
+    text-align:center; cursor:pointer; color:var(--text-dim); font-size:14px;
+  }
+  .drop:hover{border-color:var(--accent);}
+  .drop input{display:none;}
+  .thumbs{display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin-top:12px;}
+  .thumb{position:relative; aspect-ratio:1; border-radius:10px; overflow:hidden; background:var(--panel-2);}
+  .thumb img{width:100%; height:100%; object-fit:cover; display:block;}
+  .thumb .no{
+    position:absolute; left:6px; top:6px; background:rgba(0,0,0,.65); color:#fff;
+    font-size:12px; padding:1px 7px; border-radius:999px;
+  }
+  .thumb button{
+    position:absolute; right:4px; top:4px; width:28px; height:28px; border:0; border-radius:50%;
+    background:rgba(0,0,0,.65); color:#fff; font-size:16px; line-height:1; cursor:pointer;
+  }
+
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:6px;
+    min-height:48px; padding:0 18px; border-radius:12px; border:1px solid var(--border);
+    background:var(--panel-2); color:var(--text); font-size:15px; font-weight:600; cursor:pointer;
+  }
+  .btn.primary{background:var(--accent); color:var(--accent-ink); border-color:var(--accent);}
+  .btn:disabled{opacity:.5; cursor:not-allowed;}
+  .btn.block{width:100%; margin-top:14px;}
+  .actions{display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;}
+  .actions .btn{flex:1 1 auto;}
+
+  .status{font-size:13px; color:var(--text-dim); min-height:20px; margin-top:8px;}
+  .status.err{color:var(--danger);}
+  .meta{display:flex; justify-content:space-between; font-size:12px; color:var(--text-mute); margin-top:6px;}
+  .tips{font-size:13px; color:var(--text-dim); line-height:1.7;}
+  .tips li{margin-left:18px;}
+  .privacy{font-size:12px; color:var(--text-mute); text-align:center; margin-top:6px; padding:0 8px;}
+</style>
+</head>
+<body>
+<header>
+  <h1>블로그 글쓰기 도우미</h1>
+  <p>사진으로 초안을 만들고, 내 생각을 넣어 내 글로 다시 씁니다.</p>
+</header>
+
+<main>
+  <section>
+    <div class="step"><b>1</b><h2>사진과 정보</h2></div>
+    <p class="hint">사진은 올린 순서가 글의 [사진1], [사진2]… 순서가 됩니다. 최대 6장.</p>
+
+    <label class="drop" id="drop">
+      <input type="file" id="file" accept="image/*" multiple>
+      <span><b>사진 고르기</b> (또는 여기로 끌어놓기)</span>
+      <span id="dropNote">JPG · PNG · WEBP</span>
+    </label>
+    <div class="thumbs" id="thumbs"></div>
+
+    <div class="row" style="margin-top:14px">
+      <div>
+        <label for="topic">주제</label>
+        <select id="topic">
+          <option>맛집</option><option>카페</option><option>여행</option><option>육아</option>
+          <option>일상</option><option>제품 리뷰</option><option>기타</option>
+        </select>
+      </div>
+      <div>
+        <label for="keyword">핵심 키워드</label>
+        <input type="text" id="keyword" maxlength="80" placeholder="예: 성수동 칼국수">
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label for="tone">말투</label>
+        <select id="tone">
+          <option value="friendly">친근한 ~했어요</option>
+          <option value="plain">담백한 ~했다</option>
+          <option value="lively">발랄한 ~했어요</option>
+        </select>
+      </div>
+      <div>
+        <label for="length">분량</label>
+        <select id="length">
+          <option value="short">짧게 (약 900자)</option>
+          <option value="normal" selected>보통 (약 1,600자)</option>
+          <option value="long">길게 (약 2,600자)</option>
+        </select>
+      </div>
+    </div>
+
+    <label for="facts">확실한 정보 메모 (선택)</label>
+    <textarea id="facts" maxlength="3000" placeholder="가게 이름, 가격, 영업시간, 위치처럼 사진에 안 보이는 사실만 적어 주세요. 적지 않은 가격이나 이름은 AI가 지어내지 않고 '(확인 필요)'로 남겨 둡니다. 협찬을 받았다면 그렇게 적어 주세요."></textarea>
+
+    <button class="btn primary block" id="makeDraft">초안 만들기</button>
+    <div class="status" id="status1" role="status"></div>
+  </section>
+
+  <section>
+    <div class="step"><b>2</b><h2>글</h2></div>
+    <p class="hint">여기서 직접 고쳐도 됩니다. 글 속의 <b>(내 생각 자리: …)</b> 는 3단계에서 채워집니다.</p>
+    <textarea id="post" placeholder="초안이 여기에 나옵니다."></textarea>
+    <div class="meta"><span id="count">0자</span><span id="versionNote"></span></div>
+  </section>
+
+  <section>
+    <div class="step"><b>3</b><h2>내 생각 넣어 다시 쓰기</h2></div>
+    <p class="hint">거칠게 적어도 됩니다. 맛은 어땠는지, 다시 갈지, 아쉬운 점이 있었는지. AI가 의견을 순화하거나 없는 경험을 지어내지 않도록 시켜 두었습니다.</p>
+    <label for="notes" class="sr" style="display:none">내 생각</label>
+    <textarea id="notes" maxlength="3000" placeholder="예)&#10;국물이 생각보다 진했음, 간은 조금 짬&#10;웨이팅 30분, 재방문은 평일 점심에&#10;아이랑 가기엔 좁음"></textarea>
+    <button class="btn primary block" id="rewrite">내 생각 반영해서 다시 쓰기</button>
+    <div class="status" id="status2" role="status"></div>
+    <div class="actions">
+      <button class="btn" id="undo" disabled>이전 버전으로</button>
+      <button class="btn" id="stop" disabled>멈추기</button>
+    </div>
+  </section>
+
+  <section>
+    <div class="step"><b>4</b><h2>네이버에 올리기</h2></div>
+    <button class="btn primary block" id="copy" style="margin-top:0">글 전체 복사</button>
+    <div class="status" id="status3" role="status"></div>
+    <ul class="tips">
+      <li>네이버 블로그 글쓰기 화면에 붙여넣고, 제목은 '제목 후보' 중 하나를 골라 제목 칸에 넣으세요.</li>
+      <li>[사진1] 줄이 있는 자리에 같은 번호의 사진을 올리고, 그 줄은 지우세요.</li>
+      <li>(확인 필요) 표시와 가격·영업시간은 직접 확인하고 고치세요.</li>
+      <li>해시태그는 맨 아래 태그 칸에 옮겨 넣으면 됩니다.</li>
+    </ul>
+  </section>
+
+  <p class="privacy">사진과 글은 서버에 저장하지 않습니다. 쓰던 글과 메모만 이 기기의 브라우저에 남고, 지우려면 글을 비우세요.</p>
+</main>
+
+<script>
+(function(){
+  var MAX_IMAGES = 6;
+  var $ = function(id){ return document.getElementById(id); };
+  var images = [];          // { dataUrl, url }
+  var versions = [];        // 되돌리기용 이전 글
+  var controller = null;
+
+  // ── 저장(편의용): 사진은 저장하지 않고, 글과 설정만 이 기기에 둔다 ──
+  var KEYS = ['topic','keyword','tone','length','facts','notes','post'];
+  function save(){
+    try {
+      var o = {};
+      KEYS.forEach(function(k){ o[k] = $(k).value; });
+      localStorage.setItem('blog-helper', JSON.stringify(o));
+    } catch(e) {}
+  }
+  function load(){
+    try {
+      var o = JSON.parse(localStorage.getItem('blog-helper') || '{}');
+      KEYS.forEach(function(k){ if (typeof o[k] === 'string') $(k).value = o[k]; });
+    } catch(e) {}
+  }
+  KEYS.forEach(function(k){ $(k).addEventListener('input', function(){ save(); if (k === 'post') updateCount(); }); });
+
+  function updateCount(){
+    var n = $('post').value.replace(/\s/g, '').length;
+    $('count').textContent = '공백 제외 ' + n.toLocaleString() + '자';
+  }
+  function setStatus(id, msg, isErr){
+    var el = $(id); el.textContent = msg || ''; el.className = 'status' + (isErr ? ' err' : '');
+  }
+  function busy(on){
+    ['makeDraft','rewrite','copy','undo'].forEach(function(id){ $(id).disabled = on; });
+    $('stop').disabled = !on;
+    if (!on) $('undo').disabled = versions.length === 0;
+  }
+
+  // ── 사진: 폰 사진은 수 MB 라서 줄여서 보낸다(요청 본문 한도 4.5MB) ──
+  function shrink(file){
+    return new Promise(function(resolve, reject){
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function(){
+        var max = 1280, w = img.naturalWidth, h = img.naturalHeight;
+        var s = Math.min(1, max / Math.max(w, h));
+        var c = document.createElement('canvas');
+        c.width = Math.round(w * s); c.height = Math.round(h * s);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        var q = 0.82, data = c.toDataURL('image/jpeg', q);
+        while (data.length > 600000 && q > 0.4) { q -= 0.1; data = c.toDataURL('image/jpeg', q); }
+        resolve({ dataUrl: data, url: url });
+      };
+      img.onerror = function(){ URL.revokeObjectURL(url); reject(new Error(file.name)); };
+      img.src = url;
+    });
+  }
+  function renderThumbs(){
+    var box = $('thumbs'); box.innerHTML = '';
+    images.forEach(function(im, i){
+      var d = document.createElement('div'); d.className = 'thumb';
+      var img = document.createElement('img'); img.src = im.url; img.alt = '사진 ' + (i + 1);
+      var no = document.createElement('span'); no.className = 'no'; no.textContent = '사진' + (i + 1);
+      var x = document.createElement('button'); x.type = 'button'; x.textContent = '×';
+      x.setAttribute('aria-label', '사진 ' + (i + 1) + ' 빼기');
+      x.onclick = function(){ URL.revokeObjectURL(im.url); images.splice(i, 1); renderThumbs(); };
+      d.appendChild(img); d.appendChild(no); d.appendChild(x); box.appendChild(d);
+    });
+    $('dropNote').textContent = images.length ? images.length + '/' + MAX_IMAGES + '장 · 더 올릴 수 있어요' : 'JPG · PNG · WEBP';
+  }
+  async function addFiles(list){
+    var files = Array.prototype.slice.call(list).filter(function(f){ return /^image\//.test(f.type); });
+    var room = MAX_IMAGES - images.length;
+    if (files.length > room) setStatus('status1', '사진은 ' + MAX_IMAGES + '장까지입니다. 앞의 ' + room + '장만 넣었어요.', true);
+    for (var f of files.slice(0, room)) {
+      try { images.push(await shrink(f)); }
+      catch(e) { setStatus('status1', '이 사진은 열 수 없습니다: ' + e.message + ' (JPG·PNG로 바꿔 올려 주세요)', true); }
+    }
+    renderThumbs();
+  }
+  $('file').addEventListener('change', function(e){ addFiles(e.target.files); e.target.value = ''; });
+  var drop = $('drop');
+  drop.addEventListener('dragover', function(e){ e.preventDefault(); });
+  drop.addEventListener('drop', function(e){ e.preventDefault(); addFiles(e.dataTransfer.files); });
+
+  // ── 서버 호출: 응답을 흘려받으며 글 칸에 바로 채운다 ──
+  async function run(payload, statusId, startMsg){
+    var before = $('post').value;
+    controller = new AbortController();
+    busy(true); setStatus(statusId, startMsg);
+    var text = '';
+    try {
+      var res = await fetch('/api/blog', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload), signal: controller.signal
+      });
+      if (!res.ok) {
+        var msg = '글을 만들지 못했습니다.';
+        try { var j = await res.json(); if (j && j.error && j.error.message) msg = j.error.message; } catch(e) {}
+        throw new Error(msg);
+      }
+      var reader = res.body.getReader(), dec = new TextDecoder();
+      $('post').value = '';
+      for (;;) {
+        var r = await reader.read();
+        if (r.done) break;
+        text += dec.decode(r.value, { stream: true });
+        $('post').value = text; updateCount();
+      }
+      text += dec.decode();
+      $('post').value = text;
+      if (before.trim()) versions.push(before);
+      setStatus(statusId, '완료. 글 칸에서 직접 고칠 수도 있어요.');
+    } catch(e) {
+      if (e.name === 'AbortError') {
+        // 멈춘 데까지는 글로 남긴다. 아무것도 안 왔으면 원래 글로 되돌린다.
+        if (text.trim()) { if (before.trim()) versions.push(before); setStatus(statusId, '멈췄습니다. 받은 데까지 남겨 두었어요.'); }
+        else { $('post').value = before; setStatus(statusId, '멈췄습니다.'); }
+      } else {
+        $('post').value = before;
+        setStatus(statusId, e.message || '연결이 끊겼습니다. 다시 눌러 주세요.', true);
+      }
+    } finally {
+      controller = null; busy(false); updateCount(); save();
+      $('versionNote').textContent = versions.length ? '이전 버전 ' + versions.length + '개' : '';
+    }
+  }
+
+  $('makeDraft').onclick = function(){
+    if (!images.length && !$('facts').value.trim()) { setStatus('status1', '사진을 올리거나 메모를 적어 주세요.', true); return; }
+    if ($('post').value.trim() && !confirm('지금 글 칸의 내용이 새 초안으로 바뀝니다. 계속할까요? (이전 버전으로 되돌릴 수 있어요)')) return;
+    run({
+      mode: 'draft', images: images.map(function(i){ return i.dataUrl; }),
+      topic: $('topic').value, keyword: $('keyword').value, tone: $('tone').value,
+      length: $('length').value, notes: $('facts').value
+    }, 'status1', '사진을 보고 초안을 쓰는 중… 20~40초 걸립니다.');
+  };
+  $('rewrite').onclick = function(){
+    if (!$('post').value.trim()) { setStatus('status2', '먼저 1단계에서 초안을 만들어 주세요.', true); return; }
+    if (!$('notes').value.trim()) { setStatus('status2', '내 생각을 한 줄이라도 적어 주세요.', true); return; }
+    run({
+      mode: 'rewrite', draft: $('post').value, notes: $('notes').value,
+      topic: $('topic').value, keyword: $('keyword').value, tone: $('tone').value, length: $('length').value
+    }, 'status2', '내 생각을 녹여 다시 쓰는 중…');
+  };
+  $('stop').onclick = function(){ if (controller) controller.abort(); };
+  $('undo').onclick = function(){
+    if (!versions.length) return;
+    $('post').value = versions.pop(); updateCount(); save();
+    $('versionNote').textContent = versions.length ? '이전 버전 ' + versions.length + '개' : '';
+    $('undo').disabled = versions.length === 0;
+    setStatus('status2', '이전 버전으로 돌렸습니다.');
+  };
+
+  $('copy').onclick = async function(){
+    var t = $('post').value;
+    if (!t.trim()) { setStatus('status3', '복사할 글이 없습니다.', true); return; }
+    try { await navigator.clipboard.writeText(t); }
+    catch(e) { $('post').select(); document.execCommand('copy'); }
+    setStatus('status3', '복사했습니다. 네이버 블로그 글쓰기 화면에 붙여넣으세요.');
+  };
+
+  load(); updateCount(); renderThumbs();
+})();
+</script>
+</body>
+</html>
