@@ -19,12 +19,17 @@
 //   --out blog-drafts    초안 저장 폴더
 //   --topic / --keyword / --tone / --length   /blog 화면의 같은 항목
 //
+// 라이브포토(HEIC+MOV)도 됩니다: 사진만 JPG 로 바꿔 쓰고 영상은 무시합니다.
+// 5MB 가 넘는 원본도 줄여서 보내므로 상관없습니다.
+//
 // 사진과 같은 폴더에 "메모.txt" 가 있으면 가격·이름 같은 확실한 정보로 읽어 간다.
 const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
-const IMG = /\.(jpe?g|png|webp)$/i;
+// 아이폰 라이브포토는 사진(HEIC)과 짧은 영상(MOV)이 한 쌍으로 올라온다. 영상은 글에 쓰지
+// 않으므로 확장자 목록에 없어 자연스럽게 빠지고, 사진(HEIC)만 JPG 로 바꿔 쓴다.
+const IMG = /\.(jpe?g|png|webp|heic|heif)$/i;
 const MIME = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
 const MAX_PER_POST = 6;
 const POLL_MS = 30 * 1000;
@@ -83,18 +88,32 @@ function walk(dir, skip, out) {
   return out;
 }
 
-// 폰 원본은 수 MB 라 줄여서 보낸다. sharp 가 없으면 5MB 이하 사진만 그대로 보낸다.
-let sharp = null;
-try { sharp = require('sharp'); } catch (e) { /* 선택 사항 */ }
+// 폰 사진은 원본이 5MB 를 넘기 일쑤고 라이브포토는 HEIC 라서 그대로는 못 보낸다.
+// 그래서 항상 JPG 로 바꾸고 긴 쪽 1600px 로 줄여서 보낸다(보통 300KB 안팎).
+//   · HEIC → JPG: heic-convert (순수 JS, 윈도우·맥 어디서나 설치됨)
+//   · 줄이기·회전: sharp
+// 둘 다 optionalDependencies 라서 npm install 만 하면 들어온다.
+let sharp = null, heicConvert = null;
+try { sharp = require('sharp'); } catch (e) { /* 아래 시작 안내에서 알린다 */ }
+try { heicConvert = require('heic-convert'); } catch (e) { /* 위와 같다 */ }
+const isHeic = (p) => /\.(heic|heif)$/i.test(p);
+
 async function loadImage(file) {
-  const raw = fs.readFileSync(file.path);
+  let raw = fs.readFileSync(file.path);
+  if (isHeic(file.path)) {
+    if (!heicConvert) return { skip: 'HEIC 를 바꿀 도구(heic-convert)가 없습니다. npm install 을 다시 해 주세요.' };
+    const jpg = await heicConvert({ buffer: raw, format: 'JPEG', quality: 0.9 });
+    raw = Buffer.from(jpg);
+  }
   if (sharp) {
     const buf = await sharp(raw).rotate().resize({ width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true })
       .jpeg({ quality: 82 }).toBuffer();
-    return { media_type: 'image/jpeg', data: buf.toString('base64') };
+    return { image: { media_type: 'image/jpeg', data: buf.toString('base64') } };
   }
-  if (raw.length > 5 * 1024 * 1024) return null;
-  return { media_type: MIME[path.extname(file.path).toLowerCase()], data: raw.toString('base64') };
+  // sharp 가 없으면 줄일 수 없으니 5MB 이하 JPG/PNG/WEBP 만 그대로 보낸다.
+  if (raw.length > 5 * 1024 * 1024) return { skip: '5MB 가 넘는데 사진을 줄일 도구(sharp)가 없습니다. npm install 을 다시 해 주세요.' };
+  const ext = isHeic(file.path) ? '.jpg' : path.extname(file.path).toLowerCase();
+  return { image: { media_type: MIME[ext], data: raw.toString('base64') } };
 }
 
 function stamp(ms) {
@@ -139,7 +158,7 @@ async function main() {
   const idOf = (f) => f.path + '|' + f.mtime + '|' + f.size;
 
   console.log('폴더를 지켜보는 중: ' + watchDir);
-  console.log('초안 저장 위치: ' + outDir + '  (모델: ' + blog.MODEL + (sharp ? ', 사진 축소 켜짐' : ', 5MB 넘는 사진은 건너뜀') + ')');
+  console.log('초안 저장 위치: ' + outDir + '  (모델: ' + blog.MODEL + (sharp ? ', JPG 변환·축소 켜짐' : ', 사진 축소 꺼짐(npm install 필요)') + ')');
 
   async function scan() {
     const files = walk(watchDir, outDir, []).filter((f) => f.mtime >= since && f.size > 0 && !state[idOf(f)]);
@@ -152,8 +171,8 @@ async function main() {
       try {
         const imgs = [], used = [];
         for (const f of g) {
-          const img = await loadImage(f);
-          if (img) { imgs.push(img); used.push(f); } else console.log('  건너뜀(5MB 초과, sharp 없음): ' + f.path);
+          const r = await loadImage(f);
+          if (r.image) { imgs.push(r.image); used.push(f); } else console.log('  건너뜀: ' + f.path + ' — ' + r.skip);
         }
         if (!imgs.length) { g.forEach((f) => { state[idOf(f)] = 'skipped'; }); saveState(); continue; }
         let notes = '';
