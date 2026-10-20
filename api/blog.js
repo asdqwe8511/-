@@ -322,3 +322,15 @@ module.exports = async (req, res) => {
 };
 
 module.exports.MODEL = MODEL;
+module.exports.TONES = Object.keys(TONES);
+module.exports.LENGTHS = Object.keys(LENGTHS);
+module.exports.TOPICS = TOPICS;
+// 내 PC 에서 도는 tools/blog-watch.js 가 같은 프롬프트로 초안을 쓰게 한다.
+// 프롬프트가 두 군데로 갈라지면 사이트와 폴더 감시의 글 모양이 달라진다.
+module.exports.draftRequest = (input) => ({
+  model: MODEL,
+  max_tokens: 6000,
+  system: SYSTEM_DRAFT,
+  messages: [{ role: 'user', content: buildUser(Object.assign(
+    { mode: 'draft', images: [], notes: '', topic: '기타', keyword: '', tone: 'friendly', length: 'normal' }, input)) }]
+});

@@ -79,6 +79,20 @@ const PIC = 'data:image/jpeg;base64,/9j/4AAQSkZJRg==';
   ok('키가 없으면 503 과 할 일 안내', r.status_ === 503 && /ANTHROPIC_API_KEY/.test(r.body), r.status_);
   process.env.ANTHROPIC_API_KEY = saved;
 
+  console.log('폴더 감시');
+  const { groupFiles } = require('./blog-watch.js');
+  const M = 60 * 1000;
+  const f = (n, min) => ({ path: n, mtime: min * M });
+  let gr = groupFiles([f('a', 0), f('b', 5), f('c', 60), f('d', 62)], 20 * M);
+  ok('20분 넘게 벌어지면 다른 글로 자른다', gr.length === 2 && gr[0].length === 2 && gr[1].length === 2, JSON.stringify(gr));
+  gr = groupFiles([f('b', 5), f('a', 0)], 20 * M);
+  ok('시간순으로 정렬한다', gr[0][0].path === 'a');
+  gr = groupFiles(Array.from({ length: 8 }, (_, i) => f('p' + i, i)), 20 * M);
+  ok('한 글은 6장까지', gr.length === 2 && gr[0].length === 6 && gr[1].length === 2, gr.map((x) => x.length));
+  const req = handler.draftRequest({ images: [{ media_type: 'image/jpeg', data: 'AA==' }], topic: '카페' });
+  ok('draftRequest 가 사이트와 같은 프롬프트·사진 블록을 만든다',
+    req.system.length > 100 && req.messages[0].content.some((b) => b.type === 'image') && /카페/.test(JSON.stringify(req.messages)));
+
   console.log('\n' + pass + ' 통과, ' + fail + ' 실패');
   process.exit(fail ? 1 : 0);
 })();
