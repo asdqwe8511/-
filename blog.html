@@ -114,9 +114,9 @@
     <p class="hint">사진은 올린 순서가 글의 [사진1], [사진2]… 순서가 됩니다. 최대 6장.</p>
 
     <label class="drop" id="drop">
-      <input type="file" id="file" accept="image/*" multiple>
+      <input type="file" id="file" accept="image/*,.heic,.heif" multiple>
       <span><b>사진 고르기</b> (또는 여기로 끌어놓기)</span>
-      <span id="dropNote">JPG · PNG · WEBP</span>
+      <span id="dropNote">JPG · PNG · WEBP · HEIC(아이폰)</span>
     </label>
     <div class="thumbs" id="thumbs"></div>
 
@@ -233,23 +233,50 @@
   }
 
   // ── 사진: 폰 사진은 수 MB 라서 줄여서 보낸다(요청 본문 한도 4.5MB) ──
-  function shrink(file){
+  // 아이폰 HEIC 는 사파리만 그대로 열 수 있다. 윈도우·크롬에서는 열리지 않으므로
+  // 열기에 실패하면 HEIC → JPG 변환기를 그때 한 번만 불러와서 바꾼다.
+  var HEIC = /\.(heic|heif)$/i;
+  function isHeic(f){ return HEIC.test(f.name) || /^image\/(heic|heif)/i.test(f.type); }
+  var heicLoader = null;
+  function loadHeicConverter(){
+    if (window.heic2any) return Promise.resolve(window.heic2any);
+    if (!heicLoader) heicLoader = new Promise(function(resolve, reject){
+      var sc = document.createElement('script');
+      sc.src = '/vendor/heic2any.min.js';
+      sc.onload = function(){ resolve(window.heic2any); };
+      sc.onerror = function(){ heicLoader = null; reject(new Error('HEIC 변환기를 불러오지 못했습니다')); };
+      document.head.appendChild(sc);
+    });
+    return heicLoader;
+  }
+  function decode(blob){
     return new Promise(function(resolve, reject){
-      var url = URL.createObjectURL(file);
+      var url = URL.createObjectURL(blob);
       var img = new Image();
-      img.onload = function(){
-        var max = 1280, w = img.naturalWidth, h = img.naturalHeight;
-        var s = Math.min(1, max / Math.max(w, h));
-        var c = document.createElement('canvas');
-        c.width = Math.round(w * s); c.height = Math.round(h * s);
-        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-        var q = 0.82, data = c.toDataURL('image/jpeg', q);
-        while (data.length > 600000 && q > 0.4) { q -= 0.1; data = c.toDataURL('image/jpeg', q); }
-        resolve({ dataUrl: data, url: url });
-      };
-      img.onerror = function(){ URL.revokeObjectURL(url); reject(new Error(file.name)); };
+      img.onload = function(){ resolve({ img: img, url: url }); };
+      img.onerror = function(){ URL.revokeObjectURL(url); reject(new Error('decode')); };
       img.src = url;
     });
+  }
+  async function shrink(file){
+    var d;
+    try { d = await decode(file); }
+    catch(e) {
+      if (!isHeic(file)) throw new Error(file.name);
+      setStatus('status1', 'HEIC 사진을 JPG 로 바꾸는 중… (처음 한 번은 몇 초 걸려요)');
+      var conv = await loadHeicConverter();
+      var out = await conv({ blob: file, toType: 'image/jpeg', quality: 0.9 });
+      d = await decode(Array.isArray(out) ? out[0] : out);
+      setStatus('status1', '');
+    }
+    var img = d.img, max = 1280, w = img.naturalWidth, h = img.naturalHeight;
+    var s = Math.min(1, max / Math.max(w, h));
+    var c = document.createElement('canvas');
+    c.width = Math.round(w * s); c.height = Math.round(h * s);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    var q = 0.82, data = c.toDataURL('image/jpeg', q);
+    while (data.length > 600000 && q > 0.4) { q -= 0.1; data = c.toDataURL('image/jpeg', q); }
+    return { dataUrl: data, url: d.url };
   }
   function renderThumbs(){
     var box = $('thumbs'); box.innerHTML = '';
@@ -262,15 +289,15 @@
       x.onclick = function(){ URL.revokeObjectURL(im.url); images.splice(i, 1); renderThumbs(); };
       d.appendChild(img); d.appendChild(no); d.appendChild(x); box.appendChild(d);
     });
-    $('dropNote').textContent = images.length ? images.length + '/' + MAX_IMAGES + '장 · 더 올릴 수 있어요' : 'JPG · PNG · WEBP';
+    $('dropNote').textContent = images.length ? images.length + '/' + MAX_IMAGES + '장 · 더 올릴 수 있어요' : 'JPG · PNG · WEBP · HEIC(아이폰)';
   }
   async function addFiles(list){
-    var files = Array.prototype.slice.call(list).filter(function(f){ return /^image\//.test(f.type); });
+    var files = Array.prototype.slice.call(list).filter(function(f){ return /^image\//.test(f.type) || isHeic(f); });
     var room = MAX_IMAGES - images.length;
     if (files.length > room) setStatus('status1', '사진은 ' + MAX_IMAGES + '장까지입니다. 앞의 ' + room + '장만 넣었어요.', true);
     for (var f of files.slice(0, room)) {
       try { images.push(await shrink(f)); }
-      catch(e) { setStatus('status1', '이 사진은 열 수 없습니다: ' + e.message + ' (JPG·PNG로 바꿔 올려 주세요)', true); }
+      catch(e) { setStatus('status1', '이 사진은 열 수 없습니다: ' + f.name + ' (JPG·PNG로 바꿔 올려 주세요)', true); }
     }
     renderThumbs();
   }
