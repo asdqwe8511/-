@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#f2f3f7">
+<meta name="robots" content="noindex">
+<title>BTC EMA200 리테스트</title>
+<meta name="description" content="일봉·4시간봉 EMA200 기준으로 지금 어느 단계인지 보여 주고, 같은 규칙을 과거에 돌려 봅니다.">
+<link rel="icon" type="image/png" href="/favicon.png">
+<style>
+  :root{
+    --bg:#f2f3f7; --panel:#ffffff; --panel-2:#f4f6f9; --border:#e4e7ee;
+    --text:#14161c; --text-dim:#586074; --text-mute:#8b93a3;
+    --up:#d6334f; --down:#1f6feb; --accent:#2b3a67; --warn:#b7791f;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#101216; --panel:#1a1d23; --panel-2:#22262e; --border:#2d323c;
+      --text:#eceef2; --text-dim:#a3abbb; --text-mute:#7b8394;
+      --up:#ff6b86; --down:#6aa4ff; --accent:#9db4ff; --warn:#e8b04b;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 -apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif}
+  main{max-width:880px;margin:0 auto;padding:16px}
+  h1{font-size:19px;margin:4px 0 2px}
+  .sub{color:var(--text-mute);font-size:13px;margin-bottom:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px}
+  .card h2{font-size:14px;margin:0 0 10px;color:var(--text-dim);font-weight:600}
+  .stage{font-size:20px;font-weight:700;margin:0 0 4px}
+  .stage.short{color:var(--down)} .stage.long{color:var(--up)} .stage.idle{color:var(--text-dim)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+  .kv{background:var(--panel-2);border-radius:8px;padding:8px 10px}
+  .kv b{display:block;font-size:12px;color:var(--text-mute);font-weight:500}
+  .kv span{font-size:15px;font-variant-numeric:tabular-nums}
+  .note{color:var(--text-dim);font-size:13px;margin:8px 0 0}
+  canvas{width:100%;height:300px;display:block}
+  table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+  th,td{text-align:right;padding:6px 6px;border-bottom:1px solid var(--border);white-space:nowrap}
+  th:first-child,td:first-child{text-align:left}
+  th{color:var(--text-mute);font-weight:500}
+  .scroll{overflow-x:auto}
+  .pos{color:var(--up)} .neg{color:var(--down)}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+  button{font:inherit;background:var(--accent);color:var(--bg);border:0;border-radius:8px;padding:7px 14px;cursor:pointer}
+  button[disabled]{opacity:.5}
+  select,input{font:inherit;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:6px 8px}
+  .err{color:var(--warn)}
+  @media (max-width:520px){canvas{height:240px}}
+</style>
+</head>
+<body>
+<main>
+  <h1>BTC EMA200 리테스트</h1>
+  <div class="sub">바이낸스 USDT 선물 공개 시세 · API 키 없음 · 이 화면은 참고용이며 주문을 내지 않습니다</div>
+
+  <div class="card" id="status"><h2>지금 상태</h2><div id="statusBody">불러오는 중…</div></div>
+
+  <div class="card"><h2>4시간봉 + EMA200 (최근 120봉)</h2><canvas id="chart"></canvas>
+    <p class="note">▼ 숏 진입 · ▲ 롱 진입 · ✕ 청산(손절) · ● 이탈봉</p></div>
+
+  <div class="card">
+    <h2>백테스트</h2>
+    <div class="row">
+      <label>몸통 기준 <select id="th"><option value="0.5" selected>절반 (50%)</option><option value="0.33">1/3</option><option value="0.67">2/3</option></select></label>
+      <label>편도 수수료 <input id="fee" type="number" step="0.01" value="0.04" style="width:70px"> %</label>
+      <button id="rerun">다시 계산</button>
+    </div>
+    <div id="summary"></div>
+    <div class="scroll"><table id="trades"></table></div>
+    <p class="note">익절 규칙(4시간봉 3배 오더블록)은 정의가 정해지지 않아 아직 넣지 않았습니다. 지금 결과는 "손절 신호가 나올 때까지 보유"입니다. 수익을 보장하지 않으며, 레버리지는 반영하지 않은 현물 기준 손익률입니다.</p>
+  </div>
+</main>
+
+<script src="/trade-engine.js"></script>
+<script>
+(function () {
+  var BASE = 'https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT';
+  var h4 = [], daily = [], result = null;
+  var $ = function (id) { return document.getElementById(id); };
+  var pct = function (x, d) { return (x * 100).toFixed(d == null ? 2 : d) + '%'; };
+  var num = function (x) { return x.toLocaleString('en-US', { maximumFractionDigits: 1 }); };
+  var fmtT = function (t) { var d = new Date(t); return d.toLocaleDateString('ko-KR', { year: '2-digit', month: '2-digit', day: '2-digit' }) + ' ' + String(d.getHours()).padStart(2, '0') + '시'; };
+
+  function toCandle(k) { return { t: k[0], o: +k[1], h: +k[2], l: +k[3], c: +k[4] }; }
+
+  // 과거로 거슬러 가며 한 번에 1500개씩 받는다. 아직 마감하지 않은 마지막 봉은 뺀다.
+  async function fetchAll(interval, total) {
+    var out = [], end = null;
+    while (out.length < total) {
+      var url = BASE + '&interval=' + interval + '&limit=1500' + (end ? '&endTime=' + end : '');
+      var r = await fetch(url);
+      if (!r.ok) throw new Error('바이낸스 응답 ' + r.status + (r.status === 451 ? ' (이 지역에서 막힘)' : ''));
+      var rows = (await r.json()).map(toCandle);
+      if (!rows.length) break;
+      out = rows.concat(out);
+      end = rows[0].t - 1;
+      if (rows.length < 1500) break;
+    }
+    var now = Date.now(), span = interval === '1d' ? TradeEngine.DAY_MS : TradeEngine.H4_MS;
+    return out.filter(function (c) { return c.t + span <= now; });
+  }
+
+  function renderStatus(s) {
+    var dirTxt = { short: '숏', long: '롱' };
+    var html = '', b = s.bias;
+    if (s.stage === 'nodata') { $('statusBody').textContent = s.text; return; }
+    var title, cls = s.dir || 'idle';
+    if (s.stage === 'holding') title = (dirTxt[s.dir]) + ' 보유 중 (가상)';
+    else if (s.stage === 'waiting') title = dirTxt[s.dir] + ' 리테스트 대기';
+    else if (s.stage === 'blocked') { title = '관망 (일봉과 방향이 다름)'; cls = 'idle'; }
+    else { title = '관망 (이탈봉 없음)'; cls = 'idle'; }
+    html += '<p class="stage ' + cls + '">' + title + '</p><div class="grid">';
+    html += '<div class="kv"><b>큰 방향 (일봉 EMA200)</b><span>' + (b ? (b.dir === 'short' ? '하방 · 숏만' : '상방 · 롱만') : '-') + '</span></div>';
+    html += '<div class="kv"><b>4시간봉 위치</b><span>' + (s.side4h === 'short' ? 'EMA200 아래' : 'EMA200 위') + ' (' + pct(s.distPct) + ')</span></div>';
+    html += '<div class="kv"><b>방향 일치</b><span>' + (s.aligned ? '일치' : '불일치') + '</span></div>';
+    html += '<div class="kv"><b>최근 종가 / EMA200</b><span>' + num(s.close) + ' / ' + num(s.ema4h) + '</span></div>';
+    if (s.stage === 'holding') {
+      html += '<div class="kv"><b>진입가</b><span>' + num(s.entry) + '</span></div>';
+      html += '<div class="kv"><b>평가손익 (레버리지 전)</b><span class="' + (s.pnl >= 0 ? 'pos' : 'neg') + '">' + pct(s.pnl) + '</span></div>';
+      html += '<div class="kv"><b>손절 기준선</b><span>' + num(s.stopLine) + ' (몸통 절반 이상 반대편 마감 시)</span></div>';
+    }
+    if (s.stage === 'waiting') html += '<div class="kv"><b>이탈 후 지난 봉</b><span>' + s.barsSince + '개</span></div>';
+    html += '</div>';
+    var msg = {
+      holding: '반대편으로 몸통 절반 이상 마감한 봉이 나오기 전까지는 꼬리로 선을 찔러도 손절 신호가 아닙니다.',
+      waiting: 'EMA200 선에 닿았다가 원래 방향으로 마감하는 봉이 나오면 그 봉 종가가 진입 신호입니다.',
+      blocked: '이탈은 있었지만 일봉 방향과 달라 진입 근거가 없습니다.',
+      idle: '몸통 절반 이상이 EMA200 반대편에서 마감한 이탈봉을 기다리는 중입니다.'
+    }[s.stage];
+    html += '<p class="note">' + msg + ' 마지막 마감 봉: ' + fmtT(h4[h4.length - 1].t) + '</p>';
+    $('statusBody').innerHTML = html;
+  }
+
+  function renderSummary(r) {
+    var s = TradeEngine.summarize(r.trades);
+    if (!s.n) { $('summary').innerHTML = '<p class="note">거래가 없습니다.</p>'; $('trades').innerHTML = ''; return; }
+    var kv = function (k, v) { return '<div class="kv"><b>' + k + '</b><span>' + v + '</span></div>'; };
+    $('summary').innerHTML = '<div class="grid">' + kv('기간', fmtT(h4[0].t).slice(0, 8) + ' ~ ' + fmtT(h4[h4.length - 1].t).slice(0, 8)) +
+      kv('거래 수', s.n) + kv('승률', pct(s.winRate, 0)) + kv('평균 손익', pct(s.avg)) +
+      kv('누적 (복리)', pct(s.total)) + kv('손익비', s.profitFactor == null ? '-' : s.profitFactor.toFixed(2)) +
+      kv('최대 낙폭', pct(s.maxDrawdown)) + kv('평균 최대 역행', pct(s.avgMae)) + kv('평균 보유', (s.avgBars * 4 / 24).toFixed(1) + '일') + '</div>';
+    var rows = r.trades.slice().reverse().map(function (t) {
+      return '<tr><td>' + fmtT(t.entryT) + '</td><td>' + (t.dir === 'short' ? '숏' : '롱') + '</td><td>' + num(t.entry) + '</td><td>' + num(t.exit) +
+        '</td><td class="' + (t.pnl >= 0 ? 'pos' : 'neg') + '">' + pct(t.pnl) + '</td><td>' + pct(t.mae) + '</td><td>' + (t.bars * 4 / 24).toFixed(1) + '일</td></tr>';
+    }).join('');
+    $('trades').innerHTML = '<tr><th>진입</th><th>방향</th><th>진입가</th><th>청산가</th><th>손익</th><th>최대 역행</th><th>보유</th></tr>' + rows;
+  }
+
+  function drawChart(r) {
+    var cv = $('chart'), dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+    cv.width = W * dpr; cv.height = H * dpr;
+    var g = cv.getContext('2d'); g.scale(dpr, dpr);
+    var cs = getComputedStyle(document.documentElement);
+    var col = function (n) { return cs.getPropertyValue(n).trim(); };
+    var N = 120, from = Math.max(0, h4.length - N), view = h4.slice(from);
+    var lo = Infinity, hi = -Infinity;
+    view.forEach(function (c, k) { lo = Math.min(lo, c.l); hi = Math.max(hi, c.h); var e = r.ema4h[from + k]; if (e) { lo = Math.min(lo, e); hi = Math.max(hi, e); } });
+    var pad = (hi - lo) * 0.06; lo -= pad; hi += pad;
+    var X = function (k) { return 8 + (k + 0.5) * (W - 60) / view.length; };
+    var Y = function (p) { return 8 + (hi - p) / (hi - lo) * (H - 16); };
+    var bw = Math.max(1.5, (W - 60) / view.length * 0.6);
+    view.forEach(function (c, k) {
+      var up = c.c >= c.o; g.strokeStyle = g.fillStyle = up ? col('--up') : col('--down');
+      g.beginPath(); g.moveTo(X(k), Y(c.h)); g.lineTo(X(k), Y(c.l)); g.stroke();
+      g.fillRect(X(k) - bw / 2, Math.min(Y(c.o), Y(c.c)), bw, Math.max(1, Math.abs(Y(c.o) - Y(c.c))));
+    });
+    g.strokeStyle = col('--warn'); g.lineWidth = 2; g.beginPath();
+    var started = false;
+    view.forEach(function (c, k) { var e = r.ema4h[from + k]; if (e == null) return; if (!started) { g.moveTo(X(k), Y(e)); started = true; } else g.lineTo(X(k), Y(e)); });
+    g.stroke(); g.lineWidth = 1;
+    g.font = '12px sans-serif'; g.textAlign = 'center'; g.fillStyle = col('--text');
+    r.events.forEach(function (ev) {
+      if (ev.i < from) return;
+      var k = ev.i - from, c = h4[ev.i];
+      if (ev.type === 'entry') g.fillText(ev.dir === 'short' ? '▼' : '▲', X(k), ev.dir === 'short' ? Y(c.h) - 4 : Y(c.l) + 14);
+      else if (ev.type === 'stop') g.fillText('✕', X(k), Y(c.c) - 4);
+      else if (ev.type === 'break') g.fillText('●', X(k), ev.dir === 'short' ? Y(c.l) + 14 : Y(c.h) - 4);
+    });
+    g.textAlign = 'left'; g.fillStyle = col('--text-mute');
+    g.fillText(num(hi), W - 52, 16); g.fillText(num(lo), W - 52, H - 6);
+  }
+
+  function compute() {
+    var th = +$('th').value, fee = (+$('fee').value || 0) / 100;
+    result = TradeEngine.run(h4, daily, { threshold: th, fee: fee });
+    renderStatus(result.state); renderSummary(result); drawChart(result);
+  }
+
+  async function load() {
+    try {
+      var res = await Promise.all([fetchAll('4h', 6000), fetchAll('1d', 1500)]);
+      h4 = res[0]; daily = res[1];
+      compute();
+    } catch (e) {
+      $('statusBody').innerHTML = '<span class="err">시세를 불러오지 못했습니다: ' + e.message + '</span>';
+    }
+  }
+  $('rerun').onclick = function () { if (h4.length) compute(); };
+  window.addEventListener('resize', function () { if (result) drawChart(result); });
+  load();
+})();
+</script>
+</body>
+</html>

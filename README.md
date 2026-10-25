@@ -30,6 +30,10 @@ tools/blog-watch.js     N드라이브 같은 사진 폴더(라이브포토 HEIC�
                          txt 로 만들어 둡니다(내 PC 에서 실행, blog-drafts/ 에 저장).
 tools/heic-to-jpg.js    N드라이브 사진(HEIC)을 JPG 로 바꿔 바탕화면 "네이버마이박스" 폴더에 따로
                          모읍니다. 원본은 그대로 두고, 수정 시각을 원본과 맞춥니다.
+trade-engine.js         BTC 선물 EMA200 리테스트 전략 엔진(일봉 방향 + 4시간봉 이탈·리테스트·종가 손절).
+                         브라우저와 테스트가 같은 파일을 씁니다.
+trade.html             전략 상태 패널·차트·백테스트 UI(/trade). 바이낸스 공개 시세를 브라우저에서 직접 받아 키가 필요 없습니다.
+tools/test-trade.js     전략 규칙 점검 (19가지)
 api/health.js           설정 점검. 어떤 키가 들어갔고 무엇이 켜졌는지 알려 줍니다.
 og-saju.png             링크 미리보기 이미지
 favicon.png             브라우저 탭 아이콘
