@@ -38,6 +38,11 @@ tools/make-og-saju.py   미리보기 이미지 생성
 tools/dev-server.js     PC용 개발 서버
 tools/test-saju.js      만세력·궁합·택일·연락처 계산 점검 (218가지)
 tools/test-blog.js      블로그 도우미 검증·사용량 제한·프롬프트 점검 (23가지)
+position.html          포지션 사이징 계산기(/position) + 비트코인 백테스트 UI. 숫자는 브라우저 안에서만 계산.
+position-engine.js      RSI·MACD·일목 지표, 사이징(현물·선물·롱·숏·청산가), 1:2:6 백테스트 엔진.
+                         화면·CLI·테스트가 같은 파일을 씁니다.
+tools/backtest-btc.js   바이낸스 BTC 일봉(현물·선물·펀딩비)을 받아 1:2:6 / 한 번에 / 물타기를 비교(내 PC에서 실행).
+tools/test-position.js  지표·사이징·백테스트 불변식 점검 (42가지)
 tools/test-quota.js     사용량 제한·시간 상한·키 없을 때 안내 점검 (25가지)
 tools/test-browser.js   휴대폰 크기 브라우저에서 화면 점검 (117가지, playwright 필요)
 tools/build-hanja.js    hanja-data.js 를 다시 만드는 스크립트
@@ -83,6 +88,20 @@ npm test                     # 계산 점검 (키 없이 됩니다)
 npm i -D playwright          # 화면 점검을 하려면 한 번만
 npm run test:browser         # 개발 서버를 띄워 둔 채로
 ```
+
+## 포지션 사이징 · 백테스트 (/position)
+
+"내가 틀리면 얼마를 잃지"를 먼저 정하고 매수 금액을 거꾸로 구합니다. 후지모토식 1:2:6 분할
+(RSI 복귀 → MACD 골든크로스 → 일목구름 돌파 뒤 지지)을 같은 위험 규칙으로 "한 번에 진입",
+"신호 없이 물타기"와 비교합니다. 선물(롱·숏·레버리지·펀딩비·청산가)도 지원합니다.
+
+```bash
+node tools/backtest-btc.js                    # 바이낸스 현물·선물 BTC 일봉 6년, 세 방식 비교
+node tools/backtest-btc.js --csv btc.csv      # 네트워크가 막혔을 때 직접 받은 시세로
+```
+
+서버(api/)는 쓰지 않고 키도 필요 없습니다. 시세는 브라우저(또는 내 PC)에서 바이낸스 공개
+API 로 직접 받습니다. 과거 성과는 앞으로를 보장하지 않습니다.
 
 ## 배포에 키 넣기
 

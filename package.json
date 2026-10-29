@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "node tools/dev-server.js",
-    "test": "node tools/test-saju.js && node tools/test-quota.js && node tools/test-blog.js",
+    "test": "node tools/test-saju.js && node tools/test-quota.js && node tools/test-blog.js && node tools/test-position.js",
     "test:browser": "node tools/test-browser.js"
   },
   "optionalDependencies": {

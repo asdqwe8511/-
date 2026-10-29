@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#f2f3f7">
+<meta name="robots" content="noindex">
+<title>포지션 사이징 계산기</title>
+<meta name="description" content="내가 틀리면 얼마를 잃을지 먼저 정하고 매수 금액을 거꾸로 계산합니다. 1:2:6 분할, 현물·선물, 비트코인 백테스트.">
+<link rel="icon" type="image/png" href="/favicon.png">
+<style>
+  :root{
+    --bg:#f2f3f7; --panel:#ffffff; --panel-2:#f4f6f9; --border:#e4e7ee;
+    --text:#14161c; --text-dim:#586074; --text-mute:#8b93a3;
+    --accent:#2f6bff; --accent-ink:#ffffff; --good:#12915a; --bad:#dc2f52; --warn:#b87500;
+    --s1:#2f6bff; --s2:#e8590c; --s3:#8b93a3;
+    --shadow:0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.08);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#101216; --panel:#1a1d23; --panel-2:#22262e; --border:#2d323c;
+      --text:#eceef2; --text-dim:#a3abbb; --text-mute:#7b8394;
+      --accent:#6b93ff; --accent-ink:#0a1230; --good:#3ecf8e; --bad:#ff6b86; --warn:#f0b429;
+      --s1:#6b93ff; --s2:#ff9a52; --s3:#7b8394; --shadow:none;
+    }
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+    line-height:1.55; overflow-x:hidden; -webkit-text-size-adjust:100%;
+    padding-bottom:calc(32px + env(safe-area-inset-bottom));
+  }
+  header{padding:calc(14px + env(safe-area-inset-top)) 16px 12px; background:var(--panel); border-bottom:1px solid var(--border);}
+  header h1{font-size:18px;}
+  header p{font-size:13px; color:var(--text-dim); margin-top:2px;}
+  main{max-width:720px; margin:0 auto; padding:16px;}
+  section{background:var(--panel); border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow); padding:16px; margin-bottom:14px;}
+  h2{font-size:16px; margin-bottom:4px;}
+  .hint{font-size:13px; color:var(--text-dim); margin-bottom:12px;}
+  label{display:block; font-size:13px; font-weight:600; margin:12px 0 6px;}
+  input[type=number], input[type=text], select{
+    width:100%; font:inherit; font-size:16px; color:var(--text); background:var(--panel-2);
+    border:1px solid var(--border); border-radius:10px; padding:10px 12px; min-height:46px; -webkit-appearance:none; appearance:none;
+  }
+  input:focus, select:focus{outline:2px solid var(--accent); outline-offset:-1px;}
+  .row{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .row3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;}
+  @media (max-width:420px){ .row3{grid-template-columns:1fr 1fr;} }
+  .seg{display:grid; grid-auto-flow:column; grid-auto-columns:1fr; gap:6px;}
+  .seg button{min-height:44px; border:1px solid var(--border); background:var(--panel-2); color:var(--text); border-radius:10px; font:inherit; font-size:15px; font-weight:600; cursor:pointer;}
+  .seg button[aria-pressed=true]{background:var(--accent); color:var(--accent-ink); border-color:var(--accent);}
+  .btn{display:inline-flex; align-items:center; justify-content:center; min-height:48px; padding:0 18px; border-radius:12px; border:1px solid var(--border); background:var(--panel-2); color:var(--text); font:inherit; font-size:15px; font-weight:600; cursor:pointer;}
+  .btn.primary{background:var(--accent); color:var(--accent-ink); border-color:var(--accent);}
+  .btn:disabled{opacity:.5; cursor:default;}
+  .btns{display:flex; flex-wrap:wrap; gap:8px; margin-top:14px;}
+  details{margin-top:12px;} summary{cursor:pointer; font-size:13px; font-weight:600; color:var(--text-dim); min-height:32px;}
+  .big{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin:14px 0;}
+  .stat{background:var(--panel-2); border-radius:12px; padding:12px;}
+  .stat small{display:block; font-size:12px; color:var(--text-dim);}
+  .stat b{font-size:19px; display:block; word-break:break-all;}
+  .stat em{font-style:normal; font-size:12px; color:var(--text-mute);}
+  table{width:100%; border-collapse:collapse; font-size:13px; font-variant-numeric:tabular-nums;}
+  th,td{padding:8px 6px; text-align:right; border-bottom:1px solid var(--border); white-space:nowrap;}
+  th:first-child,td:first-child{text-align:left;}
+  th{font-size:12px; color:var(--text-dim); font-weight:600;}
+  .scroll{overflow-x:auto; -webkit-overflow-scrolling:touch;}
+  .warn{background:var(--panel-2); border-left:3px solid var(--warn); padding:8px 12px; border-radius:6px; font-size:13px; margin-top:8px;}
+  .warn.bad{border-color:var(--bad);}
+  .pos{color:var(--good);} .neg{color:var(--bad);}
+  .note{font-size:12px; color:var(--text-mute); margin-top:12px; line-height:1.6;}
+  .legend{display:flex; flex-wrap:wrap; gap:12px; font-size:12px; color:var(--text-dim); margin:8px 0 4px;}
+  .legend i{display:inline-block; width:12px; height:3px; border-radius:2px; margin-right:5px; vertical-align:middle;}
+  svg.chart{width:100%; height:auto; display:block;}
+  #status{font-size:13px; color:var(--text-dim); margin-top:10px; min-height:20px;}
+</style>
+</head>
+<body>
+<header>
+  <h1>포지션 사이징 계산기</h1>
+  <p>"올라가면 얼마 벌지"가 아니라 "내가 틀리면 얼마 잃지"를 먼저 정하고, 그 안에서 매수 금액을 정합니다.</p>
+</header>
+<main>
+
+<section id="calc">
+  <h2>1. 얼마나 살까</h2>
+  <p class="hint">숫자는 이 브라우저 안에서만 계산하고 어디에도 보내거나 저장하지 않습니다.</p>
+
+  <label>거래 종류</label>
+  <div class="seg" id="kind">
+    <button type="button" data-k="spot" aria-pressed="true">현물</button>
+    <button type="button" data-k="fut" aria-pressed="false">선물</button>
+  </div>
+  <div id="sideBox" hidden>
+    <label>방향</label>
+    <div class="seg" id="side">
+      <button type="button" data-s="long" aria-pressed="true">롱(오른다)</button>
+      <button type="button" data-s="short" aria-pressed="false">숏(내린다)</button>
+    </div>
+  </div>
+
+  <div class="row">
+    <div><label for="account">계좌 금액</label><input id="account" type="number" inputmode="decimal" value="10000" min="0" step="any"></div>
+    <div><label for="riskPct">최대 손실 (계좌의 %)</label><input id="riskPct" type="number" inputmode="decimal" value="2" min="0" step="any"></div>
+  </div>
+  <div class="row">
+    <div><label for="entry">진입가</label><input id="entry" type="number" inputmode="decimal" value="100000" min="0" step="any"></div>
+    <div><label for="stop">손절가</label><input id="stop" type="number" inputmode="decimal" value="96000" min="0" step="any"></div>
+  </div>
+  <div id="levBox" hidden>
+    <div class="row">
+      <div><label for="lev">레버리지 (배)</label><input id="lev" type="number" inputmode="decimal" value="3" min="1" step="any"></div>
+      <div><label for="mmr">유지증거금률 (%)</label><input id="mmr" type="number" inputmode="decimal" value="0.5" min="0" step="any"></div>
+    </div>
+  </div>
+
+  <details>
+    <summary>수수료 · 분할 비율 · 단계별 예상가</summary>
+    <div class="row">
+      <div><label for="fee">수수료 (한 번당 %)</label><input id="fee" type="number" inputmode="decimal" value="0.1" min="0" step="any"></div>
+      <div><label for="slip">슬리피지 (한 번당 %)</label><input id="slip" type="number" inputmode="decimal" value="0.02" min="0" step="any"></div>
+    </div>
+    <label>분할 비율 (1단계 : 2단계 : 3단계)</label>
+    <div class="row3">
+      <input id="w1" type="number" inputmode="decimal" value="1" min="0" step="any" aria-label="1단계 비율">
+      <input id="w2" type="number" inputmode="decimal" value="2" min="0" step="any" aria-label="2단계 비율">
+      <input id="w3" type="number" inputmode="decimal" value="6" min="0" step="any" aria-label="3단계 비율">
+    </div>
+    <label>단계별 예상 체결가 (비우면 진입가와 같다고 봅니다)</label>
+    <div class="row3">
+      <input id="p1" type="number" inputmode="decimal" placeholder="1단계" step="any" aria-label="1단계 예상가">
+      <input id="p2" type="number" inputmode="decimal" placeholder="2단계" step="any" aria-label="2단계 예상가">
+      <input id="p3" type="number" inputmode="decimal" placeholder="3단계" step="any" aria-label="3단계 예상가">
+    </div>
+    <p class="note">뒤 단계가 더 비싸게 체결될 걸 알고 넣으면, 모든 단계를 채운 뒤 손절가에서 닫아도 손실이 한도 안에 들도록 전체 금액이 줄어듭니다.</p>
+  </details>
+
+  <div id="out"></div>
+</section>
+
+<section id="bt">
+  <h2>2. 비트코인으로 백테스트</h2>
+  <p class="hint">같은 위험 규칙(위 "최대 손실 %")과 같은 정리 규칙으로 <b>1:2:6 분할</b>, <b>첫 신호에 한 번에</b>, <b>신호 없이 물타기</b> 세 가지를 비교합니다. 신호는 RSI(14) → MACD(12·26·9) → 일목구름 순서입니다.</p>
+
+  <div class="row">
+    <div><label for="src">시세</label>
+      <select id="src">
+        <option value="spot">바이낸스 현물 BTCUSDT</option>
+        <option value="fut">바이낸스 선물 BTCUSDT (펀딩비 반영)</option>
+      </select></div>
+    <div><label for="years">기간</label>
+      <select id="years"><option value="3">최근 3년</option><option value="6" selected>최근 6년</option><option value="9">최근 9년</option></select></div>
+  </div>
+  <div class="btns">
+    <button class="btn primary" id="run" type="button">시세 받아서 백테스트</button>
+    <label class="btn" for="csv" style="margin:0">CSV 파일로</label>
+    <input id="csv" type="file" accept=".csv,text/csv" hidden>
+  </div>
+  <p class="note">CSV 형식: <code>time,open,high,low,close</code> (time 은 밀리초 또는 날짜, 일봉). 위의 거래 종류·방향·레버리지·수수료·위험 설정을 그대로 씁니다.</p>
+  <div id="status" role="status"></div>
+  <div id="btOut"></div>
+</section>
+
+<section>
+  <h2>읽기 전에</h2>
+  <p class="note" style="margin-top:0">
+    · 이 페이지는 투자 권유가 아니라 규칙을 숫자로 확인하는 도구입니다. 과거 성과는 앞으로를 보장하지 않습니다.<br>
+    · 백테스트는 일봉 종가 체결, 손절은 다음 칸부터 저가/고가로 검사, 갭이면 시가 체결로 가정합니다. 실제 체결·호가 공백·거래소 장애는 반영하지 못합니다.<br>
+    · 선물 청산가는 격리 증거금 기준 근사식(진입가×(1−1/배수+유지증거금률))입니다. 거래소마다 계산이 다르니 실제 주문 전 거래소의 청산가를 꼭 확인하세요.<br>
+    · "영상에서 이렇게 한다고 했다"는 근거가 아니라 직접 검증한 숫자만 믿으세요.
+  </p>
+</section>
+
+</main>
+<script src="/position-engine.js"></script>
+<script>
+(function(){
+  'use strict';
+  var E = window.PositionEngine;
+  var $ = function(id){ return document.getElementById(id); };
+  var state = { kind:'spot', side:'long' };
+  var KEY = 'position-calc-v1';
+
+  function num(id){ var v = parseFloat($(id).value); return isFinite(v) ? v : NaN; }
+  function fmt(x, d){ if (!isFinite(x)) return '—'; return x.toLocaleString('ko-KR', { maximumFractionDigits: d === undefined ? 0 : d, minimumFractionDigits: 0 }); }
+  function price(x){ return fmt(x, x >= 1000 ? 0 : x >= 1 ? 2 : 6); }
+  function pct(x, d){ return isFinite(x) ? x.toFixed(d === undefined ? 1 : d) + '%' : '—'; }
+
+  function save(){ try { var o = { kind:state.kind, side:state.side }; document.querySelectorAll('input[type=number]').forEach(function(i){ o[i.id] = i.value; }); localStorage.setItem(KEY, JSON.stringify(o)); } catch(e){} }
+  function load(){ try { var o = JSON.parse(localStorage.getItem(KEY) || 'null'); if (!o) return; if (o.kind) state.kind = o.kind; if (o.side) state.side = o.side; document.querySelectorAll('input[type=number]').forEach(function(i){ if (o[i.id] !== undefined) i.value = o[i.id]; }); } catch(e){} }
+
+  function syncUi(){
+    document.querySelectorAll('#kind button').forEach(function(b){ b.setAttribute('aria-pressed', b.dataset.k === state.kind); });
+    document.querySelectorAll('#side button').forEach(function(b){ b.setAttribute('aria-pressed', b.dataset.s === state.side); });
+    $('sideBox').hidden = state.kind !== 'fut'; $('levBox').hidden = state.kind !== 'fut';
+    if (state.kind !== 'fut') state.side = 'long';
+  }
+
+  function params(){
+    var fut = state.kind === 'fut';
+    var stagePrices = [num('p1'), num('p2'), num('p3')];
+    var hasSP = stagePrices.every(function(x){ return isFinite(x) && x > 0; });
+    return {
+      account:num('account'), riskPct:num('riskPct'), entry:num('entry'), stop:num('stop'),
+      side: fut ? state.side : 'long', leverage: fut ? (num('lev') || 1) : 1, mmrPct: num('mmr'),
+      feePct:num('fee') || 0, slipPct:num('slip') || 0,
+      weights:[num('w1'), num('w2'), num('w3')], stagePrices: hasSP ? stagePrices : null
+    };
+  }
+
+  function renderCalc(){
+    var p = params(), out = $('out');
+    if (!p.weights.every(function(x){ return isFinite(x) && x >= 0; }) || p.weights.every(function(x){ return !x; })) { out.innerHTML = '<div class="warn bad">분할 비율은 0 이상 숫자로 넣어 주세요.</div>'; return; }
+    var r = E.sizePosition(p), h = '';
+    if (!r.ok) { out.innerHTML = r.warnings.map(function(w){ return '<div class="warn bad">' + w + '</div>'; }).join(''); return; }
+    var fut = state.kind === 'fut';
+    h += '<div class="big">' +
+      '<div class="stat"><small>총 매수 금액</small><b>' + fmt(r.totalNotional) + '</b><em>계좌의 ' + pct(r.notionalPct) + '</em></div>' +
+      '<div class="stat"><small>틀렸을 때 손실(손절 시)</small><b class="neg">−' + fmt(r.lossAtStop) + '</b><em>계좌의 ' + pct(r.lossAtStopPct, 2) + ' · 손절폭 ' + pct(r.stopDistPct) + '</em></div>' +
+      (fut ? '<div class="stat"><small>필요 증거금</small><b>' + fmt(r.margin) + '</b><em>계좌의 ' + pct(r.marginPct) + '</em></div>' +
+             '<div class="stat"><small>청산가(근사)</small><b class="' + (r.liqBeforeStop ? 'neg' : '') + '">' + price(r.liqPrice) + '</b><em>손절가 ' + price(p.stop) + '</em></div>' : '') +
+      '</div>';
+    h += '<div class="scroll"><table><thead><tr><th>단계</th><th>비율</th><th>가격</th><th>금액</th><th>수량</th>' + (fut ? '<th>증거금</th>' : '') + '</tr></thead><tbody>';
+    r.stages.forEach(function(s){
+      h += '<tr><td>' + s.stage + '단계</td><td>' + pct(100 * s.share, 0) + '</td><td>' + price(s.price) + '</td><td>' + fmt(s.notional) + '</td><td>' + fmt(s.units, 6) + '</td>' + (fut ? '<td>' + fmt(s.margin) + '</td>' : '') + '</tr>';
+    });
+    h += '<tr><td><b>합계</b></td><td>100%</td><td>평단 ' + price(r.avgEntry) + '</td><td><b>' + fmt(r.totalNotional) + '</b></td><td>' + fmt(r.totalUnits, 6) + '</td>' + (fut ? '<td>' + fmt(r.margin) + '</td>' : '') + '</tr></tbody></table></div>';
+    r.warnings.forEach(function(w){ h += '<div class="warn' + (/청산|거부|아래|위입니다/.test(w) ? ' bad' : '') + '">' + w + '</div>'; });
+    if (fut) h += '<p class="note">이 매수 금액은 레버리지와 상관없이 같습니다. 레버리지는 증거금만 바꾸고, 손실 한도는 "금액 × 손절폭"이 정합니다. 배수를 올릴수록 청산가만 손절가에 가까워집니다. 이 조건의 권장 상한은 약 ' + r.maxSafeLeverage.toFixed(1) + '배입니다.</p>';
+    out.innerHTML = h;
+  }
+
+  // ── 백테스트 ───────────────────────────────────────────────────────────
+  var chartColors = ['var(--s1)', 'var(--s2)', 'var(--s3)'];
+  function setStatus(t){ $('status').textContent = t; }
+
+  async function getJson(url){ var r = await fetch(url); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }
+  async function klines(base, path, since){
+    var out = [], from = since;
+    for (;;) {
+      var rows = await getJson(base + path + '?symbol=BTCUSDT&interval=1d&startTime=' + from + '&limit=1000');
+      if (!rows.length) break;
+      rows.forEach(function(k){ out.push({ t:k[0], o:+k[1], h:+k[2], l:+k[3], c:+k[4] }); });
+      from = rows[rows.length - 1][0] + 1;
+      setStatus('시세 받는 중... ' + out.length + '개');
+      if (rows.length < 1000) break;
+    }
+    return out;
+  }
+  async function meanFunding(since){
+    var rates = [], from = since;
+    for (;;) {
+      var rows = await getJson('https://fapi.binance.com/fapi/v1/fundingRate?symbol=BTCUSDT&startTime=' + from + '&limit=1000');
+      if (!rows.length) break;
+      rows.forEach(function(r){ rates.push(+r.fundingRate * 100); });
+      from = rows[rows.length - 1].fundingTime + 1;
+      if (rows.length < 1000) break;
+    }
+    return rates.length ? rates.reduce(function(a, b){ return a + b; }, 0) / rates.length : 0.01;
+  }
+  function parseCsv(text){
+    var out = [];
+    text.trim().split(/\r?\n/).forEach(function(line){
+      var r = line.split(','), t = /^\d+$/.test(r[0]) ? +r[0] : Date.parse(r[0]);
+      var o = +r[1], h = +r[2], l = +r[3], c = +r[4];
+      if (isFinite(t) && isFinite(o) && isFinite(h) && isFinite(l) && isFinite(c)) out.push({ t:t, o:o, h:h, l:l, c:c });
+    });
+    return out.sort(function(a, b){ return a.t - b.t; });
+  }
+
+  function btOptions(funding){
+    var p = params(), fut = state.kind === 'fut';
+    return { side:p.side, leverage:p.leverage, riskPct:p.riskPct, feePct:p.feePct, slipPct:p.slipPct, mmrPct:isFinite(p.mmrPct) ? p.mmrPct : 0.5,
+             weights:p.weights, barHours:24, startEquity:10000, fundingPer8hPct: fut ? funding : 0 };
+  }
+
+  function chart(series, labels, t0, t1){
+    var W = 640, H = 220, pl = 8, pr = 8, pt = 8, pb = 22, n = series[0].length;
+    var all = [].concat.apply([], series).filter(isFinite), lo = Math.min.apply(null, all), hi = Math.max.apply(null, all);
+    if (hi === lo) hi = lo + 1;
+    var x = function(i){ return pl + (W - pl - pr) * i / (n - 1); }, y = function(v){ return pt + (H - pt - pb) * (1 - (v - lo) / (hi - lo)); };
+    var s = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="자산 곡선 비교">';
+    var base = y(10000);
+    if (base > pt && base < H - pb) s += '<line x1="' + pl + '" x2="' + (W - pr) + '" y1="' + base + '" y2="' + base + '" stroke="var(--border)" stroke-dasharray="4 4"/>';
+    series.forEach(function(arr, k){
+      var step = Math.max(1, Math.floor(n / 400)), d = '';
+      for (var i = 0; i < n; i += step) d += (d ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(arr[i]).toFixed(1);
+      d += 'L' + x(n - 1).toFixed(1) + ',' + y(arr[n - 1]).toFixed(1);
+      s += '<path d="' + d + '" fill="none" stroke="' + chartColors[k] + '" stroke-width="2" stroke-linejoin="round"/>';
+    });
+    s += '<text x="' + pl + '" y="' + (H - 6) + '" font-size="11" fill="var(--text-mute)">' + t0 + '</text>';
+    s += '<text x="' + (W - pr) + '" y="' + (H - 6) + '" font-size="11" fill="var(--text-mute)" text-anchor="end">' + t1 + '</text></svg>';
+    return s + '<div class="legend">' + labels.map(function(l, k){ return '<span><i style="background:' + chartColors[k] + '"></i>' + l + '</span>'; }).join('') + '</div>';
+  }
+
+  function renderBt(candles, funding, srcLabel){
+    var opt = btOptions(funding), modes = [['1:2:6 분할', 'ladder'], ['한 번에 진입', 'allin'], ['물타기(신호 없이)', 'avgdown']];
+    var rs = modes.map(function(m){ return E.backtest(candles, Object.assign({}, opt, { mode:m[1] })); });
+    var d0 = new Date(candles[0].t).toISOString().slice(0, 10), d1 = new Date(candles[candles.length - 1].t).toISOString().slice(0, 10);
+    var cls = function(x){ return x > 0 ? 'pos' : x < 0 ? 'neg' : ''; };
+    var h = '<p class="hint" style="margin-top:14px">' + srcLabel + ' · ' + d0 + ' ~ ' + d1 + ' · 캔들 ' + candles.length + '개 · ' +
+      (opt.side === 'short' ? '숏' : '롱') + ' ' + (opt.leverage > 1 ? opt.leverage + '배' : '현물') + ' · 거래당 위험 ' + opt.riskPct + '%' +
+      (opt.fundingPer8hPct ? ' · 펀딩 평균 ' + opt.fundingPer8hPct.toFixed(4) + '%/8h' : '') + '</p>';
+    h += '<div class="scroll"><table><thead><tr><th>방식</th><th>거래</th><th>승률</th><th>기대R</th><th>PF</th><th>총수익</th><th>최대낙폭</th><th>1/2/3단계</th><th>청산</th></tr></thead><tbody>';
+    rs.forEach(function(r, k){
+      var s = r.stats;
+      h += '<tr><td>' + modes[k][0] + '</td><td>' + s.trades + '</td><td>' + pct(s.winRatePct) + '</td><td class="' + cls(s.expectancyR) + '">' + (isFinite(s.expectancyR) ? s.expectancyR.toFixed(2) : '—') +
+        '</td><td>' + (isFinite(s.profitFactor) ? s.profitFactor.toFixed(2) : '∞') + '</td><td class="' + cls(s.totalReturnPct) + '">' + pct(s.totalReturnPct) + '</td><td>' + pct(s.maxDrawdownPct) +
+        '</td><td>' + s.stageReach.join('/') + '</td><td>' + s.liquidations + '</td></tr>';
+    });
+    var bh = rs[0].stats.buyHoldReturnPct;
+    h += '<tr><td>단순 보유(롱, 참고)</td><td colspan="4"></td><td class="' + cls(bh) + '">' + pct(bh) + '</td><td colspan="3"></td></tr></tbody></table></div>';
+    h += chart(rs.map(function(r){ return r.equity; }), modes.map(function(m){ return m[0]; }), d0, d1);
+    var l = rs[0].stats;
+    h += '<p class="note"><b>읽는 법</b> — 기대R: 거래 1건이 평균 몇 R(=위험으로 정한 손실액)을 남기는가. PF: 총이익÷총손실. 1/2/3단계: 각 단계까지 실제로 들어간 거래 수(1:2:6은 3단계까지 가는 경우가 드물어, 대부분 1~2단계에서 끝납니다 — 이 거래 수를 꼭 보세요). 청산: 손절보다 먼저 강제청산된 횟수.<br>' +
+      '1:2:6 분할은 거래 ' + l.trades + '건 중 2단계까지 ' + l.stageReach[1] + '건, 3단계까지 ' + l.stageReach[2] + '건 갔습니다. 표본이 작으면 수익률 차이는 우연일 수 있습니다.</p>';
+    $('btOut').innerHTML = h;
+    var warnings = rs[0].warnings; if (warnings.length) $('btOut').innerHTML += '<div class="warn">' + warnings.join(' ') + '</div>';
+  }
+
+  async function runFetch(){
+    var btn = $('run'); btn.disabled = true; $('btOut').innerHTML = '';
+    try {
+      var years = +$('years').value, since = Date.now() - years * 365.25 * 864e5, fut = $('src').value === 'fut';
+      setStatus('시세 받는 중...');
+      var candles = fut ? await klines('https://fapi.binance.com', '/fapi/v1/klines', since) : await klines('https://api.binance.com', '/api/v3/klines', since);
+      var f = 0.01;
+      if (fut) { setStatus('펀딩비 받는 중...'); try { f = await meanFunding(since); } catch (e) {} }
+      setStatus(''); renderBt(candles, f, fut ? '바이낸스 선물 BTCUSDT 일봉' : '바이낸스 현물 BTCUSDT 일봉');
+    } catch (e) {
+      setStatus('시세를 받지 못했습니다(' + e.message + '). 네트워크·지역 제한이 있으면 CSV 파일로 돌려 보세요.');
+    } finally { btn.disabled = false; }
+  }
+
+  function bind(){
+    document.querySelectorAll('#kind button').forEach(function(b){ b.addEventListener('click', function(){ state.kind = b.dataset.k; syncUi(); renderCalc(); save(); }); });
+    document.querySelectorAll('#side button').forEach(function(b){ b.addEventListener('click', function(){ state.side = b.dataset.s; syncUi(); renderCalc(); save(); }); });
+    document.querySelectorAll('input[type=number]').forEach(function(i){ i.addEventListener('input', function(){ renderCalc(); save(); }); });
+    $('run').addEventListener('click', runFetch);
+    $('csv').addEventListener('change', function(ev){
+      var f = ev.target.files && ev.target.files[0]; if (!f) return;
+      var rd = new FileReader();
+      rd.onload = function(){ var c = parseCsv(String(rd.result)); ev.target.value = '';
+        if (c.length < 120) { setStatus('읽은 캔들이 ' + c.length + '개입니다. 일봉 120개 이상, time,open,high,low,close 형식인지 확인해 주세요.'); return; }
+        setStatus(''); renderBt(c, 0.01, 'CSV 파일'); };
+      rd.readAsText(f);
+    });
+  }
+
+  load(); syncUi(); bind(); renderCalc();
+})();
+</script>
+</body>
+</html>
