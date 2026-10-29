@@ -139,5 +139,33 @@ console.log('백테스트 — 입력 검증');
   ok('캔들이 너무 적으면 경고하고 거래 없이 끝남', r.warnings.length > 0 && r.trades.length === 0, JSON.stringify(r.warnings));
 }
 
+console.log('백테스트 — 노이즈 필터');
+{
+  const cs = synth(2500, 11, 0.0002, 0.03);
+  const off = E.backtest(cs, {});
+  const tr = E.backtest(cs, { trendMaPeriod: 200 });
+  ok('필터를 안 켜면 기존 결과와 같음(기본값 0)', JSON.stringify(E.backtest(cs, { trendMaPeriod: 0, cooldownBars: 0, atrStopMult: 0 }).stats) === JSON.stringify(off.stats), '');
+  ok('추세 필터를 켜면 거래가 줄어듦(' + off.trades.length + '→' + tr.trades.length + ')', tr.trades.length < off.trades.length, '');
+  const ma = E.sma(cs.map(x => x.c), 200);
+  ok('롱 진입은 전부 종가가 200칸 평균 위', tr.trades.every(t => cs[t.openIdx].c > ma[t.openIdx]), '');
+  const trS = E.backtest(cs, { trendMaPeriod: 200, side: 'short', leverage: 2 });
+  ok('숏 진입은 전부 종가가 200칸 평균 아래', trS.trades.length > 0 && trS.trades.every(t => cs[t.openIdx].c < ma[t.openIdx]), trS.trades.length);
+  const sl = E.backtest(cs, { trendMaPeriod: 100, trendMode: 'slope' });
+  const ma100 = E.sma(cs.map(x => x.c), 100);
+  ok('기울기 필터: 롱 진입은 전부 100칸 평균이 10칸 전보다 높음(' + sl.trades.length + '건)', sl.trades.length > 0 && sl.trades.every(t => ma100[t.openIdx] > ma100[t.openIdx - 10]), sl.trades.length);
+  const cd = E.backtest(cs, { cooldownBars: 10 });
+  let gapOk = true; for (let i = 1; i < cd.trades.length; i++) if (cd.trades[i].openIdx - cd.trades[i - 1].closeIdx <= 10) gapOk = false;
+  ok('쿨다운 10칸: 닫은 뒤 10칸 안에는 재진입 없음', gapOk && cd.trades.length <= off.trades.length, '');
+  const at = E.backtest(cs, { atrStopMult: 2 });
+  ok('ATR 손절도 최소~최대 폭 안(1%~15%)', at.trades.length > 0 && at.trades.every(t => { const d = (t.avgEntry - t.stop) / t.avgEntry; return d > 0.0099 && d < 0.1501; }), '');
+  const calm = synth(600, 3, 0, 0.01), wild = synth(600, 3, 0, 0.05);
+  const a1 = E.atr(calm.map(x => x.h), calm.map(x => x.l), calm.map(x => x.c)), a2 = E.atr(wild.map(x => x.h), wild.map(x => x.l), wild.map(x => x.c));
+  ok('ATR: 변동성이 큰 시세가 더 큼', a2[500] / wild[500].c > a1[500] / calm[500].c, '');
+  ok('SMA: 1..5 의 3칸 평균은 2,3,4', (v => v[2] === 2 && v[3] === 3 && v[4] === 4)(E.sma([1, 2, 3, 4, 5], 3)), '');
+  let worst = 0;
+  for (let seed = 1; seed <= 20; seed++) E.backtest(synth(1500, seed, 0.0003, 0.025), { trendMaPeriod: 100, cooldownBars: 3, atrStopMult: 2 }).trades.forEach(t => { if (t.reason === 'stop' && t.R < worst) worst = t.R; });
+  ok('필터를 모두 켜도 손절 손실 ≥ −1.25R (최악 ' + worst.toFixed(3) + 'R)', worst >= -1.25, worst);
+}
+
 console.log('\n' + pass + ' 통과 / ' + fail + ' 실패');
 process.exit(fail ? 1 : 0);

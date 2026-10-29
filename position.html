@@ -151,6 +151,24 @@
     <div><label for="years">기간</label>
       <select id="years"><option value="3">최근 3년</option><option value="6" selected>최근 6년</option><option value="9">최근 9년</option></select></div>
   </div>
+  <details open>
+    <summary>노이즈 필터 (가짜 신호 줄이기)</summary>
+    <div class="row">
+      <div><label for="trend">추세 필터 (1단계 진입 조건)</label>
+        <select id="trend">
+          <option value="0|above">끔</option>
+          <option value="200|above">종가가 200칸 평균 위(숏은 아래)</option>
+          <option value="100|above">종가가 100칸 평균 위(숏은 아래)</option>
+          <option value="200|slope">200칸 평균선이 오르는 중(숏은 내리는 중)</option>
+          <option value="100|slope">100칸 평균선이 오르는 중(숏은 내리는 중)</option>
+        </select></div>
+      <div><label for="atr">손절 방식</label>
+        <select id="atr"><option value="0">최근 저점/고점</option><option value="2">ATR(14)×2</option><option value="3">ATR(14)×3</option></select></div>
+    </div>
+    <label for="cool">쿨다운 (닫은 뒤 N칸 재진입 금지)</label>
+    <input id="cool" type="number" inputmode="numeric" value="0" min="0" step="1">
+    <p class="note">RSI 30 복귀는 하락 추세에서 가장 많이 틀립니다. "평균 위" 필터는 신호가 거의 안 나올 수 있어(거래 수를 꼭 확인) 기울기 필터도 둡니다. 필터를 켜면 거래가 줄어드니 앞/뒤 구간 모두에서 좋은지 CLI(<code>node tools/backtest-btc.js</code>)의 필터 비교표로 확인하세요.</p>
+  </details>
   <div class="btns">
     <button class="btn primary" id="run" type="button">시세 받아서 백테스트</button>
     <label class="btn" for="csv" style="margin:0">CSV 파일로</label>
@@ -271,7 +289,8 @@
   function btOptions(funding){
     var p = params(), fut = state.kind === 'fut';
     return { side:p.side, leverage:p.leverage, riskPct:p.riskPct, feePct:p.feePct, slipPct:p.slipPct, mmrPct:isFinite(p.mmrPct) ? p.mmrPct : 0.5,
-             weights:p.weights, barHours:24, startEquity:10000, fundingPer8hPct: fut ? funding : 0 };
+             weights:p.weights, barHours:24, trendMaPeriod:+$('trend').value.split('|')[0], trendMode:$('trend').value.split('|')[1],
+             atrStopMult:+$('atr').value, cooldownBars:Math.max(0, parseInt($('cool').value, 10) || 0), startEquity:10000, fundingPer8hPct: fut ? funding : 0 };
   }
 
   function chart(series, labels, t0, t1){
@@ -300,6 +319,7 @@
     var cls = function(x){ return x > 0 ? 'pos' : x < 0 ? 'neg' : ''; };
     var h = '<p class="hint" style="margin-top:14px">' + srcLabel + ' · ' + d0 + ' ~ ' + d1 + ' · 캔들 ' + candles.length + '개 · ' +
       (opt.side === 'short' ? '숏' : '롱') + ' ' + (opt.leverage > 1 ? opt.leverage + '배' : '현물') + ' · 거래당 위험 ' + opt.riskPct + '%' +
+      (opt.trendMaPeriod ? ' · 추세 필터 ' + opt.trendMaPeriod + (opt.trendMode === 'slope' ? '칸 기울기' : '칸 평균') : '') + (opt.atrStopMult ? ' · ATR×' + opt.atrStopMult + ' 손절' : '') + (opt.cooldownBars ? ' · 쿨다운 ' + opt.cooldownBars : '') +
       (opt.fundingPer8hPct ? ' · 펀딩 평균 ' + opt.fundingPer8hPct.toFixed(4) + '%/8h' : '') + '</p>';
     h += '<div class="scroll"><table><thead><tr><th>방식</th><th>거래</th><th>승률</th><th>기대R</th><th>PF</th><th>총수익</th><th>최대낙폭</th><th>1/2/3단계</th><th>청산</th></tr></thead><tbody>';
     rs.forEach(function(r, k){

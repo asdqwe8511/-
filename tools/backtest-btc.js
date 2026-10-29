@@ -98,6 +98,31 @@ function row(label, r) {
     }
   }
   console.log('\n  단순 보유(현물 롱, 같은 기간): ' + f(bh.buyHoldReturnPct) + '%   ← 위 표 수익률은 위험을 ' + RISK + '%로 묶은 전략이라 직접 비교용이 아니라 참고용');
+  // 노이즈 필터 비교 — 1:2:6 만, 같은 시세를 앞/뒤 절반으로 나눠 과최적화도 같이 본다.
+  const VARIANTS = [
+    ['필터 없음', {}],
+    ['추세: 200칸 평균', { trendMaPeriod: 200 }],
+    ['추세: 100칸 평균', { trendMaPeriod: 100 }],
+    ['추세: 50칸 평균', { trendMaPeriod: 50 }],
+    ['추세: 200칸 기울기', { trendMaPeriod: 200, trendMode: 'slope' }],
+    ['추세: 100칸 기울기', { trendMaPeriod: 100, trendMode: 'slope' }],
+    ['ATR 손절 2배', { atrStopMult: 2 }],
+    ['쿨다운 5칸', { cooldownBars: 5 }],
+    ['기울기100+ATR2+쿨다운5', { trendMaPeriod: 100, trendMode: 'slope', atrStopMult: 2, cooldownBars: 5 }]
+  ];
+  console.log('\n══ 노이즈 필터 비교 (1:2:6 분할) ══  앞/뒤 절반에서 둘 다 좋아야 믿을 만합니다');
+  for (const [name, data, o] of groups) {
+    console.log('\n[' + name + ']');
+    console.log('  ' + '필터'.padEnd(24) + '| ' + '전체: 거래 기대R   PF   수익   MDD'.padEnd(36) + '| 앞절반: 거래 기대R 수익   | 뒤절반: 거래 기대R 수익');
+    const mid = Math.floor(data.length / 2);
+    for (const [label, v] of VARIANTS) {
+      const run = d => E.backtest(d, Object.assign({}, base, o, v, { mode: 'ladder' })).stats;
+      const a = run(data), h1 = run(data.slice(0, mid)), h2 = run(data.slice(mid));
+      console.log('  ' + label.padEnd(24) + '| ' + (String(a.trades).padStart(4) + f(a.expectancyR, 2).padStart(8) + f(a.profitFactor, 2).padStart(7) + f(a.totalReturnPct).padStart(7) + '%' + f(a.maxDrawdownPct).padStart(6) + '%').padEnd(34) +
+        '| ' + (String(h1.trades).padStart(4) + f(h1.expectancyR, 2).padStart(8) + f(h1.totalReturnPct).padStart(7) + '%').padEnd(26) +
+        '| ' + String(h2.trades).padStart(4) + f(h2.expectancyR, 2).padStart(8) + f(h2.totalReturnPct).padStart(7) + '%');
+    }
+  }
   console.log('\n읽는 법: 기대R = 거래 1건이 평균 몇 R(=위험으로 정한 손실액) 을 남기나 · PF = 총이익/총손실 · MDD = 최대 낙폭');
   console.log('        1/2/3단계 = 각 단계까지 들어간 거래 수 · 청산 = 손절보다 먼저 강제청산된 횟수');
 })().catch(e => { console.error('실패: ' + e.message + '\n네트워크가 막혀 있으면 --csv 로 직접 받은 시세 파일을 넣으세요.'); process.exit(1); });

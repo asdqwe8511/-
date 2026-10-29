@@ -56,6 +56,26 @@
     return out;
   }
 
+  function sma(arr, n) {
+    var out = fill(arr.length), sum = 0;
+    for (var i = 0; i < arr.length; i++) {
+      sum += arr[i]; if (i >= n) sum -= arr[i - n];
+      if (i >= n - 1) out[i] = sum / n;
+    }
+    return out;
+  }
+
+  /** ATR(와일더). 첫 값은 처음 n칸 True Range 의 평균. */
+  function atr(high, low, close, n) {
+    n = n || 14;
+    var out = fill(close.length), tr = [], i;
+    for (i = 0; i < close.length; i++) tr.push(i === 0 ? high[0] - low[0] : Math.max(high[i] - low[i], Math.abs(high[i] - close[i - 1]), Math.abs(low[i] - close[i - 1])));
+    if (close.length < n) return out;
+    var a = 0; for (i = 0; i < n; i++) a += tr[i]; a /= n; out[n - 1] = a;
+    for (i = n; i < close.length; i++) { a = (a * (n - 1) + tr[i]) / n; out[i] = a; }
+    return out;
+  }
+
   function macd(close, fast, slow, sig) {
     fast = fast || 12; slow = slow || 26; sig = sig || 9;
     var f = ema(close, fast), s = ema(close, slow), line = fill(close.length);
@@ -188,6 +208,11 @@
     stageWindow: 40,         // 1단계 뒤 MACD 확인까지 기다리는 칸 수
     cloudWindow: 30,         // 구름 돌파 뒤 되돌림 지지까지 기다리는 칸 수
     pullbackTolPct: 1.5,     // 구름 경계에서 이 % 안까지 내려오면 "받친다"고 봄
+    // 노이즈 필터 — 0 이면 꺼짐(기본값은 필터 없음)
+    trendMaPeriod: 0,        // N칸 이동평균으로 1단계 진입을 거름(0 = 끔)
+    trendMode: 'above',      // 'above' 롱은 종가가 평균 위(숏은 아래) · 'slope' 평균선 자체가 10칸 전보다 오르는 중(숏은 내리는 중)
+    cooldownBars: 0,         // 포지션을 닫은 뒤 N칸 동안 새 진입 금지(손절 직후 재진입 방지)
+    atrStopMult: 0,          // >0 이면 손절가 = 진입가 ∓ ATR(14)×이 값 (0 이면 최근 저점/고점)
     avgDownStepPct: 5        // avgdown: 첫 진입가에서 이 % 씩 떨어질 때마다 추가
   };
 
@@ -204,10 +229,13 @@
     var O = [], H = [], L = [], C = [], T = [];
     for (var q = 0; q < n; q++) { O.push(candles[q].o); H.push(candles[q].h); L.push(candles[q].l); C.push(candles[q].c); T.push(candles[q].t); }
     var R = rsi(C, P.rsiPeriod), M = macd(C), I = ichimoku(H, L);
+    var TR = P.trendMaPeriod > 0 ? sma(C, P.trendMaPeriod) : null;
+    var AT = P.atrStopMult > 0 ? atr(H, L, C, 14) : null;
+    var lastClose = -1e9;                                             // 마지막으로 포지션을 닫은 칸(쿨다운용)
     var fee = P.feePct / 100, slip = P.slipPct / 100, mmr = P.mmrPct / 100, lev = Math.max(1, P.leverage);
     var fund = d * P.fundingPer8hPct / 100 * (P.barHours / 8);
     var W = P.weights, sumW = 0; W.forEach(function (x) { sumW += x; });
-    var warm = 52 + 26;                                               // 구름이 처음 생기는 칸
+    var warm = Math.max(52 + 26, P.trendMaPeriod + 10);                                               // 구름이 처음 생기는 칸
     var equity = P.startEquity, peak = equity, maxDD = 0;
     var pos = null, st = null, bhStart = null, exposure = 0, liqCount = 0;
     var stageReach = [0, 0, 0];
@@ -250,6 +278,11 @@
         stop = -Infinity; for (var s2 = Math.max(0, i - P.swingLookback + 1); s2 <= i; s2++) if (H[s2] > stop) stop = H[s2];
         stop = Math.min(stop, px * (1 + P.maxStopPct / 100)); stop = Math.max(stop, px * (1 + P.minStopPct / 100));
       }
+      if (AT && isNum(AT[i])) {                                        // ATR 손절: 변동성에 맞춰 폭을 정한다(최소·최대 폭은 그대로 적용)
+        var raw = px - d * P.atrStopMult * AT[i];
+        stop = d > 0 ? Math.min(Math.max(raw, px * (1 - P.maxStopPct / 100)), px * (1 - P.minStopPct / 100))
+                     : Math.max(Math.min(raw, px * (1 + P.maxStopPct / 100)), px * (1 + P.minStopPct / 100));
+      }
       var Eq = sizeEquity();
       var Rr = Eq * P.riskPct / 100;
       var dist = d * (px - stop) / px + 2 * (fee + slip);
@@ -274,7 +307,7 @@
     }
 
     function finish(i, reason) {
-      pos.exited = true;
+      pos.exited = true; lastClose = i;
       res.trades.push({ side: P.side, openIdx: pos.openIdx, closeIdx: i, openT: T[pos.openIdx], closeT: T[i],
         stages: pos.stage, avgEntry: pos.avg0 || pos.fills[0].price, stop: pos.stop, pnl: pos.pnl, R: pos.pnl / pos.R,
         retPct: 100 * pos.pnl / pos.E0, reason: reason });
@@ -328,7 +361,8 @@
       var brokeCloud = d > 0 ? C[i] < bot : C[i] > top;                // 구름 반대편으로 무너짐
 
       if (!pos) {
-        if (entrySig) open(i);
+        var trendOk = !TR || (P.trendMode === 'slope' ? d * (TR[i] - TR[i - 10]) > 0 : d > 0 ? C[i] > TR[i] : C[i] < TR[i]);
+        if (entrySig && trendOk && i - lastClose > P.cooldownBars) open(i);
         markEquity(i);
         continue;
       }
@@ -418,7 +452,7 @@
   }
 
   return {
-    rsi: rsi, ema: ema, macd: macd, ichimoku: ichimoku,
+    rsi: rsi, ema: ema, sma: sma, atr: atr, macd: macd, ichimoku: ichimoku,
     sizePosition: sizePosition, backtest: backtest, DEFAULTS: DEFAULTS, DEFAULT_WEIGHTS: DEFAULT_WEIGHTS
   };
 });

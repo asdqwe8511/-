@@ -42,7 +42,7 @@ position.html          포지션 사이징 계산기(/position) + 비트코인 �
 position-engine.js      RSI·MACD·일목 지표, 사이징(현물·선물·롱·숏·청산가), 1:2:6 백테스트 엔진.
                          화면·CLI·테스트가 같은 파일을 씁니다.
 tools/backtest-btc.js   바이낸스 BTC 일봉(현물·선물·펀딩비)을 받아 1:2:6 / 한 번에 / 물타기를 비교(내 PC에서 실행).
-tools/test-position.js  지표·사이징·백테스트 불변식 점검 (42가지)
+tools/test-position.js  지표·사이징·백테스트 불변식·노이즈 필터 점검 (52가지)
 tools/test-quota.js     사용량 제한·시간 상한·키 없을 때 안내 점검 (25가지)
 tools/test-browser.js   휴대폰 크기 브라우저에서 화면 점검 (117가지, playwright 필요)
 tools/build-hanja.js    hanja-data.js 를 다시 만드는 스크립트
