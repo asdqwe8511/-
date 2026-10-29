@@ -224,7 +224,7 @@
     var P = merge(opts);
     var d = P.side === 'short' ? -1 : 1;
     var n = candles.length;
-    var res = { params: P, trades: [], equity: [], stats: null, warnings: [] };
+    var res = { params: P, trades: [], equity: [], events: [], stats: null, warnings: [] };   // events: 자동매매가 읽는 칸별 행동(open/add/reduce/close)
     if (n < 120) { res.warnings.push('캔들이 120개 미만이라 지표가 자리 잡기 전에 끝납니다.'); }
     var O = [], H = [], L = [], C = [], T = [];
     for (var q = 0; q < n; q++) { O.push(candles[q].o); H.push(candles[q].h); L.push(candles[q].l); C.push(candles[q].c); T.push(candles[q].t); }
@@ -293,6 +293,7 @@
       var nn = plannedNotional(i, first);
       if (nn <= 0) { pos = null; return; }
       addFill(i, first, nn);
+      res.events.push({ i: i, type: 'open', side: P.side, stage: P.mode === 'allin' ? W.length : 1, notional: nn, price: pos.fills[0].price, stop: pos.stop, riskAmount: pos.R });
       if (P.mode === 'allin') pos.stage = W.length;
       stageReach[0]++;
       if (P.mode === 'allin') { stageReach[1]++; stageReach[2]++; }
@@ -308,6 +309,7 @@
 
     function finish(i, reason) {
       pos.exited = true; lastClose = i;
+      if (reason !== 'end') res.events.push({ i: i, type: 'close', reason: reason });
       res.trades.push({ side: P.side, openIdx: pos.openIdx, closeIdx: i, openT: T[pos.openIdx], closeT: T[i],
         stages: pos.stage, avgEntry: pos.avg0 || pos.fills[0].price, stop: pos.stop, pnl: pos.pnl, R: pos.pnl / pos.R,
         retPct: 100 * pos.pnl / pos.E0, reason: reason });
@@ -378,11 +380,13 @@
           pos.flagA = true;
           closeUnits(sellPx(C[i]), Math.min(W[0], pos.heldW) / pos.heldW);
           if (pos.units < 1e-12 || pos.heldW < 1e-9) { finish(i, 'exit-macd'); exited = true; }
+          else res.events.push({ i: i, type: 'reduce', reason: 'exit-macd', fraction: W[0] / (pos.heldW + W[0]) });
         }
         if (!exited && rsiAgainst && !pos.flagB) {
           pos.flagB = true;
           closeUnits(sellPx(C[i]), Math.min(W[1], pos.heldW) / pos.heldW);
           if (pos.units < 1e-12 || pos.heldW < 1e-9) { finish(i, 'exit-rsi'); exited = true; }
+          else res.events.push({ i: i, type: 'reduce', reason: 'exit-rsi', fraction: W[1] / (pos.heldW + W[1]) });
         }
       }
       if (exited) { markEquity(i); continue; }
@@ -392,7 +396,7 @@
         if (P.mode === 'ladder') {
           if (pos.stage === 1 && i - pos.lastStageIdx <= P.stageWindow && macdConfirm) {
             var n2 = plannedNotional(i, W[1]);
-            if (n2 > 0) { addFill(i, W[1], n2); pos.stage = 2; pos.lastStageIdx = i; stageReach[1]++; if (beyondCloud) pos.cloudBreak = i; }
+            if (n2 > 0) { addFill(i, W[1], n2); res.events.push({ i: i, type: 'add', stage: 2, notional: n2 }); pos.stage = 2; pos.lastStageIdx = i; stageReach[1]++; if (beyondCloud) pos.cloudBreak = i; }
           } else if (pos.stage === 2) {
             if (pos.cloudBreak < 0) {
               if (beyondCloud) pos.cloudBreak = i;
@@ -405,7 +409,7 @@
                                 : (H[i] >= bot * (1 - tol) && C[i] < bot && C[i] < O[i]);
               if (touch) {
                 var n3 = plannedNotional(i, W[2]);
-                if (n3 > 0) { addFill(i, W[2], n3); pos.stage = 3; pos.lastStageIdx = i; stageReach[2]++; }
+                if (n3 > 0) { addFill(i, W[2], n3); res.events.push({ i: i, type: 'add', stage: 3, notional: n3 }); pos.stage = 3; pos.lastStageIdx = i; stageReach[2]++; }
               }
             } else if (pos.cloudBreak >= 0 && i - pos.cloudBreak > P.cloudWindow) {
               pos.cloudBreak = -1;                                     // 시간 초과 — 다음 돌파를 다시 기다린다
@@ -419,7 +423,7 @@
             var hit = d > 0 ? C[i] <= trigger : C[i] >= trigger;
             if (hit) {
               var na = plannedNotional(i, W[cur]);
-              if (na > 0) { addFill(i, W[cur], na); pos.stage = cur + 1; stageReach[cur]++; }
+              if (na > 0) { addFill(i, W[cur], na); res.events.push({ i: i, type: 'add', stage: cur + 1, notional: na }); pos.stage = cur + 1; stageReach[cur]++; }
             }
           }
         }

@@ -6,3 +6,4 @@ skill-observations/
 .claude/settings.local.json
 .agents/
 blog-drafts/
+.autotrade/

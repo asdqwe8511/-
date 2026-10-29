@@ -42,6 +42,8 @@ position.html          포지션 사이징 계산기(/position) + 비트코인 �
 position-engine.js      RSI·MACD·일목 지표, 사이징(현물·선물·롱·숏·청산가), 1:2:6 백테스트 엔진.
                          화면·CLI·테스트가 같은 파일을 씁니다.
 tools/backtest-btc.js   바이낸스 BTC 일봉(현물·선물·펀딩비)을 받아 1:2:6 / 한 번에 / 물타기를 비교(내 PC에서 실행).
+tools/autotrade.js       1:2:6 자동매매(바이낸스 선물 테스트넷 전용). 기본은 모의 실행. 판단은 autotrade-core.js,
+                         거래소 호출은 binance-futures-client.js, 점검은 test-autotrade.js(가짜 거래소).
 tools/test-position.js  지표·사이징·백테스트 불변식·노이즈 필터 점검 (52가지)
 tools/test-quota.js     사용량 제한·시간 상한·키 없을 때 안내 점검 (25가지)
 tools/test-browser.js   휴대폰 크기 브라우저에서 화면 점검 (117가지, playwright 필요)
@@ -102,6 +104,27 @@ node tools/backtest-btc.js --csv btc.csv      # 네트워크가 막혔을 때 �
 
 서버(api/)는 쓰지 않고 키도 필요 없습니다. 시세는 브라우저(또는 내 PC)에서 바이낸스 공개
 API 로 직접 받습니다. 과거 성과는 앞으로를 보장하지 않습니다.
+
+### 자동매매 (테스트넷 전용)
+
+백테스트와 같은 엔진이 "가장 최근 닫힌 일봉에서 무엇을 해야 하나"를 판단하고, 거래소의 실제
+포지션과 맞춰 본 뒤 주문합니다. 하루 한 번 UTC 00:05 에 돕니다. **테스트넷 주소만 허용**하며
+실계좌 주소로는 클라이언트가 만들어지지 않습니다.
+
+```bash
+# 1) testnet.binancefuture.com 에서 키 발급(출금 권한 없음) → .env 에 BINANCE_TESTNET_API_KEY/SECRET
+# 2) 모의 실행: 주문 없이 무엇을 할지만 출력
+node tools/autotrade.js --risk 0.5 --lev 2
+# 3) 테스트넷에 실제 주문
+node tools/autotrade.js --live --risk 0.5 --lev 2 --trend 100:slope --atr 2 --cooldown 5
+# 4) 매일 자동으로(내 PC나 작은 서버에서 켜 두기)
+node tools/autotrade.js --live --loop
+```
+
+안전장치: 기본 모의 실행 · 진입 직후 서버에 손절(STOP_MARKET) 설정, 실패하면 즉시 청산 ·
+하루 손실 한도(기본 3%) 도달 시 전량 정리 후 정지(`--reset-halt` 로 해제) · 봉·단계별 고정 주문 ID 로
+중복 주문 방지 · 청산가가 손절가보다 가까우면 진입 안 함 · 거래당 손실 5%·레버리지 10배 초과 거부.
+상태와 로그는 `.autotrade/` 에 남고 커밋되지 않습니다.
 
 ## 배포에 키 넣기
 
