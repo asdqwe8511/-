@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>도매 출고율 비교</title>
+<meta name="description" content="북센·출협·교보·알라딘·예스24·도매상 출고율 파일을 올리면 책마다 가장 유리한 거래처를 골라 주문서로 나눠 줍니다.">
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1d2330;--mute:#667085;--line:#e3e6ec;--accent:#2457d6;--best:#e6f6ec;--bestInk:#116b36;--warn:#fff4e0;--warnInk:#8a5200}
+@media (prefers-color-scheme:dark){:root{--bg:#12151b;--card:#1b2029;--ink:#e8ebf1;--mute:#98a2b3;--line:#2c3340;--accent:#7aa2ff;--best:#143222;--bestInk:#6fdc9a;--warn:#3a2c10;--warnInk:#ffc766}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif}
+main{max-width:1100px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:22px;margin:4px 0 4px}
+h2{font-size:16px;margin:0 0 10px}
+p.sub{margin:0 0 18px;color:var(--mute)}
+section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.sup{border:1px dashed var(--line);border-radius:10px;padding:10px}
+.sup b{display:block;margin-bottom:6px}
+.sup .st{font-size:13px;color:var(--mute);margin-top:6px;min-height:19px}
+.sup .st.ok{color:var(--bestInk)}
+.sup .st.bad{color:var(--warnInk)}
+textarea{width:100%;min-height:110px;border:1px solid var(--line);border-radius:8px;padding:8px;background:transparent;color:var(--ink);font:13px/1.4 ui-monospace,Menlo,Consolas,monospace}
+input[type=file]{width:100%;font-size:13px}
+button{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:8px 14px;font:inherit;cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button:disabled{opacity:.5;cursor:default}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.note{font-size:13px;color:var(--mute);margin:6px 0 0}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{padding:6px 9px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child,th.l,td.l{text-align:left}
+td.best{background:var(--best);color:var(--bestInk);font-weight:700}
+td.none{color:var(--mute)}
+.warn{background:var(--warn);color:var(--warnInk);border-radius:8px;padding:8px 12px;margin-top:10px;font-size:13.5px}
+.sum{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.sum div{border:1px solid var(--line);border-radius:10px;padding:10px}
+.sum b{display:block}
+.sum span{color:var(--mute);font-size:13px}
+.sum button{margin-top:8px;width:100%}
+label.opt{font-size:14px;display:inline-flex;gap:6px;align-items:center}
+select{padding:6px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit}
+@media (max-width:560px){main{padding:14px 12px 50px}}
+</style>
+</head>
+<body>
+<main>
+  <h1>도매 출고율 비교</h1>
+  <p class="sub">거래처별 출고율 파일과 주문 목록을 올리면, 책마다 가장 유리한 거래처를 골라 거래처별 주문서로 나눠 줍니다.
+  파일은 이 브라우저 안에서만 처리되고 서버로 보내지 않습니다.</p>
+
+  <section>
+    <h2>1. 거래처별 출고율 파일</h2>
+    <div class="grid" id="sups"></div>
+    <p class="note">각 거래처 사이트에서 내려받은 CSV(엑셀이면 "CSV UTF-8"로 저장)를 올립니다. ISBN 열과 출고율(공급률) 열을 제목으로 찾고, 있으면 재고·정가 열도 씁니다. 올리지 않은 거래처는 비교에서 빠집니다.</p>
+  </section>
+
+  <section>
+    <h2>2. 주문 목록</h2>
+    <textarea id="orders" placeholder="ISBN, 수량 (한 줄에 한 권. 엑셀에서 복사해 붙여넣어도 됩니다)&#10;9788936434120, 5&#10;9791190090018, 3"></textarea>
+    <div class="row">
+      <input type="file" id="orderFile" accept=".csv,.txt,.tsv" style="max-width:260px">
+      <label class="opt">기준
+        <select id="mode"><option value="low">출고율이 낮은 곳</option><option value="high">출고율이 높은 곳</option></select>
+      </label>
+      <label class="opt"><input type="checkbox" id="useStock" checked> 재고 부족한 곳 제외</label>
+      <button class="primary" id="run">비교하기</button>
+      <button id="demo">예시 데이터</button>
+    </div>
+    <p class="note">같은 출고율이면 위 목록의 거래처 순서(북센 → 출협 → 교보 → 알라딘 → 예스24 → 도매상)가 우선합니다.</p>
+  </section>
+
+  <div id="result" hidden>
+    <section><h2>3. 거래처별 주문서</h2><div class="sum" id="summary"></div><div id="warns"></div></section>
+    <section><h2>책별 비교</h2><div class="tablewrap"><table id="cmp"></table></div></section>
+  </div>
+</main>
+
+<script>
+/* ===== 계산 부분 (tools/test-wholesale.js 가 이 구간만 잘라 검증합니다) ===== */
+// @core-start
+var SUPPLIERS = ['북센', '출협', '교보', '알라딘', '예스24', '도매상'];
+
+function parseDelimited(text) {
+  text = String(text).replace(/^﻿/, '');
+  var first = text.split(/\r?\n/, 1)[0] || '';
+  var delim = ['\t', ',', ';'].map(function (d) {
+    return [d, first.split(d).length];
+  }).sort(function (a, b) { return b[1] - a[1]; })[0][0];
+  var rows = [], row = [], cell = '', q = false;
+  function end() { return row.some(function (x) { return x.trim() !== ''; }); }
+  for (var i = 0; i < text.length; i++) {
+    var c = text[i];
+    if (q) {
+      if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; }
+      else cell += c;
+    } else if (c === '"') q = true;
+    else if (c === delim) { row.push(cell); cell = ''; }
+    else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(cell); cell = '';
+      if (end()) rows.push(row);
+      row = [];
+    } else cell += c;
+  }
+  row.push(cell);
+  if (end()) rows.push(row);
+  return rows;
+}
+
+function normIsbn(v) {
+  var s = String(v == null ? '' : v).replace(/[^0-9Xx]/g, '').toUpperCase();
+  if (/^\d{9}[\dX]$/.test(s)) {            // ISBN-10 → 13
+    var b = '978' + s.slice(0, 9), sum = 0;
+    for (var i = 0; i < 12; i++) sum += +b[i] * (i % 2 ? 3 : 1);
+    return b + ((10 - sum % 10) % 10);
+  }
+  return /^\d{13}$/.test(s) ? s : '';
+}
+
+function normRate(v) {
+  var s = String(v == null ? '' : v).replace(/[%\s,]/g, '');
+  if (s === '' || isNaN(+s)) return null;
+  var n = +s;
+  if (n > 0 && n <= 1) n *= 100;           // 0.65 → 65
+  return n > 0 && n <= 100 ? Math.round(n * 100) / 100 : null;
+}
+
+function numOf(v) {
+  var n = parseInt(String(v == null ? '' : v).replace(/[^0-9-]/g, ''), 10);
+  return isNaN(n) ? null : n;
+}
+
+function findCol(header, pats) {
+  for (var i = 0; i < header.length; i++) {
+    var h = header[i].replace(/\s/g, '').toLowerCase();
+    if (pats.some(function (p) { return h.indexOf(p) >= 0; })) return i;
+  }
+  return -1;
+}
+
+// 거래처 파일 → {map: isbn→{rate, stock, price}, n, error}
+function parseSupplierFile(text) {
+  var rows = parseDelimited(text);
+  if (rows.length < 2) return { map: {}, n: 0, error: '내용이 비어 있습니다.' };
+  var h = rows[0];
+  var ci = findCol(h, ['isbn', '바코드', '도서코드']);
+  var cr = findCol(h, ['출고율', '공급률', '공급가율', '매입률']);
+  var cs = findCol(h, ['재고', '현재고', '가용']);
+  var cp = findCol(h, ['정가', '판매가']);
+  if (ci < 0 || cr < 0) return { map: {}, n: 0, error: 'ISBN 열 또는 출고율 열을 제목에서 못 찾았습니다.' };
+  var map = {}, n = 0;
+  rows.slice(1).forEach(function (r) {
+    var k = normIsbn(r[ci]), rate = normRate(r[cr]);
+    if (!k || rate == null) return;
+    map[k] = { rate: rate, stock: cs >= 0 ? numOf(r[cs]) : null, price: cp >= 0 ? numOf(r[cp]) : null };
+    n++;
+  });
+  return { map: map, n: n, error: n ? '' : '읽을 수 있는 행이 없습니다.' };
+}
+
+// 주문 텍스트 → {orders:[{isbn, qty, title}], bad:[...]}
+function parseOrders(text) {
+  var out = [], bad = [];
+  parseDelimited(text).forEach(function (r, idx) {
+    var k = normIsbn(r[0]);
+    if (!k) { if (idx > 0) bad.push(r[0]); return; }   // 첫 줄(제목)은 조용히 건너뜀
+    var q = numOf(r[1]);
+    out.push({ isbn: k, qty: q && q > 0 ? q : 1, title: (r[2] || '').trim() });
+  });
+  var merged = {}, list = [];
+  out.forEach(function (o) {                // 같은 ISBN 은 수량 합산
+    if (merged[o.isbn]) merged[o.isbn].qty += o.qty;
+    else { merged[o.isbn] = o; list.push(o); }
+  });
+  return { orders: list, bad: bad };
+}
+
+// 핵심: 책마다 거래처 하나 고르기 (동률이면 SUPPLIERS 순서가 먼저)
+function compare(orders, data, opts) {
+  var low = opts.mode !== 'high';
+  var names = SUPPLIERS.filter(function (s) { return data[s]; });
+  return orders.map(function (o) {
+    var cells = {}, best = null;
+    names.forEach(function (s) {
+      var e = data[s][o.isbn];
+      if (!e) { cells[s] = null; return; }
+      var short = !!(opts.useStock && e.stock != null && e.stock < o.qty);
+      cells[s] = { rate: e.rate, stock: e.stock, price: e.price, short: short };
+      if (short) return;
+      if (!best || (low ? e.rate < cells[best].rate : e.rate > cells[best].rate)) best = s;
+    });
+    return { isbn: o.isbn, qty: o.qty, title: o.title, cells: cells, best: best };
+  });
+}
+
+function groupBySupplier(results) {
+  var g = {};
+  results.forEach(function (r) { if (r.best) (g[r.best] = g[r.best] || []).push(r); });
+  return g;
+}
+
+function csvEscape(v) { v = String(v == null ? '' : v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+// @core-end
+
+/* ===== 화면 ===== */
+var data = {};   // 거래처명 → map
+var supEl = document.getElementById('sups');
+SUPPLIERS.forEach(function (s) {
+  var d = document.createElement('div'); d.className = 'sup';
+  d.innerHTML = '<b>' + s + '</b><input type="file" accept=".csv,.txt,.tsv" data-s="' + s + '"><div class="st">파일 없음</div>';
+  supEl.appendChild(d);
+});
+
+function readText(file) {            // UTF-8 이 깨지면 CP949(EUC-KR)로 다시 읽음
+  return file.arrayBuffer().then(function (buf) {
+    var t = new TextDecoder('utf-8').decode(buf);
+    if (t.indexOf('�') >= 0) { try { t = new TextDecoder('euc-kr').decode(buf); } catch (e) {} }
+    return t;
+  });
+}
+
+supEl.addEventListener('change', function (e) {
+  var inp = e.target, s = inp.getAttribute('data-s'), st = inp.parentNode.querySelector('.st');
+  if (!inp.files[0]) { delete data[s]; st.className = 'st'; st.textContent = '파일 없음'; return; }
+  readText(inp.files[0]).then(function (t) {
+    var r = parseSupplierFile(t);
+    if (r.error) { delete data[s]; st.className = 'st bad'; st.textContent = r.error; return; }
+    data[s] = r.map; st.className = 'st ok'; st.textContent = r.n.toLocaleString() + '권 읽음';
+  });
+});
+
+document.getElementById('orderFile').addEventListener('change', function (e) {
+  if (e.target.files[0]) readText(e.target.files[0]).then(function (t) { document.getElementById('orders').value = t; });
+});
+
+function download(name, text) {
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿' + text], { type: 'text/csv;charset=utf-8' }));
+  a.download = name; document.body.appendChild(a); a.click(); a.remove();
+}
+
+function orderCsv(items) {
+  return ['ISBN,수량,도서명,출고율'].concat(items.map(function (r) {
+    return [r.isbn, r.qty, r.title, r.cells[r.best].rate + '%'].map(csvEscape).join(',');
+  })).join('\n');
+}
+
+function run() {
+  var p = parseOrders(document.getElementById('orders').value);
+  var warns = document.getElementById('warns'); warns.innerHTML = '';
+  var names = SUPPLIERS.filter(function (s) { return data[s]; });
+  function warn(t) { var d = document.createElement('div'); d.className = 'warn'; d.textContent = t; warns.appendChild(d); }
+  document.getElementById('result').hidden = false;
+  document.getElementById('summary').innerHTML = '';
+  document.getElementById('cmp').innerHTML = '';
+  if (!names.length) warn('거래처 파일을 하나 이상 올려 주세요.');
+  if (!p.orders.length) warn('주문 목록에서 ISBN 을 찾지 못했습니다.');
+  if (!names.length || !p.orders.length) return;
+  if (p.bad.length) warn('ISBN 으로 읽지 못한 줄 ' + p.bad.length + '개는 건너뛰었습니다: ' + p.bad.slice(0, 5).join(', ') + (p.bad.length > 5 ? ' …' : ''));
+
+  var res = compare(p.orders, data, { mode: document.getElementById('mode').value, useStock: document.getElementById('useStock').checked });
+  var g = groupBySupplier(res);
+  var sum = document.getElementById('summary');
+  names.forEach(function (s) {
+    var items = g[s] || [], copies = items.reduce(function (a, r) { return a + r.qty; }, 0);
+    var avg = items.length ? (items.reduce(function (a, r) { return a + r.cells[s].rate; }, 0) / items.length).toFixed(1) : '-';
+    var d = document.createElement('div');
+    d.innerHTML = '<b>' + s + '</b><span>' + items.length + '종 · ' + copies + '권 · 평균 ' + avg + '%</span>';
+    var b = document.createElement('button'); b.textContent = '주문서 내려받기'; b.disabled = !items.length;
+    b.onclick = function () { download('주문서_' + s + '.csv', orderCsv(items)); };
+    d.appendChild(b); sum.appendChild(d);
+  });
+  var none = res.filter(function (r) { return !r.best; });
+  if (none.length) warn('주문할 곳이 없는 책 ' + none.length + '종(미취급 또는 전 거래처 재고 부족): ' + none.slice(0, 5).map(function (r) { return r.isbn; }).join(', ') + (none.length > 5 ? ' …' : ''));
+
+  document.getElementById('cmp').innerHTML = '<tr><th>ISBN</th><th>수량</th>' + names.map(function (s) { return '<th>' + s + '</th>'; }).join('') + '<th class="l">선택</th></tr>' +
+    res.map(function (r) {
+      return '<tr><td>' + r.isbn + '</td><td>' + r.qty + '</td>' + names.map(function (s) {
+        var c = r.cells[s];
+        if (!c) return '<td class="none">-</td>';
+        var cls = s === r.best ? 'best' : (c.short ? 'none' : '');
+        return '<td class="' + cls + '">' + c.rate + '%' + (c.short ? ' (재고' + c.stock + ')' : '') + '</td>';
+      }).join('') + '<td class="l">' + (r.best || '없음') + '</td></tr>';
+    }).join('');
+  document.getElementById('result').scrollIntoView({ behavior: 'smooth' });
+}
+document.getElementById('run').onclick = run;
+
+document.getElementById('demo').onclick = function () {
+  var mk = function (rows) { return parseSupplierFile('ISBN,출고율,재고\n' + rows.join('\n')).map; };
+  data = {};
+  data['북센'] = mk(['9788936434120,67,50', '9791190090018,65,2', '9788954655972,70,10']);
+  data['교보'] = mk(['9788936434120,64,20', '9791190090018,66,30']);
+  data['알라딘'] = mk(['9788936434120,68,9', '9788954655972,66,9']);
+  document.querySelectorAll('.sup').forEach(function (el) {
+    var s = el.querySelector('b').textContent, st = el.querySelector('.st');
+    el.querySelector('input').value = '';
+    if (data[s]) { st.className = 'st ok'; st.textContent = Object.keys(data[s]).length + '권 (예시)'; }
+    else { st.className = 'st'; st.textContent = '파일 없음'; }
+  });
+  document.getElementById('orders').value = '9788936434120, 5\n9791190090018, 3\n9788954655972, 2\n9780000000002, 1';
+  run();
+};
+</script>
+</body>
+</html>
