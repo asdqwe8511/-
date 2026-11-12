@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>냠냠 밥먹기 게임</title>
+<style>
+  :root{--bg:#fff4e0;--ink:#3b2a1a;--accent:#ff7a45;--card:#ffffff}
+  @media (prefers-color-scheme:dark){:root{--bg:#2a1f16;--ink:#ffeccf;--accent:#ff9a62;--card:#3a2c20}}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;overscroll-behavior:none}
+  body{display:flex;flex-direction:column;align-items:center;padding:12px 16px;gap:8px}
+  header{width:100%;max-width:480px;display:flex;justify-content:space-between;align-items:center;font-weight:700}
+  #hearts{letter-spacing:2px}
+  #wrap{position:relative;width:100%;max-width:480px;flex:1;min-height:0;max-height:760px}
+  canvas{width:100%;height:100%;display:block;border-radius:20px;background:var(--card);touch-action:none;box-shadow:0 6px 24px rgba(0,0,0,.15)}
+  #overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:24px;border-radius:20px;background:rgba(255,244,224,.92);color:#3b2a1a}
+  @media (prefers-color-scheme:dark){#overlay{background:rgba(42,31,22,.92);color:#ffeccf}}
+  #overlay h1{margin:0;font-size:30px}
+  #overlay p{margin:0;line-height:1.5;opacity:.85}
+  button{font:inherit;font-weight:700;background:var(--accent);color:#fff;border:0;border-radius:999px;padding:12px 32px;font-size:18px;cursor:pointer}
+  button:active{transform:scale(.96)}
+  .hidden{display:none!important}
+</style>
+</head>
+<body>
+<header>
+  <div>점수 <span id="score">0</span></div>
+  <div id="hearts">❤️❤️❤️</div>
+  <div>최고 <span id="best">0</span></div>
+</header>
+<div id="wrap">
+  <canvas id="c"></canvas>
+  <div id="overlay">
+    <h1 id="title">🍚 냠냠 밥먹기</h1>
+    <p id="msg">떨어지는 음식을 입으로 받아먹어요!<br>🪨 돌멩이와 🌶️ 매운 고추는 피하세요.<br>← → 키 또는 화면을 드래그해서 움직여요.</p>
+    <button id="start">시작하기</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+  const $ = id => document.getElementById(id);
+  const overlay = $('overlay'), scoreEl = $('score'), heartsEl = $('hearts'), bestEl = $('best');
+
+  const GOOD = [['🍙',10],['🍎',10],['🍜',15],['🍗',15],['🍔',20],['🍕',20],['🍰',30]];
+  const BAD = ['🪨','🌶️'];
+
+  let W, H, dpr;
+  function resize(){
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const r = cv.getBoundingClientRect();
+    W = r.width; H = r.height;
+    cv.width = W * dpr; cv.height = H * dpr;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  addEventListener('resize', resize);
+
+  let best = 0;
+  try { best = +localStorage.getItem('mukbang-best') || 0; } catch(e){}
+  bestEl.textContent = best;
+
+  let st;
+  function reset(){
+    st = { x: W/2, target: W/2, score: 0, lives: 3, items: [], parts: [], spawn: 0,
+           t: 0, mouth: 0, chew: 0, combo: 0, hurt: 0, over: false, running: false, last: 0 };
+    scoreEl.textContent = 0; renderHearts();
+  }
+  function renderHearts(){ heartsEl.textContent = '❤️'.repeat(Math.max(st.lives,0)) + '🖤'.repeat(Math.max(3-st.lives,0)); }
+
+  // input
+  const keys = {};
+  addEventListener('keydown', e => { keys[e.key] = true; if (e.key === ' ' && !st.running) start(); });
+  addEventListener('keyup', e => keys[e.key] = false);
+  function pointer(e){
+    const r = cv.getBoundingClientRect();
+    st.target = (e.clientX - r.left);
+  }
+  cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); pointer(e); });
+  cv.addEventListener('pointermove', e => { if (e.buttons || e.pointerType === 'touch') pointer(e); });
+
+  function spawn(){
+    const bad = Math.random() < Math.min(0.15 + st.t * 0.004, 0.35);
+    const e = bad ? BAD[Math.random()*BAD.length|0] : null;
+    const g = bad ? null : GOOD[Math.random()*GOOD.length|0];
+    st.items.push({ x: 30 + Math.random()*(W-60), y: -30, vy: 120 + st.t*3 + Math.random()*60,
+      emoji: bad ? e : g[0], pts: bad ? 0 : g[1], bad, rot: Math.random()*6, vr: (Math.random()-.5)*4 });
+  }
+
+  function burst(x, y, emoji){
+    for (let i=0;i<6;i++) st.parts.push({x,y,vx:(Math.random()-.5)*200,vy:-Math.random()*180,life:.6,emoji});
+  }
+
+  function update(dt){
+    st.t += dt;
+    const sp = 420;
+    if (keys.ArrowLeft || keys.a) st.target = Math.max(0, st.target - sp*dt);
+    if (keys.ArrowRight || keys.d) st.target = Math.min(W, st.target + sp*dt);
+    st.target = Math.max(40, Math.min(W-40, st.target));
+    st.x += (st.target - st.x) * Math.min(1, dt*14);
+
+    st.spawn -= dt;
+    if (st.spawn <= 0){ spawn(); st.spawn = Math.max(0.35, 0.95 - st.t*0.01); }
+
+    const mouthY = H - 95, mouthR = 34;
+    let near = false;
+    for (const it of st.items){
+      it.y += it.vy*dt; it.rot += it.vr*dt;
+      const dx = it.x - st.x, dy = it.y - mouthY;
+      if (Math.abs(dx) < 90 && dy > -110 && dy < 20) near = true;
+      if (!it.dead && Math.hypot(dx, dy) < mouthR + 14){
+        it.dead = true;
+        if (it.bad){
+          st.lives--; st.combo = 0; st.hurt = .4; renderHearts();
+          burst(it.x, it.y, '💥');
+          if (st.lives <= 0) return end();
+        } else {
+          st.combo++;
+          const gain = it.pts * (1 + Math.min(st.combo-1, 9)*0.1);
+          st.score += Math.round(gain); scoreEl.textContent = st.score;
+          st.chew = .35; burst(it.x, it.y, '✨');
+        }
+      } else if (it.y > H + 30){
+        it.dead = true;
+        if (!it.bad) st.combo = 0;
+      }
+    }
+    st.items = st.items.filter(i => !i.dead);
+    for (const p of st.parts){ p.life -= dt; p.x += p.vx*dt; p.y += p.vy*dt; p.vy += 500*dt; }
+    st.parts = st.parts.filter(p => p.life > 0);
+    st.mouth += ((near ? 1 : 0) - st.mouth) * Math.min(1, dt*16);
+    st.chew = Math.max(0, st.chew - dt); st.hurt = Math.max(0, st.hurt - dt);
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    // table
+    ctx.fillStyle = '#c98f5a'; ctx.fillRect(0, H-40, W, 40);
+    ctx.fillStyle = '#e8b27d'; ctx.fillRect(0, H-40, W, 8);
+
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const it of st.items){
+      ctx.save(); ctx.translate(it.x, it.y); ctx.rotate(it.rot*0.15);
+      ctx.font = '34px serif'; ctx.fillText(it.emoji, 0, 0); ctx.restore();
+    }
+    for (const p of st.parts){
+      ctx.globalAlpha = Math.max(p.life/.6, 0); ctx.font = '18px serif'; ctx.fillText(p.emoji, p.x, p.y);
+    }
+    ctx.globalAlpha = 1;
+
+    // character
+    const x = st.x, y = H - 95, r = 44;
+    const bob = st.chew > 0 ? Math.sin(st.t*40)*3 : 0;
+    ctx.save(); ctx.translate(x, y + bob);
+    if (st.hurt > 0) ctx.translate(Math.sin(st.t*80)*4, 0);
+    // body
+    ctx.fillStyle = '#ffb347'; ctx.beginPath(); ctx.ellipse(0, 52, 36, 26, 0, 0, 7); ctx.fill();
+    // face
+    ctx.fillStyle = st.hurt > 0 ? '#ff9a8a' : '#ffd9a8';
+    ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.fill();
+    // cheeks
+    ctx.fillStyle = 'rgba(255,120,120,.45)';
+    ctx.beginPath(); ctx.arc(-28, 8, 8, 0, 7); ctx.arc(28, 8, 8, 0, 7); ctx.fill();
+    // eyes
+    ctx.fillStyle = '#3b2a1a';
+    if (st.hurt > 0){
+      ctx.font = 'bold 20px sans-serif'; ctx.fillText('>', -15, -10); ctx.fillText('<', 15, -10);
+    } else if (st.chew > 0){
+      ctx.lineWidth = 3; ctx.strokeStyle = '#3b2a1a'; ctx.beginPath();
+      ctx.arc(-15,-10,6,Math.PI,0); ctx.moveTo(21,-10); ctx.arc(15,-10,6,0,Math.PI,true); ctx.stroke();
+    } else {
+      ctx.beginPath(); ctx.arc(-15,-10,4,0,7); ctx.arc(15,-10,4,0,7); ctx.fill();
+    }
+    // mouth
+    const m = st.chew > 0 ? 0.25 + Math.abs(Math.sin(st.t*30))*0.2 : st.mouth;
+    ctx.fillStyle = '#7a2a2a';
+    ctx.beginPath(); ctx.ellipse(0, 18, 8 + m*14, 3 + m*16, 0, 0, 7); ctx.fill();
+    if (m > 0.4){ ctx.fillStyle = '#ff8a8a'; ctx.beginPath(); ctx.ellipse(0, 18+m*9, 7, 4, 0, 0, 7); ctx.fill(); }
+    ctx.restore();
+
+    if (st.combo >= 3){
+      ctx.fillStyle = '#ff7a45'; ctx.font = 'bold 20px system-ui';
+      ctx.fillText(st.combo + ' 콤보!', W/2, 28);
+    }
+  }
+
+  function loop(ts){
+    if (!st.running) return;
+    const dt = Math.min((ts - st.last)/1000, .05); st.last = ts;
+    update(dt); if (st.running) draw();
+    requestAnimationFrame(loop);
+  }
+
+  function start(){
+    resize(); reset();
+    overlay.classList.add('hidden');
+    st.running = true; st.last = performance.now();
+    requestAnimationFrame(loop);
+  }
+  function end(){
+    st.running = false; draw();
+    const isBest = st.score > best;
+    if (isBest){ best = st.score; bestEl.textContent = best; try { localStorage.setItem('mukbang-best', best); } catch(e){} }
+    $('title').textContent = '배불러요! 🥲';
+    $('msg').innerHTML = '점수 <b>' + st.score + '</b>점' + (isBest ? '<br>🎉 새 최고 기록!' : '');
+    $('start').textContent = '다시 먹기';
+    overlay.classList.remove('hidden');
+  }
+
+  $('start').addEventListener('click', start);
+  resize(); reset(); draw();
+})();
+</script>
+</body>
+</html>
