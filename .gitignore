@@ -6,3 +6,8 @@ skill-observations/
 .claude/settings.local.json
 .agents/
 blog-drafts/
+
+# fibo-alert (Python)
+fibo-alert/data/*.db*
+__pycache__/
+.pytest_cache/

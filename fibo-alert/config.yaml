@@ -1,0 +1,21 @@
+# 기본값은 fibo_alert/config.py 의 DEFAULTS 입니다. 바꾸고 싶은 항목만 적으세요.
+# 아래 값들은 '검증 전 기본 설정'입니다. 백테스트·리플레이로 확인하기 전에는 신뢰하지 마세요.
+symbol: BTCUSDT
+db_path: data/fibo.db
+
+trend:
+  use_4h_filter: false          # true 면 4h 도 EMA200 위치·기울기가 일치해야 함
+  slope_threshold_pct: {15m: 0.10, 1h: 0.10, 4h: 0.10}
+
+fib:
+  start_mode: auto              # auto | manual
+  # manual 예시 (시간은 UTC, side 가 SHORT 면 시작 '고점', LONG 이면 시작 '저점')
+  # manual_start: {side: SHORT, time: "2026-01-05T08:00:00Z", price: null}
+
+entry:
+  min_rr: 3.0
+
+costs:
+  fee_rate_per_side: 0.0005     # taker 0.05%
+  slippage_bps_per_side: 2.0
+  leverage: 100                 # 경고 표시에만 쓰임. 포지션 크기는 절대 자동 확대하지 않음

@@ -1,0 +1,8 @@
+services:
+  fibo-alert:
+    build: .
+    restart: unless-stopped
+    env_file: .env          # DISCORD_WEBHOOK_URL=... (.env 는 git 에 올리지 않음)
+    volumes:
+      - ./data:/app/data    # SQLite: 재시작 후에도 신호 이력·중복 방지 유지
+    command: ["sh", "-c", "python -m fibo_alert backfill -c config.yaml && python -m fibo_alert run -c config.yaml"]
