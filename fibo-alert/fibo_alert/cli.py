@@ -12,9 +12,10 @@ from .store import Store
 
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="fibo_alert")
-    ap.add_argument("cmd", choices=["run", "backfill", "replay", "backtest", "verify", "test-webhook", "status"])
+    ap.add_argument("cmd", choices=["run", "backfill", "replay", "backtest", "verify", "test-webhook", "status", "import-vision"])
     ap.add_argument("-c", "--config", default="config.yaml")
     ap.add_argument("--bars", type=int, default=None, help="backfill: 15m 기준 가져올 개수 override")
+    ap.add_argument("--dir", default=None, help="import-vision: zip 폴더")
     ap.add_argument("--db", default=None, help="DB 경로 override")
     a = ap.parse_args(argv)
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
@@ -31,6 +32,10 @@ def main(argv=None):
         for tf in ("15m", "1h", "4h"):
             n = r.backfill(st, cfg.symbol, tf, bars=(a.bars if a.bars and tf == "15m" else cfg.history_bars[tf]))
             print(tf, n)
+    elif a.cmd == "import-vision":
+        from .vision import import_dir
+        n, gaps = import_dir(st, a.dir)
+        print("imported", n, "gaps", gaps)
     elif a.cmd == "run":
         from .live import Runner
         from .notifier import DiscordNotifier, webhook_from_env

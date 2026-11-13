@@ -20,6 +20,7 @@ python -m fibo_alert run                    # 상시 실행(WebSocket)
 python -m fibo_alert backtest               # 저장된 봉으로 리플레이 리포트(가상 성과)
 python -m fibo_alert verify                 # 라이브 이력 ↔ 리플레이 일치 검증
 python -m fibo_alert status
+python -m fibo_alert import-vision --dir <zip폴더>   # data.binance.vision 월별 klines zip 적재(지역 제한으로 REST 가 막힌 환경용)
 ```
 
 Docker: `.env` 에 `DISCORD_WEBHOOK_URL=` 를 넣고 `docker compose up -d`. `data/` 볼륨에 SQLite 가 남습니다.

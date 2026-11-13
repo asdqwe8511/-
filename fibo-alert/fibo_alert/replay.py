@@ -23,8 +23,8 @@ def run_replay(src: Store, cfg, start_close=None, end_close=None, path=":memory:
     m = tf_ms(cfg.trigger_tf)
     first = src.first_open(cfg.trigger_tf)
     last = src.last_open(cfg.trigger_tf)
-    warm = first + cfg.history_bars["15m"] * m // 2 if first is not None else 0
-    start_close = start_close or max(warm, first + 500 * m)
+    # 1h EMA200 에 2*200 개 이상의 1h 봉(= 15m 1600개)이 필요하므로 그 이후부터 시작
+    start_close = start_close or first + 1700 * m
     end_close = end_close or (last + m)
     eng, errors, c = Engine(cfg, dst), [], start_close
     while c <= end_close:
