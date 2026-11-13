@@ -226,7 +226,7 @@
     const start = c.findIndex((b) => b.t === snap.startTime);
     if (start < 0) throw new Error('시작 봉이 캔들 데이터에 없습니다');
     const end = o.asOfIdx == null ? c.length - 1 : o.asOfIdx;
-    const A = atr(c, o.atrPeriod);
+    const A = o._atr || atr(c, o.atrPeriod);
     const P0 = snap.P0, P1 = snap.P1, s = P0 < P1 ? -1 : 1; // s: 파동 진행 방향
     const side = s < 0 ? 'short' : 'long';
     const results = [];
@@ -325,7 +325,7 @@
   // 규칙: 한 봉에 최초 SL·TP 가 모두 닿으면 ambiguous. 0 에 닿은 봉에서 바꾼 SL 은 다음 봉부터 적용.
   function simulateManaged(c, entryIdx, t, o, st) {
     o = opt(o); st = Object.assign({ afterTarget: 'exit', protectFrac: 0.5 }, st || {});
-    const long = t.side === 'long', end = c.length - 1;
+    const long = t.side === 'long', end = o.endIdx == null ? c.length - 1 : Math.min(o.endIdx, c.length - 1); // endIdx: 이 봉까지만 본다(구간 검증용)
     const A = o._atr || atr(c, o.atrPeriod);
     const pv = st.afterTarget === 'trail' ? (o.pivots || findPivots(c, o)) : [];
     const byConf = new Map(); pv.forEach((p) => { if (!byConf.has(p.confirmedIndex)) byConf.set(p.confirmedIndex, []); byConf.get(p.confirmedIndex).push(p); });
@@ -364,7 +364,7 @@
   //   · 일치 레벨 수 ≥ btMinMatches 인 1순위 0 후보를 스냅샷으로 고정한다.
   // 같은 시작점에서 0 이 의미 있게 달라지면 새 스냅샷(새 버전)이고, 이전 것은 그 봉에서 끝난다.
   // 진입은 스냅샷 생성 이후 봉(돌파 포함)에서만 인정한다.
-  function runBacktest(c, o) {
+  function buildSnapshots(c, o) {
     o = opt(o);
     const W = o.btLookback || 300, minM = o.btMinMatches || 2, maxLife = o.btMaxLife || 500, minMove = o.btMinMoveAtr || 3;
     const A = atr(c, o.atrPeriod), pv = findPivots(c, o);
@@ -393,24 +393,39 @@
       }
     }
     // 각 스냅샷의 유효 구간: 다음 버전 직전 / 최대 수명 / 시작점을 넘어서는 새 극값 직전
-    const cands = [];
     for (const r of snaps) {
       let end = Math.min(r.end == null ? c.length - 1 : r.end, r.k + maxLife, c.length - 1);
       const P1 = r.snap.P1;
       for (let j = r.k + 1; j <= end; j++) { if (r.kind === 'H' ? c[j].h > P1 : c[j].l < P1) { end = j - 1; break; } }
       r.validEnd = end;
-      const ev = evaluateSetup(c, r.snap, Object.assign({}, base, { asOfIdx: end, fromIdx: r.k + 1 }));
       // 예측 지표: 이 0 에 실제로 도달했는가 (거래 수익성과 별개)
       const P0 = r.snap.P0; r.targetHitIdx = null;
       for (let j = r.k + 1; j < c.length && j <= r.k + maxLife; j++) { if (r.kind === 'H' ? c[j].l <= P0 : c[j].h >= P0) { r.targetHitIdx = j; break; } }
+    }
+    return { snaps, atr: A, pivots: pv };
+  }
+
+  // 스냅샷마다 돌파·리테스트·진입 후보를 평가한다. biasCache: 진입 봉 index → 방향 판정(조합끼리 공유).
+  function evalSnapshots(c, B, o, biasCache) {
+    o = opt(o);
+    const base = Object.assign({}, o, { pivots: B.pivots, _atr: B.atr });
+    const cands = [];
+    for (const r of B.snaps) {
+      const ev = evaluateSetup(c, r.snap, Object.assign({}, base, { asOfIdx: r.validEnd, fromIdx: r.k + 1 }));
       for (const lv of ev.levels) if (lv.status === 'candidate') cands.push({ rec: r, level: lv.ratio, e: lv.entry, breakout: lv.breakout });
     }
     cands.sort((a, b) => a.e.index - b.e.index || a.level - b.level);
     for (const x of cands) {
-      const b = biasAt(c, x.e.index, o);
-      x.bias = b.dir; x.biasOk = b.dir === x.e.side;
+      let dir = biasCache && biasCache.get(x.e.index);
+      if (dir == null) { dir = biasAt(c, x.e.index, o).dir; if (biasCache) biasCache.set(x.e.index, dir); }
+      x.bias = dir; x.biasOk = dir === x.e.side;
     }
-    return { snaps, candidates: cands, atr: A, pivots: pv };
+    return { snaps: B.snaps, candidates: cands, atr: B.atr, pivots: B.pivots };
+  }
+
+  function runBacktest(c, o) {
+    o = opt(o);
+    return evalSnapshots(c, buildSnapshots(c, o), o);
   }
 
   // 후보에 청산 전략을 입혀 거래 목록과 통계를 만든다. 한 번에 한 포지션만, 겹치는 신호는 건너뜀.
@@ -452,6 +467,88 @@
       tradeTargetRate: decided.length ? tgt.length / decided.length : null,
       snapCount: snaps.length,
       snapTargetRate: snaps.length ? snaps.filter((s) => s.targetHitIdx != null).length / snaps.length : null
+    };
+  }
+
+
+  // ───────── 워크포워드 검증 ─────────
+  // 학습 구간에서 파라미터 격자 중 최선을 고르고, 그 값을 바꾸지 않은 채 바로 뒤 검증 구간(OOS)에서 거래한다.
+  // 구간을 앞으로 밀며 반복해 OOS 거래만 이어 붙인 성적이 "과최적화를 걸러낸" 성적이다.
+  //   · 스냅샷·진입 후보는 전체 데이터에서 한 번 만들지만 모두 인과적이라(접두 불변) 구간 선택에 미래가 새지 않는다.
+  //   · 학습 구간 청산 시뮬레이션은 학습 끝 봉에서 자른다(endIdx). 이후 봉의 결과가 파라미터 선택에 들어가지 않게.
+  //   · 검증 구간 끝에서 안 끝난 거래는 종가로 평가해 포함한다.
+  //   · 선택 기준은 거래 수를 반영한 t 값(평균 R / 표준오차). 학습 거래가 minTrades 미만이거나 t ≤ 0 이면 후보에서 뺀다.
+  function rList(trades) { return trades.map((t) => (t.sim.outcome === 'ambiguous' ? t.sim.rWorst : t.sim.r)); }
+  function tScore(trades, minTrades) {
+    const r = rList(trades), n = r.length;
+    if (n < minTrades) return -Infinity;
+    const m = r.reduce((a, b) => a + b, 0) / n, v = r.reduce((a, b) => a + (b - m) * (b - m), 0) / Math.max(1, n - 1);
+    return v > 0 ? m / Math.sqrt(v / n) : (m > 0 ? Infinity : -Infinity);
+  }
+  const FIT_KEYS = ['pivotLeft', 'pivotRight', 'fitTol', 'atrPeriod', 'btLookback', 'btMinMatches', 'btMinMoveAtr', 'btMaxLife', 'emaPeriod'];
+
+  function walkForward(c, o, cfg) {
+    o = opt(o);
+    cfg = Object.assign({ trainBars: 6000, testBars: 2000, stepBars: null, grid: {}, strat: { afterTarget: 'exit', protectFrac: 0.5 },
+      useBias: true, minTrades: 8, warmBars: 1000, onProgress: null }, cfg || {});
+    const n = c.length, step = cfg.stepBars || cfg.testBars, ms = barMs(c);
+    const folds = [];
+    for (let a = cfg.warmBars; a + cfg.trainBars + cfg.testBars <= n; a += step) {
+      folds.push({ trainStart: a, trainEnd: a + cfg.trainBars - 1, testStart: a + cfg.trainBars, testEnd: a + cfg.trainBars + cfg.testBars - 1 });
+    }
+    if (!folds.length) throw new Error('봉이 부족합니다: 최소 ' + (cfg.warmBars + cfg.trainBars + cfg.testBars) + '봉 필요 (현재 ' + n + ')');
+
+    // 조합: 격자의 곱 + 현재 값 그대로(기준선). 기준선은 선택 없이 항상 같은 값으로 거래한다.
+    const keys = Object.keys(cfg.grid).filter((k) => cfg.grid[k] && cfg.grid[k].length);
+    let combos = [{}];
+    keys.forEach((k) => { const nx = []; combos.forEach((cb) => cfg.grid[k].forEach((v) => nx.push(Object.assign({}, cb, { [k]: v })))); combos = nx; });
+    const baseline = { id: 'base', over: {}, P: o };
+    const list = combos.map((over, i) => ({ id: 'c' + i, over, P: Object.assign({}, o, over) }));
+    list.push(baseline);
+
+    const builds = new Map(), bias = new Map(), total = list.length;
+    let done = 0;
+    for (const cb of list) {
+      const fk = FIT_KEYS.map((k) => cb.P[k]).join('|');
+      if (!builds.has(fk)) builds.set(fk, buildSnapshots(c, cb.P));
+      cb.bt = evalSnapshots(c, builds.get(fk), cb.P, bias);
+      if (cfg.onProgress) cfg.onProgress(++done, total);
+    }
+
+    const seg = (cb, a, b) => {
+      const bt = Object.assign({}, cb.bt, { candidates: cb.bt.candidates.filter((x) => x.e.index >= a && x.e.index <= b) });
+      return tradeAll(c, bt, Object.assign({}, cb.P, { endIdx: b }), cfg.strat, cfg.useBias).trades;
+    };
+    const oosTrades = [], baseTrades = [], isStatsList = [], stability = {};
+    const out = [];
+    for (const f of folds) {
+      let best = null, bestScore = -Infinity, qualified = 0;
+      for (const cb of list) {
+        if (cb === baseline) continue;
+        const sc = tScore(seg(cb, f.trainStart, f.trainEnd), cfg.minTrades);
+        if (sc > -Infinity) qualified++;
+        if (sc > 0 && sc > bestScore) { bestScore = sc; best = cb; } // 학습에서도 손해인 조합은 고르지 않는다
+      }
+      const row = { train: [c[f.trainStart].t, c[f.trainEnd].t + ms], test: [c[f.testStart].t, c[f.testEnd].t + ms], qualified };
+      const bTr = seg(baseline, f.testStart, f.testEnd);
+      row.baseOos = summarize(bTr, null); baseTrades.push(...bTr);
+      if (best && bestScore > -Infinity) {
+        const isT = seg(best, f.trainStart, f.trainEnd), oT = seg(best, f.testStart, f.testEnd);
+        row.chosen = best.over; row.score = bestScore; row.isStats = summarize(isT, null); row.oosStats = summarize(oT, null);
+        oosTrades.push(...oT); isStatsList.push(row.isStats);
+        Object.keys(best.over).forEach((k) => { (stability[k] = stability[k] || {})[best.over[k]] = ((stability[k] || {})[best.over[k]] || 0) + 1; });
+      } else { row.chosen = null; row.note = qualified ? '학습 구간에서 이익이 난 조합이 없음 — 이 구간은 거래하지 않음' : '학습 구간 거래가 ' + cfg.minTrades + '건 미만 — 이 구간은 거래하지 않음'; }
+      out.push(row);
+    }
+    const isN = isStatsList.reduce((a, s) => a + s.n, 0);
+    return {
+      cfg: { trainBars: cfg.trainBars, testBars: cfg.testBars, stepBars: step, grid: cfg.grid, strat: cfg.strat, useBias: cfg.useBias, minTrades: cfg.minTrades },
+      combos: total - 1, folds: out, stability,
+      oos: summarize(oosTrades, null), baseOos: summarize(baseTrades, null),
+      isAvgR: isN ? isStatsList.reduce((a, s) => a + s.avgR * s.n, 0) / isN : null, isTrades: isN,
+      oosTrades, baseTrades,
+      positiveFolds: out.filter((r) => r.oosStats && r.oosStats.n && r.oosStats.avgR > 0).length,
+      tradedFolds: out.filter((r) => r.oosStats && r.oosStats.n).length
     };
   }
 
@@ -504,5 +601,5 @@
   }
 
   return { LEVELS, DEFAULTS, atr, ema, findPivots, resample, trendOf, biasAt, calcRR, computeR, costPrice,
-    levelPrice, fitCandidates, buildSnapshot, evaluateSetup, simulateTrade, simulateManaged, runBacktest, tradeAll, summarize, compareManual, positionSize, journalStats };
+    levelPrice, fitCandidates, buildSnapshot, evaluateSetup, simulateTrade, simulateManaged, buildSnapshots, evalSnapshots, runBacktest, tradeAll, summarize, walkForward, tScore, compareManual, positionSize, journalStats };
 });

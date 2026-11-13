@@ -331,4 +331,49 @@ t('통계: 모호한 거래는 최악/최선 두 값을 따로 합산', () => {
   assert.ok(Math.abs(s.tradeTargetRate - 1 / 3) < 1e-9); // 순서 불명 제외 3건 중 1건이 0 도달(진행 중은 targetHit 미정=거짓)
 });
 
+console.log('워크포워드');
+const WFC = { trainBars: 3000, testBars: 1500, warmBars: 1000, grid: { bodyRatio: [0.6, 0.8], minRR: [2, 3] }, minTrades: 3, useBias: false };
+t('구간: 학습 바로 뒤가 검증, 검증끼리 이어지고 겹치지 않는다', () => {
+  const r = E.walkForward(sw(9000, 31), {}, WFC);
+  assert.strictEqual(r.folds.length, 3);
+  r.folds.forEach((f, i) => { if (i) assert.strictEqual(f.test[0], r.folds[i - 1].test[1]); assert.strictEqual(f.train[1], f.test[0]); });
+  assert.strictEqual(r.combos, 4);
+});
+t('검증 거래는 모두 검증 구간 안에서 진입한다', () => {
+  const c = sw(9000, 32), r = E.walkForward(c, {}, WFC);
+  const rngs = r.folds.map((f) => [f.test[0], f.test[1]]);
+  r.oosTrades.forEach((tr) => assert.ok(rngs.some(([a, b]) => tr.entryTime >= a && tr.entryTime <= b), 'OOS 밖 진입'));
+});
+t('검증 구간 데이터를 바꿔도 첫 구간의 파라미터 선택·학습 성적은 그대로다 (누수 없음)', () => {
+  const a = sw(9000, 33), b = a.map((x) => Object.assign({}, x));
+  const cut = 1000 + 3000; // 첫 학습 끝 다음 봉부터 다른 가격
+  const r2 = rng(999); let p = b[cut - 1].c;
+  for (let i = cut; i < b.length; i++) { const o = p, cl = p + (r2() - .5) * 400; b[i] = { t: b[i].t, o, h: Math.max(o, cl) + 30, l: Math.min(o, cl) - 30, c: cl, v: 1 }; p = cl; }
+  const x = E.walkForward(a, {}, WFC).folds[0], y = E.walkForward(b, {}, WFC).folds[0];
+  assert.deepStrictEqual(x.chosen, y.chosen);
+  assert.deepStrictEqual(x.isStats, y.isStats);
+  assert.strictEqual(x.score, y.score);
+});
+t('학습 거래가 minTrades 에 못 미치면 그 구간은 거래하지 않는다', () => {
+  const r = E.walkForward(sw(9000, 34), {}, Object.assign({}, WFC, { minTrades: 100000 }));
+  assert.ok(r.folds.every((f) => f.chosen === null && /미만/.test(f.note)));
+  assert.strictEqual(r.oos.n, 0);
+});
+t('t 값: 거래 수가 적으면 제외, 같은 평균이면 표본이 큰 쪽이 높다', () => {
+  const mkT = (rs) => rs.map((r) => ({ sim: { outcome: 'tp', r } }));
+  assert.strictEqual(E.tScore(mkT([1, 2]), 5), -Infinity);
+  assert.ok(E.tScore(mkT([1, 0, 2, 1, 0, 2, 1, 0, 2, 1, 0, 2]), 5) > E.tScore(mkT([1, 0, 2, 1, 0, 2]), 5));
+});
+t('봉이 모자라면 필요한 수를 알려 주며 실패한다', () => {
+  assert.throws(() => E.walkForward(sw(3000, 35), {}, WFC), /최소 \d+봉 필요/);
+});
+t('무작위 가격에서 검증(OOS) 평균 R 이 양수가 아니다 (선택 편향이 새지 않았는지)', () => {
+  let n = 0, sum = 0;
+  for (let seed = 40; seed < 52; seed++) {
+    const r = E.walkForward(sw(9000, seed), {}, WFC);
+    r.oosTrades.forEach((x) => { n++; sum += x.sim.outcome === 'ambiguous' ? x.sim.rWorst : x.sim.r; });
+  }
+  assert.ok(n > 30 && sum / n < 0, 'n=' + n + ' avgR=' + (sum / n));
+});
+
 console.log(pass + '개 통과' + (process.exitCode ? ', 실패 있음' : ''));

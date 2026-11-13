@@ -58,6 +58,7 @@ tr.click{cursor:pointer}
 <nav id="nav">
   <button data-t="chart" class="on">차트 분석</button>
   <button data-t="bt">백테스트</button>
+  <button data-t="wf">워크포워드 검증</button>
   <button data-t="risk">위험 관리</button>
   <button data-t="journal">매매일지·심리</button>
   <button data-t="rules">매매법칙 버전</button>
@@ -138,6 +139,31 @@ tr.click{cursor:pointer}
     <div id="btMsg" class="note"></div>
   </div>
   <div id="btOut"></div>
+</section>
+
+<!-- ───────── 워크포워드 ───────── -->
+<section class="tab" id="tab-wf">
+  <div class="card">
+    <h2>워크포워드 검증 — 고른 값이 새 구간에서도 통하는가</h2>
+    <div class="note" style="margin-bottom:8px">학습 구간에서 아래 값 후보 중 최선(거래 수를 반영한 t 값)을 고르고, 그 값을 <b>바꾸지 않은 채</b> 바로 뒤 검증 구간에서만 거래합니다. 구간을 앞으로 밀며 반복해 검증 구간 거래만 이어 붙인 성적을 봅니다. 같은 데이터에서 값을 반복해 고르는 과최적화를 걸러내는 장치입니다. 나머지 값은 '매매법칙 버전' 탭의 현재 값을 씁니다.</div>
+    <div class="row">
+      <div><label>학습 구간 (봉)</label><input type="number" id="wf_train" value="8000" step="500"></div>
+      <div><label>검증 구간 (봉)</label><input type="number" id="wf_test" value="2000" step="500"></div>
+      <div><label>학습 최소 거래 수</label><input type="number" id="wf_min" value="8" step="1"></div>
+      <div><label>청산 전략</label><select id="wf_strat"><option value="exit">목표 0 에서 전량 청산</option><option value="protect">0 도달 후 보호 SL</option><option value="trail">보호 SL + 후행 SL</option></select></div>
+      <div style="flex:0 0 auto"><span class="chk"><input type="checkbox" id="wf_bias" checked><label for="wf_bias">방향 필터 사용</label></span></div>
+    </div>
+    <div class="row">
+      <div><label>돌파봉 몸통 비율 후보</label><input id="wf_g_bodyRatio" value="0.6,0.7,0.8"></div>
+      <div><label>돌파 거리 ATR 후보</label><input id="wf_g_breakAtr" value="0.25,0.35,0.5"></div>
+      <div><label>최소 손익비 후보</label><input id="wf_g_minRR" value="2,3,4"></div>
+      <div><label>최소 일치 레벨 수 후보</label><input id="wf_g_btMinMatches" value="2,3"></div>
+      <div style="flex:0 0 auto"><button class="b pri" id="wfRun">검증 실행</button></div>
+    </div>
+    <div id="wfInfo" class="note"></div>
+    <div id="wfMsg" class="note"></div>
+  </div>
+  <div id="wfOut"></div>
 </section>
 
 <!-- ───────── 위험 관리 ───────── -->
@@ -251,7 +277,7 @@ const S = {
   c: [], ema: [], src: '', view: { from: 0, count: 150 },
   startIdx: null, kind: 'H', fits: [], fitSel: null,
   snaps: store.get('snaps', []), snapId: null, ev: null, selLevel: null,
-  rules: store.get('rules', []), bts: store.get('bts', []), tempSnap: null, btRes: null, journal: store.get('journal', [])
+  rules: store.get('rules', []), bts: store.get('bts', []), wfs: store.get('wfs', []), wfRes: null, tempSnap: null, btRes: null, journal: store.get('journal', [])
 };
 const EMOTIONS = ['FOMO', '손절 수용', '수익 반납', '복수매매', '조기 청산', '손절 이동(불리하게)', '원칙대로 수행'];
 
@@ -285,7 +311,7 @@ function setCandles(rows, src) {
   const c = [...seen.values()].sort((a, b) => a.t - b.t);
   if (c.length < 300) { msg('봉이 너무 적습니다(' + c.length + '). 최소 300봉이 필요합니다.', true); return; }
   S.c = c; S.src = src; S.ema = E.ema(c.map((b) => b.c), 200);
-  S.startIdx = null; S.fits = []; S.fitSel = null; S.ev = null; S.tempSnap = null; S.btRes = null;
+  S.startIdx = null; S.fits = []; S.fitSel = null; S.ev = null; S.tempSnap = null; S.btRes = null; S.wfRes = null;
   S.view = { from: Math.max(0, c.length - 150), count: 150 };
   $('dataInfo').textContent = src + ' · ' + c.length + '봉 · ' + fmtT(c[0].t) + ' ~ ' + fmtT(c[c.length - 1].t) + ' (KST, 마감 봉만)';
   msg('');
@@ -691,7 +717,7 @@ function renderJournal() {
   }));
 }
 $('exp').addEventListener('click', () => {
-  const blob = new Blob([JSON.stringify({ app: 'fibtrade', version: 1, exportedAt: new Date().toISOString(), journal: S.journal, rules: S.rules, snaps: S.snaps, bts: S.bts }, null, 1)], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify({ app: 'fibtrade', version: 1, exportedAt: new Date().toISOString(), journal: S.journal, rules: S.rules, snaps: S.snaps, bts: S.bts, wfs: S.wfs }, null, 1)], { type: 'application/json' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'fibtrade-' + new Date().toISOString().slice(0, 10) + '.json'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 });
 $('impBtn').addEventListener('click', () => $('imp').click());
@@ -700,7 +726,7 @@ $('imp').addEventListener('change', async (ev) => {
     const d = JSON.parse(await ev.target.files[0].text());
     if (d.app !== 'fibtrade') throw new Error('이 앱의 백업 파일이 아닙니다');
     const merge = (cur, inc, key) => { const m = new Map(cur.map((x) => [x[key], x])); (inc || []).forEach((x) => m.set(x[key], x)); return [...m.values()]; };
-    S.journal = merge(S.journal, d.journal, 'id'); S.rules = merge(S.rules, d.rules, 'v'); S.snaps = merge(S.snaps, d.snaps, 'id'); S.bts = merge(S.bts, d.bts, 'id'); store.set('bts', S.bts);
+    S.journal = merge(S.journal, d.journal, 'id'); S.rules = merge(S.rules, d.rules, 'v'); S.snaps = merge(S.snaps, d.snaps, 'id'); S.bts = merge(S.bts, d.bts, 'id'); store.set('bts', S.bts); S.wfs = merge(S.wfs, d.wfs, 'id'); store.set('wfs', S.wfs);
     store.set('journal', S.journal); store.set('rules', S.rules); store.set('snaps', S.snaps);
     buildRuleForm(); renderRules(); renderSnaps(); renderJournal(); alert('가져왔습니다.');
   } catch (e) { alert('가져오기 실패: ' + e.message); }
@@ -709,9 +735,9 @@ $('imp').addEventListener('change', async (ev) => {
 
 // ───────── 매매법칙 버전 ─────────
 function renderRules() {
-  $('ruleTbl').innerHTML = S.rules.length ? '<table><tr><th>버전</th><th>저장 시각</th><th>변경 사유</th><th>값</th><th>이 버전으로 고정한 피팅 / 일지</th><th>검증 결과(백테스트)</th></tr>' + S.rules.slice().reverse().map((r) => {
+  $('ruleTbl').innerHTML = S.rules.length ? '<table><tr><th>버전</th><th>저장 시각</th><th>변경 사유</th><th>값</th><th>이 버전으로 고정한 피팅 / 일지</th><th>검증 결과(백테스트 · 워크포워드)</th></tr>' + S.rules.slice().reverse().map((r) => {
     const ss = S.snaps.filter((s) => s.ruleVersion === r.v), js = S.journal.filter((j) => j.ruleVersion === r.v), cl = js.filter((j) => j.r != null);
-    return '<tr><td>v' + r.v + '</td><td>' + fmtT(r.savedAt) + '</td><td>' + esc(r.note) + '</td><td class="note">' + PARAM_DEF.map(([k]) => k + '=' + r.params[k]).join(', ') + '<br>데이터: ' + esc(r.dataSource || '-') + (r.dataRange ? ' (' + fmtT(r.dataRange[0]) + ' ~ ' + fmtT(r.dataRange[1]) + ')' : '') + '</td><td>피팅 ' + ss.length + ' · 일지 ' + js.length + (cl.length ? ' · 평균 ' + fmtR(cl.reduce((a, b) => a + b.r, 0) / cl.length) : '') + '</td><td class="note">' + btSummary(r.v) + '</td></tr>';
+    return '<tr><td>v' + r.v + '</td><td>' + fmtT(r.savedAt) + '</td><td>' + esc(r.note) + '</td><td class="note">' + PARAM_DEF.map(([k]) => k + '=' + r.params[k]).join(', ') + '<br>데이터: ' + esc(r.dataSource || '-') + (r.dataRange ? ' (' + fmtT(r.dataRange[0]) + ' ~ ' + fmtT(r.dataRange[1]) + ')' : '') + '</td><td>피팅 ' + ss.length + ' · 일지 ' + js.length + (cl.length ? ' · 평균 ' + fmtR(cl.reduce((a, b) => a + b.r, 0) / cl.length) : '') + '</td><td class="note">' + btSummary(r.v) + wfSummary(r.v) + '</td></tr>';
   }).join('') + '</table>' : '<span class="mut">저장된 버전이 없습니다. 위에서 값을 확인하고 첫 버전을 저장하세요.</span>';
 }
 $('ruleSave').addEventListener('click', () => {
@@ -796,6 +822,90 @@ function showTrade(t) {
 }
 $('btRun').addEventListener('click', runBT);
 
+
+// ───────── 워크포워드 ─────────
+const WF_GRID = ['bodyRatio', 'breakAtr', 'minRR', 'btMinMatches'];
+function wfCfg() {
+  const grid = {};
+  WF_GRID.forEach((k) => { const a = $('wf_g_' + k).value.split(/[,\s]+/).map(parseFloat).filter(isFinite); if (a.length) grid[k] = a; });
+  return { trainBars: +$('wf_train').value || 8000, testBars: +$('wf_test').value || 2000, minTrades: +$('wf_min').value || 8, useBias: $('wf_bias').checked,
+    strat: { afterTarget: $('wf_strat').value, protectFrac: parseFloat($('bt_protectFrac').value) || 0.5 }, grid, warmBars: 1000 };
+}
+function wfPlan() {
+  const cfg = wfCfg(), n = S.c.length, step = cfg.testBars;
+  let folds = 0; for (let a = cfg.warmBars; a + cfg.trainBars + cfg.testBars <= n; a += step) folds++;
+  const combos = Object.keys(cfg.grid).reduce((x, k) => x * cfg.grid[k].length, 1);
+  $('wfInfo').innerHTML = '필요 봉 수 ' + (cfg.warmBars + cfg.trainBars + cfg.testBars).toLocaleString() + ' 이상 · 현재 ' + n.toLocaleString() + '봉 → <b>' + folds + '개 구간</b> · 값 조합 ' + combos + '개' +
+    (combos > 60 ? ' <span class="warn">(조합이 많을수록 우연히 좋아 보이는 값이 뽑히기 쉽습니다)</span>' : '');
+}
+document.querySelectorAll('#tab-wf input,#tab-wf select').forEach((el) => el.addEventListener('input', wfPlan));
+const WORKER_SRC = (url) => 'importScripts(' + JSON.stringify(url) + ');onmessage=function(e){var d=e.data;d.cfg.onProgress=function(a,b){postMessage({p:[a,b]})};try{postMessage({res:FibEngine.walkForward(d.c,d.P,d.cfg)})}catch(err){postMessage({err:err.message})}};';
+function runWF() {
+  if (!S.c.length) { $('wfMsg').innerHTML = '<span class="dn">먼저 차트 탭에서 데이터를 불러오세요.</span>'; return; }
+  const cfg = wfCfg(), P = paramsFromForm();
+  $('wfOut').innerHTML = ''; $('wfRun').disabled = true; $('wfMsg').textContent = '계산 중…';
+  const fin = (m, bad) => { $('wfRun').disabled = false; $('wfMsg').innerHTML = m ? '<span class="' + (bad ? 'dn' : 'mut') + '">' + esc(m) + '</span>' : ''; };
+  const done = (res) => { S.wfRes = { res, P, ranAt: Date.now(), range: [S.c[0].t, S.c[S.c.length - 1].t + MS], src: S.src }; fin('완료'); renderWF(); };
+  const t0 = performance.now();
+  let w = null;
+  try { w = new Worker(URL.createObjectURL(new Blob([WORKER_SRC(new URL('fib-engine.js', location.href).href)], { type: 'text/javascript' }))); } catch (e) { w = null; }
+  if (w) {
+    w.onmessage = (e) => {
+      if (e.data.p) $('wfMsg').textContent = '조합 평가 중… ' + e.data.p[0] + ' / ' + e.data.p[1];
+      else { w.terminate(); if (e.data.err) fin(e.data.err, true); else { done(e.data.res); $('wfMsg').textContent = '완료 · ' + ((performance.now() - t0) / 1000).toFixed(1) + '초'; } }
+    };
+    w.onerror = () => { w.terminate(); fin('백그라운드 계산 실패 — 데이터가 너무 클 수 있습니다.', true); };
+    w.postMessage({ c: S.c, P, cfg });
+  } else {
+    setTimeout(() => { try { cfg.onProgress = null; done(E.walkForward(S.c, P, cfg)); } catch (e) { fin(e.message, true); } }, 30);
+  }
+}
+function wfVerdict(r) {
+  const o = r.oos;
+  if (o.n < 30) return ['warn', '표본 부족 — 검증 구간 거래가 ' + o.n + '건이라 판단을 보류합니다 (30건 이상 권장). 데이터를 더 불러오거나 조건을 완화해 보세요.'];
+  if (o.avgR <= 0) return ['dn', '검증 실패 — 학습 구간에서 고른 값이 새 구간에서는 비용 반영 후 이익을 내지 못했습니다.'];
+  if (r.isAvgR > 0 && o.avgR < 0.5 * r.isAvgR) return ['warn', '열화 큼 — 검증 평균 R 이 학습의 절반 미만입니다. 학습 성적은 과최적화일 가능성이 높습니다.'];
+  if (r.tradedFolds && r.positiveFolds / r.tradedFolds < 0.5) return ['warn', '일관성 부족 — 이익이 난 검증 구간이 절반 미만입니다. 일부 구간에 성적이 쏠려 있습니다.'];
+  return ['up', '검증 구간에서도 양(+)의 평균 R 이 유지됐습니다. 그래도 과거 구간의 결과이며 미래를 보장하지 않습니다.'];
+}
+function renderWF() {
+  const W = S.wfRes; if (!W) return;
+  const r = W.res, o = r.oos, b = r.baseOos, v = wfVerdict(r);
+  const kp = (l, val, note) => '<div class="card kpi"><div class="l">' + l + '</div><div class="v">' + val + '</div>' + (note ? '<div class="note">' + note + '</div>' : '') + '</div>';
+  let h = '<div class="card"><b class="' + v[0] + '">' + esc(v[1]) + '</b></div><div class="grid">' +
+    kp('검증(OOS) 평균 R', '<span class="' + (o.avgR > 0 ? 'up' : 'dn') + '">' + fmtR(o.avgR) + '</span>', o.n + '건 · 승률 ' + pc(o.winRate) + ' · PF ' + f2(o.profitFactor)) +
+    kp('학습(IS) 평균 R', fmtR(r.isAvgR), r.isTrades + '건 — 값을 고른 구간이라 낙관적') +
+    kp('기준선: 현재 값 고정', fmtR(b.avgR), '같은 검증 구간 · ' + b.n + '건 · 선택 과정 없음') +
+    kp('이익 난 검증 구간', r.positiveFolds + ' / ' + r.tradedFolds, '거래가 있었던 구간 기준') +
+    kp('검증 누적 R (최악 ~ 최선)', fmtR(o.totalRWorst) + ' ~ ' + fmtR(o.totalRBest), '순서 불명 ' + o.ambiguous + '건 · 최대 낙폭 ' + f2(o.maxDD) + 'R') + '</div>';
+  h += '<div class="card" style="margin-top:12px"><h2>구간별 결과 <span class="note">(' + r.folds.length + '개 구간 · 값 조합 ' + r.combos + '개)</span></h2><div class="tbl"><table><tr><th>#</th><th>학습 구간</th><th>검증 구간</th><th>학습에서 고른 값</th><th>학습 R (건)</th><th>검증 R (건)</th><th>기준선 검증 R (건)</th></tr>' +
+    r.folds.map((f, i) => '<tr><td>' + (i + 1) + '</td><td class="note">' + fmtT(f.train[0]) + ' ~ ' + fmtT(f.train[1]) + '</td><td class="note">' + fmtT(f.test[0]) + ' ~ ' + fmtT(f.test[1]) + '</td><td>' +
+      (f.chosen ? Object.keys(f.chosen).map((k) => k + '=' + f.chosen[k]).join(', ') + '<br><span class="note">후보 중 조건 충족 ' + f.qualified + '개 · t=' + f.score.toFixed(2) + '</span>' : '<span class="mut">' + esc(f.note) + '</span>') + '</td><td>' +
+      (f.isStats ? fmtR(f.isStats.avgR) + ' (' + f.isStats.n + ')' : '-') + '</td><td class="' + (f.oosStats && f.oosStats.avgR > 0 ? 'up' : 'dn') + '">' + (f.oosStats ? fmtR(f.oosStats.avgR) + ' (' + f.oosStats.n + ')' : '-') + '</td><td>' + fmtR(f.baseOos.avgR) + ' (' + f.baseOos.n + ')</td></tr>').join('') + '</table></div>';
+  const st = Object.keys(r.stability);
+  h += '<div class="note" style="margin-top:8px"><b>값의 안정성</b> — 구간마다 같은 값이 계속 뽑히면 안정적이고, 매번 달라지면 그 값에 의미 있는 차이가 없다는 뜻입니다.<br>' +
+    (st.length ? st.map((k) => esc(k) + ': ' + Object.keys(r.stability[k]).map((x) => x + ' ×' + r.stability[k][x]).join(', ')).join('<br>') : '선택된 값 없음') + '</div>';
+  h += '<div class="note" style="margin-top:8px">학습 구간의 청산은 학습 마지막 봉에서 자르고, 검증 구간 끝에서 끝나지 않은 거래는 종가로 평가합니다. 모든 구간이 같은 과거 데이터를 쓰므로 이 검증을 본 뒤 값을 다시 고르면 그 데이터에 대한 과최적화가 다시 시작됩니다. 펀딩비는 미반영입니다.</div>' +
+    '<div class="row tight" style="margin-top:8px"><div><button class="b pri" id="wfSave">이 결과를 현재 법칙 버전의 검증 결과로 저장</button></div><div id="wfSaved" class="note" style="align-self:center"></div></div></div>';
+  $('wfOut').innerHTML = h;
+  $('wfSave').addEventListener('click', saveWF);
+}
+function saveWF() {
+  const W = S.wfRes, v = curRule() ? curRule().v : 0, r = W.res;
+  if (!v && !confirm('저장된 매매법칙 버전이 없습니다. 버전 0(미지정)으로 저장할까요?')) return;
+  const slim = { cfg: r.cfg, combos: r.combos, folds: r.folds, stability: r.stability, oos: r.oos, baseOos: r.baseOos, isAvgR: r.isAvgR, isTrades: r.isTrades, positiveFolds: r.positiveFolds, tradedFolds: r.tradedFolds };
+  S.wfs.push({ id: 'wf' + Date.now(), ruleVersion: v, ranAt: W.ranAt, params: W.P, dataSource: W.src, dataRange: W.range, result: slim });
+  if (!store.set('wfs', S.wfs)) { S.wfs.pop(); return; }
+  $('wfSaved').textContent = '저장했습니다 (법칙 v' + v + ')'; renderRules();
+}
+function wfSummary(v) {
+  const x = S.wfs.filter((b) => b.ruleVersion === v).pop();
+  if (!x) return '';
+  const r = x.result, ve = wfVerdict(r);
+  return '<hr style="border:0;border-top:1px solid var(--line);margin:4px 0">워크포워드 ' + fmtT(x.ranAt) + '<br>검증 ' + r.oos.n + '건 · 평균 ' + fmtR(r.oos.avgR) + ' (기준선 ' + fmtR(r.baseOos.avgR) + ')<br>' + esc(ve[1].split(' — ')[0]);
+}
+$('wfRun').addEventListener('click', runWF);
+
 // ───────── 공통 ─────────
 function switchTab(t) {
   document.querySelectorAll('#nav button').forEach((b) => b.classList.toggle('on', b.dataset.t === t));
@@ -808,7 +918,7 @@ $('btnDemo').addEventListener('click', demoData);
 $('btnCsv').addEventListener('click', () => { const b = $('csvBox'); b.style.display = b.style.display === 'none' ? 'block' : 'none'; });
 $('csvGo').addEventListener('click', () => { try { setCandles(parseInput($('csvText').value), '붙여넣은 데이터'); } catch (e) { msg('해석 실패: ' + e.message, true); } });
 
-function renderAll() { renderStart(); renderFits(); renderSnaps(); renderDash(); renderEval(); draw(); }
+function renderAll() { wfPlan(); renderStart(); renderFits(); renderSnaps(); renderDash(); renderEval(); draw(); }
 buildRuleForm(); buildEmo([]); resetJournal(); renderRules(); renderJournal(); renderAll(); calcRisk();
 })();
 </script>
