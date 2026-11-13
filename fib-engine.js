@@ -140,13 +140,38 @@
   }
 
   // 체결 결과를 R(위험 단위)로. exit 가 SL 이면 -1R 보다 비용만큼 더 나쁘다.
+  // 펀딩비: 정산 시각(UTC 00/08/16 시)에 포지션을 들고 있어야 낸다/받는다. 양(+)의 펀딩률이면 롱이 내고 숏이 받는다.
+  //   o.funding = [{ t: 정산 시각 ms, rate: 소수, mark?: 정산 시점 마크가 }] (t 오름차순)
+  // 반환: 코인 1개당 가격 단위의 지불액(지불 +, 수령 −).
+  //   · 진입 봉 종가 시각(entryT) 이후 ~ 청산 이전의 정산만 센다.
+  //   · 청산 봉 안의 정산은 그 봉 어디에서 청산됐는지 모르므로 "내는 경우만" 센다(받는 쪽을 유리하게 가정하지 않는다).
+  //   · 진입 시각과 정확히 겹치는 정산도 같은 이유로 내는 경우만 센다.
+  function fundingCostPrice(t, o) {
+    const f = o && o.funding;
+    if (!f || !f.length || t.entryT == null || (t.exitT == null && t.exitBarT == null)) return 0;
+    const dir = t.side === 'long' ? 1 : -1, ms = t.barMs || 900000;
+    let lo = 0, hi = f.length;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (f[m].t < t.entryT) lo = m + 1; else hi = m; } // 첫 f.t >= entryT
+    let sum = 0;
+    for (let i = lo; i < f.length; i++) {
+      const s = f[i];
+      if (t.exitT != null ? s.t >= t.exitT : s.t >= t.exitBarT + ms) break;
+      const amt = dir * s.rate * (s.mark || t.entry);
+      const ambiguous = s.t === t.entryT || (t.exitT == null && s.t >= t.exitBarT);
+      if (ambiguous && amt <= 0) continue;
+      sum += amt;
+    }
+    return sum;
+  }
+
   function computeR(t, o) {
     const long = t.side === 'long';
     const risk = Math.abs(t.entry - t.sl);
     if (!(risk > 0)) return null;
     const gross = (long ? t.exit - t.entry : t.entry - t.exit) / risk;
     const costR = costPrice(t.entry, o) / risk;
-    return { gross, costR, net: gross - costR };
+    const fundingR = fundingCostPrice(t, o) / risk;
+    return { gross, costR, fundingR, net: gross - costR - fundingR };
   }
 
   // ───────── 피보 레벨 / 피팅 ─────────
@@ -300,23 +325,8 @@
 
   // 진입 이후 봉을 순서대로 보며 SL/TP 판정. 한 봉에 둘 다 닿으면 순서를 추측하지 않는다.
   function simulateTrade(c, entryIdx, t, o) {
-    const long = t.side === 'long';
-    for (let i = entryIdx + 1; i < c.length; i++) {
-      const b = c[i];
-      const hitSL = long ? b.l <= t.sl : b.h >= t.sl;
-      const hitTP = long ? b.h >= t.tp : b.l <= t.tp;
-      if (hitSL && hitTP) {
-        const worst = computeR({ side: t.side, entry: t.entry, sl: t.sl, exit: t.sl }, o);
-        const best = computeR({ side: t.side, entry: t.entry, sl: t.sl, exit: t.tp }, o);
-        return { outcome: 'ambiguous', exitIndex: i, rWorst: worst.net, rBest: best.net,
-          note: '같은 봉에서 SL·TP 가 모두 닿음 — 순서를 알 수 없어 확정하지 않음' };
-      }
-      if (hitSL) return { outcome: 'sl', exitIndex: i, r: computeR({ side: t.side, entry: t.entry, sl: t.sl, exit: t.sl }, o).net };
-      if (hitTP) return { outcome: 'tp', exitIndex: i, r: computeR({ side: t.side, entry: t.entry, sl: t.sl, exit: t.tp }, o).net };
-    }
-    return { outcome: 'open' };
+    return simulateManaged(c, entryIdx, t, o, { afterTarget: 'exit' });
   }
-
 
   // 진입 후 관리. afterTarget:
   //   'exit'    목표 0 에서 전량 청산
@@ -329,7 +339,12 @@
     const A = o._atr || atr(c, o.atrPeriod);
     const pv = st.afterTarget === 'trail' ? (o.pivots || findPivots(c, o)) : [];
     const byConf = new Map(); pv.forEach((p) => { if (!byConf.has(p.confirmedIndex)) byConf.set(p.confirmedIndex, []); byConf.get(p.confirmedIndex).push(p); });
-    const R = (exit) => computeR({ side: t.side, entry: t.entry, sl: t.sl, exit }, o).net;
+    const ms = barMs(c), entryT = c[entryIdx].t + ms;
+    // 청산 봉 i 에서 exit 가격으로 나갔을 때의 결과(펀딩 포함). exact: 봉 종가까지 들고 있었음(마지막 봉 평가)
+    const RR = (exit, i, exact) => computeR({ side: t.side, entry: t.entry, sl: t.sl, exit, entryT, barMs: ms,
+      exitT: exact ? c[i].t + ms : undefined, exitBarT: exact ? undefined : c[i].t }, o);
+    const R = (exit, i, exact) => RR(exit, i, exact).net;
+    const F = (exit, i, exact) => RR(exit, i, exact).fundingR;
     const protectSL = t.entry + (t.tp - t.entry) * st.protectFrac;
     let sl = t.sl, hit = false, hitIdx = null;
     for (let i = entryIdx + 1; i <= end; i++) {
@@ -344,18 +359,18 @@
       const hitSL = long ? b.l <= sl : b.h >= sl;
       const hitTP = !hit && (long ? b.h >= t.tp : b.l <= t.tp);
       if (hitSL && hitTP) {
-        return { outcome: 'ambiguous', exitIndex: i, targetHit: null, rWorst: R(t.sl),
-          rBest: st.afterTarget === 'exit' ? R(t.tp) : R(protectSL),
+        return { outcome: 'ambiguous', exitIndex: i, targetHit: null, rWorst: R(t.sl, i),
+          rBest: st.afterTarget === 'exit' ? R(t.tp, i) : R(protectSL, i),
           note: '같은 봉에서 SL·TP 가 모두 닿음 — 순서 불명' };
       }
-      if (hitSL) return { outcome: hit ? 'protect-stop' : 'sl', exitIndex: i, exitPrice: sl, r: R(sl), targetHit: hit, targetIndex: hitIdx };
+      if (hitSL) return { outcome: hit ? 'protect-stop' : 'sl', exitIndex: i, exitPrice: sl, r: R(sl, i), fundingR: F(sl, i), targetHit: hit, targetIndex: hitIdx };
       if (hitTP) {
-        if (st.afterTarget === 'exit') return { outcome: 'tp', exitIndex: i, exitPrice: t.tp, r: R(t.tp), targetHit: true, targetIndex: i };
+        if (st.afterTarget === 'exit') return { outcome: 'tp', exitIndex: i, exitPrice: t.tp, r: R(t.tp, i), fundingR: F(t.tp, i), targetHit: true, targetIndex: i };
         hit = true; hitIdx = i; sl = protectSL;
       }
     }
     // 데이터 끝까지 안 끝난 거래: 마지막 종가로 평가(r). 빼 버리면 보호 SL 전략의 수익 거래가 통계에서 사라진다.
-    return { outcome: 'open', targetHit: hit, targetIndex: hitIdx, exitPrice: c[end].c, r: R(c[end].c) };
+    return { outcome: 'open', targetHit: hit, targetIndex: hitIdx, exitPrice: c[end].c, r: R(c[end].c, end, true), fundingR: F(c[end].c, end, true) };
   }
 
   // ───────── 백테스트 (걸어가며 재현) ─────────
@@ -463,6 +478,7 @@
       totalRWorst: sum(rW), totalRBest: sum(rB),
       profitFactor: gl > 0 ? gw / gl : (gw > 0 ? Infinity : null),
       maxDD: dd, maxLossStreak: ms,
+      avgFundingR: (() => { const f = done.filter((t) => typeof t.sim.fundingR === 'number'); return f.length ? sum(f.map((t) => t.sim.fundingR)) / f.length : null; })(),
       // 거래 안에서 목표 0 에 닿은 비율(예측) — 수익성(avgR)과 따로 본다
       tradeTargetRate: decided.length ? tgt.length / decided.length : null,
       snapCount: snaps.length,
@@ -601,5 +617,5 @@
   }
 
   return { LEVELS, DEFAULTS, atr, ema, findPivots, resample, trendOf, biasAt, calcRR, computeR, costPrice,
-    levelPrice, fitCandidates, buildSnapshot, evaluateSetup, simulateTrade, simulateManaged, buildSnapshots, evalSnapshots, runBacktest, tradeAll, summarize, walkForward, tScore, compareManual, positionSize, journalStats };
+    levelPrice, fitCandidates, buildSnapshot, evaluateSetup, simulateTrade, simulateManaged, buildSnapshots, evalSnapshots, runBacktest, tradeAll, summarize, walkForward, tScore, compareManual, positionSize, journalStats, fundingCostPrice };
 });

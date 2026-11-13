@@ -376,4 +376,60 @@ t('무작위 가격에서 검증(OOS) 평균 R 이 양수가 아니다 (선택 �
   assert.ok(n > 30 && sum / n < 0, 'n=' + n + ' avgR=' + (sum / n));
 });
 
+console.log('펀딩비');
+const H8 = 8 * 3600000;
+const fnd = (times, rate, mark) => times.map((x) => ({ t: x, rate, mark }));
+t('롱은 양(+) 펀딩을 내고 숏은 받는다 (정산 횟수 × 률 × 마크가 ÷ 위험)', () => {
+  const T = Date.UTC(2025, 0, 1, 1, 0), f = fnd([Date.UTC(2025, 0, 1, 8), Date.UTC(2025, 0, 1, 16), Date.UTC(2025, 0, 2, 0)], 0.0001, 50000);
+  const base = { entry: 50000, sl: 49900, exit: 50000, entryT: T, exitT: Date.UTC(2025, 0, 2, 12), barMs: MS };
+  const L = E.computeR(Object.assign({ side: 'long' }, base), { funding: f });
+  assert.ok(Math.abs(L.fundingR - 3 * 5 / 100) < 1e-12, 'long fundingR=' + L.fundingR);
+  assert.ok(Math.abs(L.net - (L.gross - L.costR - 0.15)) < 1e-12);
+  const S = E.computeR({ side: 'short', entry: 50000, sl: 50100, exit: 50000, entryT: T, exitT: base.exitT, barMs: MS }, { funding: f });
+  assert.ok(Math.abs(S.fundingR + 0.15) < 1e-12 && S.net > S.gross - S.costR); // 받으면 순손익이 늘어난다
+  const neg = E.computeR(Object.assign({ side: 'long' }, base), { funding: fnd([Date.UTC(2025, 0, 1, 8)], -0.0002, 50000) });
+  assert.ok(neg.fundingR < 0); // 음(−) 펀딩이면 롱이 받는다
+});
+t('정산 시각을 지나지 않는 거래는 펀딩이 0', () => {
+  const T = Date.UTC(2025, 0, 1, 1, 0);
+  const r = E.computeR({ side: 'long', entry: 100, sl: 99, exit: 101, entryT: T, exitT: T + 3 * 3600000, barMs: MS }, { funding: fnd([Date.UTC(2025, 0, 1, 8)], 0.01, 100) });
+  assert.strictEqual(r.fundingR, 0);
+});
+t('청산 봉·진입 시각과 겹치는 정산은 내는 경우만 센다 (유리하게 해석 금지)', () => {
+  const S0 = Date.UTC(2025, 0, 1, 8), entryT = S0 - 3600000;
+  const mk = (side, rate, exitBarT) => E.fundingCostPrice({ side, entry: 100, entryT, exitBarT, barMs: MS }, { funding: fnd([S0], rate, 100) });
+  assert.strictEqual(mk('long', 0.001, S0), 0.1); // 청산 봉 = [S0, S0+15m) 안에 정산이 있고 내는 쪽 → 센다
+  assert.strictEqual(mk('short', 0.001, S0), 0);  // 받는 쪽 → 세지 않는다
+  assert.strictEqual(mk('long', 0.001, S0 - MS), 0); // 정산이 청산 봉 다음 → 아직 안 지남
+  assert.strictEqual(mk('short', 0.001, S0 + MS), -0.1); // 청산 봉 이전에 지나갔으면 확정적으로 받음
+  const atEntry = (side) => E.fundingCostPrice({ side, entry: 100, entryT: S0, exitT: S0 + H8, barMs: MS }, { funding: fnd([S0], 0.001, 100) });
+  assert.strictEqual(atEntry('long'), 0.1); assert.strictEqual(atEntry('short'), 0);
+});
+t('simulateManaged: 정산을 지나 들고 있으면 R 이 정확히 fundingR 만큼 달라진다', () => {
+  // 롱 진입 100 → 목표 110, 08:00 UTC 정산을 지난 뒤 목표 도달
+  const start = Date.UTC(2025, 0, 1, 6, 0), c = [];
+  for (let i = 0; i < 12; i++) { const p = 100 + (i >= 6 ? 1.2 * (i - 5) : 0); c.push({ t: start + i * MS, o: p, h: p + (i === 11 ? 12 : 0.1), l: p - 0.1, c: p, v: 1 }); }
+  c.push({ t: start + 12 * MS, o: 107, h: 111, l: 106.9, c: 110, v: 1 });
+  const tr = { side: 'long', entry: 100, sl: 99, tp: 110 };
+  const f = fnd([Date.UTC(2025, 0, 1, 8)], 0.0005, 100);
+  // 12봉 × 15분 = 3시간 → 06:00~09:00. 08:00 정산을 지난다.
+  const a = E.simulateManaged(c, 0, tr, {}, { afterTarget: 'exit' }), b = E.simulateManaged(c, 0, tr, { funding: f }, { afterTarget: 'exit' });
+  assert.strictEqual(a.outcome, b.outcome);
+  assert.ok(Math.abs((a.r - b.r) - b.fundingR) < 1e-12 && b.fundingR > 0, 'Δ=' + (a.r - b.r) + ' f=' + b.fundingR);
+  assert.strictEqual(a.fundingR, 0);
+});
+t('요약: 펀딩 R 평균이 나온다', () => {
+  const s = E.summarize([{ sim: { outcome: 'tp', r: 3, fundingR: 0.1, targetHit: true } }, { sim: { outcome: 'sl', r: -1, fundingR: 0.3, targetHit: false } }], null);
+  assert.ok(Math.abs(s.avgFundingR - 0.2) < 1e-12);
+});
+t('백테스트: 펀딩 데이터를 주면 같은 신호에서 R 만 달라지고 신호는 그대로다', () => {
+  const c = sw(5000, 61), bt = E.runBacktest(c, {});
+  const fs = []; for (let x = Math.ceil(c[0].t / H8) * H8; x < c[c.length - 1].t; x += H8) fs.push({ t: x, rate: 0.0003, mark: 20000 });
+  const a = E.tradeAll(c, bt, {}, { afterTarget: 'exit' }, false), b = E.tradeAll(c, bt, { funding: fs }, { afterTarget: 'exit' }, false);
+  assert.deepStrictEqual(a.trades.map((x) => x.entryIndex), b.trades.map((x) => x.entryIndex));
+  assert.ok(a.trades.length > 0);
+  const dir = (x) => (x.side === 'long' ? 1 : -1);
+  b.trades.forEach((x, i) => { if (x.sim.fundingR != null && dir(x) === 1) assert.ok(x.sim.r <= a.trades[i].sim.r + 1e-12); }); // 양(+) 펀딩이면 롱은 항상 불리
+});
+
 console.log(pass + '개 통과' + (process.exitCode ? ', 실패 있음' : ''));
