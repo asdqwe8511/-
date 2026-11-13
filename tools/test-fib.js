@@ -241,4 +241,94 @@ t('수동 목표와 자동 목표의 차이', () => {
   assert.strictEqual(d.diff, 600); assert.strictEqual(d.pct, 1); assert.strictEqual(d.atr, 2);
 });
 
+
+console.log('청산 전략 (보호 SL·후행 SL)');
+const mk = (rows) => rows.map((r, i) => ({ t: T0 + i * MS, o: r[0], h: r[1], l: r[2], c: r[3], v: 1 }));
+// 숏: 진입 100, SL 101, TP 90. 0 번째 봉이 진입 봉.
+const tr0 = { side: 'short', entry: 100, sl: 101, tp: 90 };
+t('exit: 목표에서 전량 청산', () => {
+  const c = mk([[100, 100.2, 99.8, 100], [100, 100.1, 95, 96], [96, 96.1, 89, 90]]);
+  const r = E.simulateManaged(c, 0, tr0, {}, { afterTarget: 'exit' });
+  assert.strictEqual(r.outcome, 'tp'); assert.ok(r.r > 9 && r.r < 10);
+});
+t('protect: 0 도달 후 SL 이 진입→목표 절반(95)으로 올라가고 거기서 청산', () => {
+  const c = mk([[100, 100.2, 99.8, 100], [100, 100.1, 89.5, 90], [90, 96, 89.8, 95.5], [95.5, 95.6, 94, 94.5]]);
+  const r = E.simulateManaged(c, 0, tr0, {}, { afterTarget: 'protect', protectFrac: 0.5 });
+  assert.strictEqual(r.outcome, 'protect-stop'); assert.strictEqual(r.exitPrice, 95); assert.strictEqual(r.targetHit, true);
+  assert.ok(r.r > 4.5 && r.r < 5); // (100-95)/1 = 5R 에서 비용만큼 덜
+});
+t('protect: 0 에 닿은 같은 봉에서는 새 SL 을 적용하지 않는다', () => {
+  const c = mk([[100, 100.2, 99.8, 100], [100, 96, 89.5, 89.8], [89.8, 90, 80, 81]]);
+  const r = E.simulateManaged(c, 0, tr0, {}, { afterTarget: 'protect', protectFrac: 0.5 });
+  assert.strictEqual(r.outcome, 'open'); assert.ok(r.r > 0 && r.targetHit); // 96 > 95 이지만 같은 봉이라 청산 안 됨, 이후 계속 하락
+});
+t('SL·TP 같은 봉이면 ambiguous (전략 불문)', () => {
+  const c = mk([[100, 100.2, 99.8, 100], [100, 101.5, 89, 95]]);
+  ['exit', 'protect', 'trail'].forEach((m) => {
+    const r = E.simulateManaged(c, 0, tr0, {}, { afterTarget: m });
+    assert.strictEqual(r.outcome, 'ambiguous'); assert.ok(r.rWorst < 0 && r.rBest > 0);
+  });
+});
+t('trail: 확정 스윙 고점으로만 유리하게 이동, 불리하게는 안 움직임', () => {
+  // 목표 도달 후 하락하다 반등 고점(스윙 고점)을 만들고 그 위로 올라가 청산되는 경로
+  const rows = [[100, 100.2, 99.8, 100], [100, 100.1, 89.5, 90]];
+  let p = 90; for (let i = 0; i < 8; i++) { rows.push([p, p + 0.2, p - 1.2, p - 1]); p -= 1; }   // 82 까지 하락
+  for (let i = 0; i < 6; i++) { rows.push([p, p + 1.2, p - 0.2, p + 1]); p += 1; }                // 반등: 고점 ~88.2
+  for (let i = 0; i < 6; i++) { rows.push([p, p + 0.2, p - 1.2, p - 1]); p -= 1; }                // 다시 하락(스윙 고점 확정)
+  rows.push([p, 95, p - 0.5, 94]);                                                                // 반등 급등
+  const c = mk(rows);
+  const rp = E.simulateManaged(c, 0, tr0, {}, { afterTarget: 'protect', protectFrac: 0.5 });
+  const rt = E.simulateManaged(c, 0, tr0, {}, { afterTarget: 'trail', protectFrac: 0.5, pivotLeft: 3, pivotRight: 3 });
+  assert.ok(rt.exitPrice < rp.exitPrice, 'trail 이 더 낮은(유리한) SL 에서 청산: ' + rt.exitPrice + ' vs ' + rp.exitPrice);
+  assert.ok(rt.r > rp.r);
+});
+
+console.log('백테스트');
+const sw = (n, seed) => { const r = rng(seed); let p = 20000; const out = []; for (let i = 0; i < n; i++) { const o = p, cl = p + (r() - .5) * 90; out.push({ t: T0 + i * MS, o, h: Math.max(o, cl) + r() * 25, l: Math.min(o, cl) - r() * 25, c: cl, v: 1 }); p = cl; } return out; };
+t('fitCandidates 에 미리 계산한 피벗을 넘겨도 결과가 같다', () => {
+  const c = sw(1500, 5), pv = E.findPivots(c);
+  const a = E.fitCandidates(c, { startIdx: 1000, startKind: 'H', asOfIdx: 1300 });
+  const b = E.fitCandidates(c, { startIdx: 1000, startKind: 'H', asOfIdx: 1300 }, { pivots: pv });
+  assert.deepStrictEqual(a.map((f) => [f.P0, f.count]), b.map((f) => [f.P0, f.count]));
+});
+t('스냅샷 생성 이전 봉의 돌파는 신호로 인정하지 않는다 / 겹치는 포지션 없음', () => {
+  let total = 0;
+  for (const seed of [11, 12, 13, 14]) {
+    const c = sw(5000, seed), bt = E.runBacktest(c, {});
+    for (const x of bt.candidates) { total++; assert.ok(x.e.index > x.rec.k, '진입은 스냅샷 생성 뒤'); assert.ok(x.breakout.index > x.rec.k, '돌파도 생성 뒤'); }
+    const r = E.tradeAll(c, bt, {}, { afterTarget: 'exit' }, false);
+    for (let i = 1; i < r.trades.length; i++) {
+      const prev = r.trades[i - 1]; assert.ok(prev.sim.outcome !== 'open' && r.trades[i].entryIndex > prev.sim.exitIndex, '겹침 없음');
+    }
+  }
+  assert.ok(total > 0, '검증할 후보가 하나도 없음');
+});
+t('뒤 봉을 잘라 돌려도 앞쪽 진입 후보는 그대로다 (미래 정보 없음)', () => {
+  let checked = 0;
+  for (const seed of [21, 22, 23]) {
+    const c = sw(5000, seed), cut = 4000;
+    const key = (x) => [x.e.index, x.e.side, x.e.price, x.e.sl, x.level].join('|');
+    const full = new Set(E.runBacktest(c, {}).candidates.filter((x) => x.e.index < cut).map(key));
+    const part = E.runBacktest(c.slice(0, cut), {}).candidates.map(key);
+    part.forEach((k) => { checked++; assert.ok(full.has(k), '잘린 데이터에서만 나온 신호: ' + k); });
+    full.forEach((k) => assert.ok(part.includes(k), '전체에서만 나온 신호: ' + k));
+  }
+  assert.ok(checked > 0);
+});
+t('무작위 가격에서 비용 반영 평균 R 이 양수가 아니다 (낙관 편향 점검)', () => {
+  let n = 0, sum = 0;
+  for (let seed = 1; seed <= 25; seed++) {
+    const c = sw(5000, seed * 7 + 1), bt = E.runBacktest(c, {});
+    E.tradeAll(c, bt, {}, { afterTarget: 'exit' }, false).trades.forEach((x) => { if (x.sim.outcome === 'tp' || x.sim.outcome === 'sl') { n++; sum += x.sim.r; } });
+  }
+  assert.ok(n > 100 && sum / n < 0, 'n=' + n + ' avgR=' + (sum / n));
+});
+t('통계: 모호한 거래는 최악/최선 두 값을 따로 합산', () => {
+  const tr = [{ sim: { outcome: 'tp', r: 3, targetHit: true } }, { sim: { outcome: 'sl', r: -1.1, targetHit: false } }, { sim: { outcome: 'ambiguous', rWorst: -1.1, rBest: 3 } }, { sim: { outcome: 'open', r: 0.5 } }];
+  const s = E.summarize(tr, null);
+  assert.strictEqual(s.n, 4); assert.strictEqual(s.open, 1); assert.strictEqual(s.ambiguous, 1);
+  assert.ok(Math.abs(s.totalRWorst - 1.3) < 1e-9 && Math.abs(s.totalRBest - 5.4) < 1e-9); // 진행 중은 종가 평가로 포함
+  assert.ok(Math.abs(s.tradeTargetRate - 1 / 3) < 1e-9); // 순서 불명 제외 3건 중 1건이 0 도달(진행 중은 targetHit 미정=거짓)
+});
+
 console.log(pass + '개 통과' + (process.exitCode ? ', 실패 있음' : ''));

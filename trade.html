@@ -57,6 +57,7 @@ tr.click{cursor:pointer}
 </header>
 <nav id="nav">
   <button data-t="chart" class="on">차트 분석</button>
+  <button data-t="bt">백테스트</button>
   <button data-t="risk">위험 관리</button>
   <button data-t="journal">매매일지·심리</button>
   <button data-t="rules">매매법칙 버전</button>
@@ -70,6 +71,7 @@ tr.click{cursor:pointer}
   <div class="grid" id="dash"></div>
   <div class="card" style="margin-top:12px">
     <div class="row">
+      <div style="flex:0 0 auto"><select id="pages" title="불러올 봉 수"><option value="2">약 3천 봉 (31일)</option><option value="10">약 1.5만 봉 (156일)</option><option value="30">약 4.5만 봉 (1.3년)</option></select></div>
       <div style="flex:0 0 auto"><button class="b pri" id="btnLoad">BTCUSDT 15분봉 불러오기</button></div>
       <div style="flex:0 0 auto"><button class="b" id="btnDemo">샘플(가짜) 데이터</button></div>
       <div style="flex:0 0 auto"><button class="b" id="btnCsv">CSV/JSON 붙여넣기</button></div>
@@ -119,6 +121,23 @@ tr.click{cursor:pointer}
     <div class="tbl" id="evTbl"><span class="mut">고정된 피팅이 없습니다.</span></div>
     <div id="evDetail"></div>
   </div>
+</section>
+
+<!-- ───────── 백테스트 ───────── -->
+<section class="tab" id="tab-bt">
+  <div class="card">
+    <h2>걸어가며 재현하는 백테스트</h2>
+    <div class="note" style="margin-bottom:8px">봉이 닫힐 때마다 그 시점까지의 정보만으로 시작점 1(최근 구간 최고가/최저가)과 0 후보를 고정하고, 고정된 뒤의 봉에서만 돌파·리테스트·진입을 인정합니다. 한 번에 한 포지션, 한 레벨당 한 번 진입(SL 뒤 재진입 잠금), 수수료·슬리피지 왕복 반영, 펀딩비는 미반영입니다. 위 '매매법칙 버전' 탭의 값이 그대로 쓰입니다.</div>
+    <div class="row">
+      <div><label>시작점 탐색 구간 (봉)</label><input type="number" id="bt_btLookback" value="300" step="10"></div>
+      <div><label>최소 일치 레벨 수</label><input type="number" id="bt_btMinMatches" value="2" step="1"></div>
+      <div><label>스냅샷 최대 수명 (봉)</label><input type="number" id="bt_btMaxLife" value="500" step="50"></div>
+      <div><label>보호 SL 위치 (진입→0 거리 비율)</label><input type="number" id="bt_protectFrac" value="0.5" step="0.1"></div>
+      <div style="flex:0 0 auto"><button class="b pri" id="btRun">백테스트 실행</button></div>
+    </div>
+    <div id="btMsg" class="note"></div>
+  </div>
+  <div id="btOut"></div>
 </section>
 
 <!-- ───────── 위험 관리 ───────── -->
@@ -232,7 +251,7 @@ const S = {
   c: [], ema: [], src: '', view: { from: 0, count: 150 },
   startIdx: null, kind: 'H', fits: [], fitSel: null,
   snaps: store.get('snaps', []), snapId: null, ev: null, selLevel: null,
-  rules: store.get('rules', []), journal: store.get('journal', [])
+  rules: store.get('rules', []), bts: store.get('bts', []), tempSnap: null, btRes: null, journal: store.get('journal', [])
 };
 const EMOTIONS = ['FOMO', '손절 수용', '수익 반납', '복수매매', '조기 청산', '손절 이동(불리하게)', '원칙대로 수행'];
 
@@ -266,7 +285,7 @@ function setCandles(rows, src) {
   const c = [...seen.values()].sort((a, b) => a.t - b.t);
   if (c.length < 300) { msg('봉이 너무 적습니다(' + c.length + '). 최소 300봉이 필요합니다.', true); return; }
   S.c = c; S.src = src; S.ema = E.ema(c.map((b) => b.c), 200);
-  S.startIdx = null; S.fits = []; S.fitSel = null; S.ev = null;
+  S.startIdx = null; S.fits = []; S.fitSel = null; S.ev = null; S.tempSnap = null; S.btRes = null;
   S.view = { from: Math.max(0, c.length - 150), count: 150 };
   $('dataInfo').textContent = src + ' · ' + c.length + '봉 · ' + fmtT(c[0].t) + ' ~ ' + fmtT(c[c.length - 1].t) + ' (KST, 마감 봉만)';
   msg('');
@@ -276,7 +295,8 @@ async function loadBinance() {
   msg('불러오는 중…');
   try {
     let all = [], end = Date.now();
-    for (let p = 0; p < 3; p++) {
+    const pages = +$('pages').value || 2;
+    for (let p = 0; p < pages; p++) {
       const r = await fetch('https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=15m&limit=1500&endTime=' + end);
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const a = await r.json();
@@ -312,7 +332,7 @@ function parseInput(text) {
 
 // ───────── 차트 ─────────
 const cv = $('cv'), ctx = cv.getContext('2d');
-function activeSnap() { return S.snaps.find((s) => s.id === S.snapId) || null; }
+function activeSnap() { return S.snapId ? (S.snaps.find((s) => s.id === S.snapId) || null) : (S.tempSnap || null); }
 function previewFit() { return S.fitSel != null ? S.fits[S.fitSel] : null; }
 function draw() {
   const dpr = window.devicePixelRatio || 1;
@@ -488,7 +508,7 @@ function renderFits() {
   el.innerHTML = '<table><tr><th>#</th><th>0 후보</th><th>일치 레벨 수</th><th>맞은 피벗 (레벨 · 오차 · 확정 시각)</th></tr>' +
     S.fits.map((f, i) => '<tr class="click ' + (i === S.fitSel ? 'sel' : '') + '" data-i="' + i + '"><td>' + (i + 1) + '</td><td><b>' + fmtP(f.P0) + '</b></td><td>' + f.count + (f.count < 2 ? ' <span class="warn">(근거 약함)</span>' : '') + '</td><td>' +
       f.matches.sort((a, b) => a.level - b.level).map((m) => m.level + ' · ' + fmtP(m.pivot.price) + ' (±' + m.err.toFixed(1) + ') · ' + fmtT(m.pivot.confirmedAt)).join('<br>') + '</td></tr>').join('') + '</table>';
-  el.querySelectorAll('tr.click').forEach((tr) => tr.addEventListener('click', () => { S.fitSel = +tr.dataset.i; S.snapId = null; renderFits(); renderSnaps(); refreshEval(); }));
+  el.querySelectorAll('tr.click').forEach((tr) => tr.addEventListener('click', () => { S.fitSel = +tr.dataset.i; S.snapId = null; S.tempSnap = null; renderFits(); renderSnaps(); refreshEval(); }));
   renderCmp();
 }
 function renderCmp() {
@@ -508,7 +528,7 @@ function renderSnaps() {
   $('btnSnapDel').disabled = !S.snapId;
   fillJournalSelects();
 }
-$('snapSel').addEventListener('change', (e) => { S.snapId = e.target.value || null; S.fitSel = null; renderFits(); renderSnaps(); refreshEval(); });
+$('snapSel').addEventListener('change', (e) => { S.snapId = e.target.value || null; S.tempSnap = null; S.fitSel = null; renderFits(); renderSnaps(); refreshEval(); });
 $('btnSnapDel').addEventListener('click', () => {
   if (!S.snapId || !confirm('이 고정 피팅을 삭제할까요? 연결된 일지의 피팅 연결은 id 만 남습니다.')) return;
   S.snaps = S.snaps.filter((s) => s.id !== S.snapId); store.set('snaps', S.snaps); S.snapId = null; S.ev = null; renderSnaps(); refreshEval();
@@ -543,7 +563,7 @@ function renderEval() {
     h += '<div>진입 ' + fmtP(e.price) + ' · SL ' + fmtP(e.sl) + ' · TP(0) ' + fmtP(e.tp) + '</div>';
     if (e.rr) h += '<div class="note">위험 ' + fmtP(e.rr.risk) + ' · 보상 ' + fmtP(e.rr.reward) + ' · 왕복 비용 ' + fmtP(e.rr.cost) + ' → 손익비 비용 전 1:' + e.rr.rrGross.toFixed(2) + ' / 비용 후 <b>1:' + e.rr.rrNet.toFixed(2) + '</b></div>';
     h += '<div class="note">진입 시점 방향 필터: 4H ' + bias.h4 + ' · 1H ' + bias.h1 + ' · 15m ' + bias.m15 + ' → <b class="' + (aligned ? 'up' : 'warn') + '">' + (aligned ? '파동 방향과 일치' : '일치하지 않음(' + bias.dir + ')') + '</b></div>';
-    const sim = E.simulateTrade(S.c, e.index, e, paramsFromForm());
+    const sim = E.simulateTrade(S.c, e.index, { side: e.side, entry: e.price, sl: e.sl, tp: e.tp }, paramsFromForm());
     h += '<div class="note">이후 봉 결과(참고): ' + ({ tp: '<span class="up">목표 0 도달 ' + fmtR(sim.r) + '</span>', sl: '<span class="dn">손절 ' + fmtR(sim.r) + '</span>', open: '진행 중', ambiguous: '<span class="warn">한 봉에서 SL·TP 모두 닿음 — 순서 불명 (' + fmtR(sim.rWorst) + ' ~ ' + fmtR(sim.rBest) + ')</span>' }[sim.outcome]) + '</div>';
     h += '<div class="note">※ 목표 도달 여부(예측)와 실제 수익성(비용 반영 R)은 별개 지표입니다. 진입은 리테스트 봉 종가로 가정합니다.</div>';
     h += '<div style="margin-top:6px"><button class="b" id="toJournal">이 신호로 일지 쓰기</button> <button class="b" id="toRisk">위험 관리로 보내기</button></div>';
@@ -565,7 +585,7 @@ $('btnFit').addEventListener('click', () => {
   const ai = asOfIdx();
   if (ai <= S.startIdx + 10) { msg('계산 시점이 시작점과 너무 가깝습니다.', true); return; }
   S.fits = E.fitCandidates(S.c, { startIdx: S.startIdx, startKind: S.kind, asOfIdx: ai }, paramsFromForm());
-  S.fitSel = S.fits.length ? 0 : null; S.snapId = null; msg('');
+  S.fitSel = S.fits.length ? 0 : null; S.snapId = null; S.tempSnap = null; msg('');
   renderFits(); renderSnaps(); refreshEval();
 });
 function saveSnap(fit) {
@@ -671,7 +691,7 @@ function renderJournal() {
   }));
 }
 $('exp').addEventListener('click', () => {
-  const blob = new Blob([JSON.stringify({ app: 'fibtrade', version: 1, exportedAt: new Date().toISOString(), journal: S.journal, rules: S.rules, snaps: S.snaps }, null, 1)], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify({ app: 'fibtrade', version: 1, exportedAt: new Date().toISOString(), journal: S.journal, rules: S.rules, snaps: S.snaps, bts: S.bts }, null, 1)], { type: 'application/json' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'fibtrade-' + new Date().toISOString().slice(0, 10) + '.json'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 });
 $('impBtn').addEventListener('click', () => $('imp').click());
@@ -680,7 +700,7 @@ $('imp').addEventListener('change', async (ev) => {
     const d = JSON.parse(await ev.target.files[0].text());
     if (d.app !== 'fibtrade') throw new Error('이 앱의 백업 파일이 아닙니다');
     const merge = (cur, inc, key) => { const m = new Map(cur.map((x) => [x[key], x])); (inc || []).forEach((x) => m.set(x[key], x)); return [...m.values()]; };
-    S.journal = merge(S.journal, d.journal, 'id'); S.rules = merge(S.rules, d.rules, 'v'); S.snaps = merge(S.snaps, d.snaps, 'id');
+    S.journal = merge(S.journal, d.journal, 'id'); S.rules = merge(S.rules, d.rules, 'v'); S.snaps = merge(S.snaps, d.snaps, 'id'); S.bts = merge(S.bts, d.bts, 'id'); store.set('bts', S.bts);
     store.set('journal', S.journal); store.set('rules', S.rules); store.set('snaps', S.snaps);
     buildRuleForm(); renderRules(); renderSnaps(); renderJournal(); alert('가져왔습니다.');
   } catch (e) { alert('가져오기 실패: ' + e.message); }
@@ -689,9 +709,9 @@ $('imp').addEventListener('change', async (ev) => {
 
 // ───────── 매매법칙 버전 ─────────
 function renderRules() {
-  $('ruleTbl').innerHTML = S.rules.length ? '<table><tr><th>버전</th><th>저장 시각</th><th>변경 사유</th><th>값</th><th>이 버전으로 고정한 피팅 / 일지</th></tr>' + S.rules.slice().reverse().map((r) => {
+  $('ruleTbl').innerHTML = S.rules.length ? '<table><tr><th>버전</th><th>저장 시각</th><th>변경 사유</th><th>값</th><th>이 버전으로 고정한 피팅 / 일지</th><th>검증 결과(백테스트)</th></tr>' + S.rules.slice().reverse().map((r) => {
     const ss = S.snaps.filter((s) => s.ruleVersion === r.v), js = S.journal.filter((j) => j.ruleVersion === r.v), cl = js.filter((j) => j.r != null);
-    return '<tr><td>v' + r.v + '</td><td>' + fmtT(r.savedAt) + '</td><td>' + esc(r.note) + '</td><td class="note">' + PARAM_DEF.map(([k]) => k + '=' + r.params[k]).join(', ') + '<br>데이터: ' + esc(r.dataSource || '-') + (r.dataRange ? ' (' + fmtT(r.dataRange[0]) + ' ~ ' + fmtT(r.dataRange[1]) + ')' : '') + '</td><td>피팅 ' + ss.length + ' · 일지 ' + js.length + (cl.length ? ' · 평균 ' + fmtR(cl.reduce((a, b) => a + b.r, 0) / cl.length) : '') + '</td></tr>';
+    return '<tr><td>v' + r.v + '</td><td>' + fmtT(r.savedAt) + '</td><td>' + esc(r.note) + '</td><td class="note">' + PARAM_DEF.map(([k]) => k + '=' + r.params[k]).join(', ') + '<br>데이터: ' + esc(r.dataSource || '-') + (r.dataRange ? ' (' + fmtT(r.dataRange[0]) + ' ~ ' + fmtT(r.dataRange[1]) + ')' : '') + '</td><td>피팅 ' + ss.length + ' · 일지 ' + js.length + (cl.length ? ' · 평균 ' + fmtR(cl.reduce((a, b) => a + b.r, 0) / cl.length) : '') + '</td><td class="note">' + btSummary(r.v) + '</td></tr>';
   }).join('') + '</table>' : '<span class="mut">저장된 버전이 없습니다. 위에서 값을 확인하고 첫 버전을 저장하세요.</span>';
 }
 $('ruleSave').addEventListener('click', () => {
@@ -703,6 +723,78 @@ $('ruleSave').addEventListener('click', () => {
   $('ruleNote').value = ''; renderRules(); fillJournalSelects();
 });
 $('ruleReset').addEventListener('click', () => { PARAM_DEF.forEach(([k]) => { $('p_' + k).value = E.DEFAULTS[k]; }); refreshEval(); });
+
+
+// ───────── 백테스트 ─────────
+const STRATS = [['exit', '목표 0 에서 전량 청산'], ['protect', '0 도달 후 보호 SL'], ['trail', '보호 SL + 스윙 후행 SL']];
+const OUTCOME = { tp: '목표 도달', sl: '손절', 'protect-stop': '보호 SL 청산', ambiguous: '순서 불명', open: '진행 중(종가 평가)' };
+const f2 = (x) => x == null ? '-' : (x === Infinity ? '∞' : x.toFixed(2));
+const pc = (x) => x == null ? '-' : (x * 100).toFixed(0) + '%';
+function btParams() {
+  const o = paramsFromForm();
+  ['btLookback', 'btMinMatches', 'btMaxLife'].forEach((k) => { o[k] = parseFloat($('bt_' + k).value) || undefined; });
+  return o;
+}
+function btSummary(v) {
+  const r = S.bts.filter((b) => b.ruleVersion === v).pop();
+  if (!r) return '<span class="mut">없음</span>';
+  const a = r.rows.find((x) => x.bias && x.strat === 'exit');
+  return fmtT(r.ranAt) + '<br>방향필터+고정 TP: ' + a.n + '건 · 평균 ' + fmtR(a.avgR) + ' · 최악합 ' + fmtR(a.totalRWorst) + '<br>0 도달률(예측) ' + pc(a.snapTargetRate);
+}
+function runBT() {
+  if (S.c.length < 1000) { $('btMsg').innerHTML = '<span class="dn">봉이 부족합니다(1000봉 이상). 차트 탭에서 더 많이 불러오세요.</span>'; return; }
+  $('btMsg').textContent = '계산 중… (' + S.c.length + '봉)'; $('btOut').innerHTML = '';
+  setTimeout(() => {
+    try {
+      const P = btParams(), t0 = performance.now(), bt = E.runBacktest(S.c, P), rows = [];
+      [true, false].forEach((bias) => STRATS.forEach(([k, name]) => {
+        const r = E.tradeAll(S.c, bt, P, { afterTarget: k, protectFrac: parseFloat($('bt_protectFrac').value) || 0.5 }, bias);
+        rows.push(Object.assign({ bias, strat: k, name, skipped: r.skipped }, r.stats, { trades: r.trades }));
+      }));
+      S.btRes = { bt, rows, P, ranAt: Date.now(), sel: 0, range: [S.c[0].t, S.c[S.c.length - 1].t + MS], src: S.src };
+      $('btMsg').textContent = '완료 · ' + ((performance.now() - t0) / 1000).toFixed(1) + '초';
+      renderBT();
+    } catch (e) { $('btMsg').innerHTML = '<span class="dn">실패: ' + esc(e.message) + '</span>'; }
+  }, 30);
+}
+function renderBT() {
+  const R = S.btRes; if (!R) return;
+  const a = R.rows[0];
+  let h = '<div class="grid"><div class="card kpi"><div class="l">고정된 0 후보 (스냅샷)</div><div class="v">' + a.snapCount + '</div></div>' +
+    '<div class="card kpi"><div class="l">예측: 0 에 실제 도달한 비율</div><div class="v">' + pc(a.snapTargetRate) + '</div><div class="note">거래 여부와 무관한 예측 적중률</div></div>' +
+    '<div class="card kpi"><div class="l">진입 후보 신호</div><div class="v">' + R.bt.candidates.length + '</div><div class="note">방향 일치 ' + R.bt.candidates.filter((x) => x.biasOk).length + '건</div></div>' +
+    '<div class="card kpi"><div class="l">검증 기간</div><div style="font-size:13px">' + fmtT(R.range[0]) + ' ~ ' + fmtT(R.range[1]) + '</div><div class="note">' + esc(R.src) + '</div></div></div>';
+  h += '<div class="card" style="margin-top:12px"><h2>청산·필터 전략 비교 <span class="note">(비용 반영 R · 행을 누르면 거래 목록)</span></h2><div class="tbl"><table><tr><th>방향 필터</th><th>청산 전략</th><th>거래</th><th>순서 불명</th><th>승률</th><th>평균 R</th><th>누적 R (최악 ~ 최선)</th><th>PF</th><th>최대 낙폭</th><th>최대 연패</th><th>거래 중 0 도달</th></tr>' +
+    R.rows.map((r, i) => '<tr class="click ' + (i === R.sel ? 'sel' : '') + '" data-i="' + i + '"><td>' + (r.bias ? '4H·1H·200EMA 일치만' : '필터 없음') + '</td><td>' + r.name + '</td><td>' + r.n + (r.open ? ' (진행 중 ' + r.open + ' 포함)' : '') + '</td><td>' + r.ambiguous + '</td><td>' + pc(r.winRate) + '</td><td class="' + (r.avgR > 0 ? 'up' : 'dn') + '">' + fmtR(r.avgR) + '</td><td>' + fmtR(r.totalRWorst) + ' ~ ' + fmtR(r.totalRBest) + '</td><td>' + f2(r.profitFactor) + '</td><td>' + f2(r.maxDD) + 'R</td><td>' + r.maxLossStreak + '</td><td>' + pc(r.tradeTargetRate) + '</td></tr>').join('') + '</table></div>' +
+    '<div class="note" style="margin-top:6px">거래 수가 적으면(수십 건 미만) 평균 R 은 우연에 크게 흔들립니다. 한 봉에서 SL·TP 가 같이 닿은 거래는 유리하게 해석하지 않고 최악/최선 두 값으로 나눠 표시합니다. 수익 보호·후행 전략의 최선값은 보호 SL 에서 청산된 경우를 가정한 하한입니다. 과거 성과는 미래를 보장하지 않으며, 같은 구간에서 파라미터를 반복해 고르면 과최적화가 됩니다.</div>' +
+    '<div class="row tight" style="margin-top:8px"><div><button class="b pri" id="btSave">이 결과를 현재 법칙 버전의 검증 결과로 저장</button></div><div id="btSaved" class="note" style="align-self:center"></div></div></div>';
+  const r = R.rows[R.sel];
+  h += '<div class="card"><h2>거래 목록 — ' + (r.bias ? '방향 필터' : '필터 없음') + ' · ' + r.name + '</h2><div class="tbl">' + (r.trades.length ? '<table><tr><th>진입 시각</th><th>방향</th><th>레벨</th><th>진입 / SL / TP</th><th>계획 손익비</th><th>방향 판정</th><th>결과</th><th>R</th><th></th></tr>' + r.trades.map((t, i) => {
+    const s = t.sim, rr = s.outcome === 'ambiguous' ? fmtR(s.rWorst) + ' ~ ' + fmtR(s.rBest) : fmtR(s.r);
+    return '<tr><td>' + fmtT(t.entryTime) + '</td><td><span class="pill ' + t.side + '">' + (t.side === 'long' ? '롱' : '숏') + '</span></td><td>' + t.level + '</td><td>' + fmtP(t.entry) + ' / ' + fmtP(t.sl) + ' / ' + fmtP(t.tp) + '</td><td>1:' + t.rrNet.toFixed(1) + '</td><td class="' + (t.bias === t.side ? 'up' : 'mut') + '">' + t.bias + '</td><td>' + OUTCOME[s.outcome] + '</td><td class="' + (s.r > 0 ? 'up' : s.r < 0 ? 'dn' : '') + '">' + rr + '</td><td><button class="b" data-show="' + i + '">차트</button></td></tr>';
+  }).join('') + '</table>' : '<span class="mut">거래가 없습니다.</span>') + '</div></div>';
+  $('btOut').innerHTML = h;
+  $('btOut').querySelectorAll('tr.click').forEach((tr) => tr.addEventListener('click', () => { R.sel = +tr.dataset.i; renderBT(); }));
+  $('btOut').querySelectorAll('[data-show]').forEach((b) => b.addEventListener('click', () => showTrade(r.trades[+b.dataset.show])));
+  $('btSave').addEventListener('click', saveBT);
+}
+function saveBT() {
+  const R = S.btRes, v = curRule() ? curRule().v : 0;
+  if (!v && !confirm('저장된 매매법칙 버전이 없습니다. 버전 0(미지정)으로 저장할까요? 먼저 법칙 탭에서 버전을 저장하면 결과가 그 버전에 붙습니다.')) return;
+  const slim = R.rows.map((r) => { const o = Object.assign({}, r); delete o.trades; return o; });
+  S.bts.push({ id: 'bt' + Date.now(), ruleVersion: v, ranAt: R.ranAt, params: R.P, protectFrac: parseFloat($('bt_protectFrac').value) || 0.5, dataSource: R.src, dataRange: R.range, rows: slim });
+  if (!store.set('bts', S.bts)) { S.bts.pop(); return; }
+  $('btSaved').textContent = '저장했습니다 (법칙 v' + v + ')'; renderRules();
+}
+function showTrade(t) {
+  const rec = S.btRes.bt.snaps.find((x) => x.snap.id === t.snapId); if (!rec) return;
+  S.tempSnap = rec.snap; S.snapId = null; S.fitSel = null; S.fits = [];
+  S.startIdx = rec.startIdx; S.kind = rec.kind; $(rec.kind === 'H' ? 'kH' : 'kL').checked = true; $('asOfBack').value = 0;
+  S.view = { from: Math.max(0, Math.min(S.c.length - 20, t.entryIndex - 130)), count: 180 };
+  renderStart(); renderFits(); renderSnaps(); switchTab('chart'); refreshEval(); S.selLevel = t.level; renderEval(); draw();
+  msg('백테스트 거래의 스냅샷을 임시로 보여 주는 중입니다(저장되지 않음). 같은 피팅을 남기려면 시작점을 다시 계산해 고정하세요.');
+}
+$('btRun').addEventListener('click', runBT);
 
 // ───────── 공통 ─────────
 function switchTab(t) {

@@ -163,7 +163,9 @@
     const down = kind === 'H';
     let extreme = P1;
     for (let i = st; i <= asOf; i++) extreme = down ? Math.min(extreme, c[i].l) : Math.max(extreme, c[i].h);
-    const pivots = findPivots(c, Object.assign({}, o, { upTo: asOf })).filter((p) => p.index > st);
+    // o.pivots: 미리 계산해 둔 전체 피벗(백테스트용). confirmedIndex <= asOf 만 쓰므로 결과는 같다.
+    const pivots = (o.pivots || findPivots(c, Object.assign({}, o, { upTo: asOf })))
+      .filter((p) => p.index > st && p.confirmedIndex <= asOf);
 
     const raw = [];
     for (const p of pivots) {
@@ -233,7 +235,8 @@
       const lp = lv.price;
       const r = { ratio: lv.ratio, price: lp, status: 'none', label: '미돌파', attempts: [], breakout: null, retest: null, entry: null };
       let state = 'scan';
-      for (let i = start + 1; i <= end; i++) {
+      // fromIdx: 이 봉부터만 판정(백테스트에서 스냅샷이 만들어지기 전 봉은 보지 않는다)
+      for (let i = Math.max(start + 1, o.fromIdx == null ? 0 : o.fromIdx); i <= end; i++) {
         const a = A[i];
         if (a == null) continue;
         const b = c[i];
@@ -314,6 +317,144 @@
     return { outcome: 'open' };
   }
 
+
+  // 진입 후 관리. afterTarget:
+  //   'exit'    목표 0 에서 전량 청산
+  //   'protect' 0 에 닿으면 SL 을 진입→목표 거리의 protectFrac 지점으로 옮기고 계속 보유
+  //   'trail'   위와 같고, 이후 확정 스윙 고/저점(+ATR 여유)으로 SL 을 유리한 쪽으로만 옮김
+  // 규칙: 한 봉에 최초 SL·TP 가 모두 닿으면 ambiguous. 0 에 닿은 봉에서 바꾼 SL 은 다음 봉부터 적용.
+  function simulateManaged(c, entryIdx, t, o, st) {
+    o = opt(o); st = Object.assign({ afterTarget: 'exit', protectFrac: 0.5 }, st || {});
+    const long = t.side === 'long', end = c.length - 1;
+    const A = o._atr || atr(c, o.atrPeriod);
+    const pv = st.afterTarget === 'trail' ? (o.pivots || findPivots(c, o)) : [];
+    const byConf = new Map(); pv.forEach((p) => { if (!byConf.has(p.confirmedIndex)) byConf.set(p.confirmedIndex, []); byConf.get(p.confirmedIndex).push(p); });
+    const R = (exit) => computeR({ side: t.side, entry: t.entry, sl: t.sl, exit }, o).net;
+    const protectSL = t.entry + (t.tp - t.entry) * st.protectFrac;
+    let sl = t.sl, hit = false, hitIdx = null;
+    for (let i = entryIdx + 1; i <= end; i++) {
+      const b = c[i];
+      if (hit && st.afterTarget === 'trail') {
+        for (const p of byConf.get(i - 1) || []) {
+          const a = A[i - 1] || 0;
+          if (long && p.type === 'L') { const v = p.price - o.slBufferAtr * a; if (v > sl && v < c[i - 1].c) sl = v; }
+          if (!long && p.type === 'H') { const v = p.price + o.slBufferAtr * a; if (v < sl && v > c[i - 1].c) sl = v; }
+        }
+      }
+      const hitSL = long ? b.l <= sl : b.h >= sl;
+      const hitTP = !hit && (long ? b.h >= t.tp : b.l <= t.tp);
+      if (hitSL && hitTP) {
+        return { outcome: 'ambiguous', exitIndex: i, targetHit: null, rWorst: R(t.sl),
+          rBest: st.afterTarget === 'exit' ? R(t.tp) : R(protectSL),
+          note: '같은 봉에서 SL·TP 가 모두 닿음 — 순서 불명' };
+      }
+      if (hitSL) return { outcome: hit ? 'protect-stop' : 'sl', exitIndex: i, exitPrice: sl, r: R(sl), targetHit: hit, targetIndex: hitIdx };
+      if (hitTP) {
+        if (st.afterTarget === 'exit') return { outcome: 'tp', exitIndex: i, exitPrice: t.tp, r: R(t.tp), targetHit: true, targetIndex: i };
+        hit = true; hitIdx = i; sl = protectSL;
+      }
+    }
+    // 데이터 끝까지 안 끝난 거래: 마지막 종가로 평가(r). 빼 버리면 보호 SL 전략의 수익 거래가 통계에서 사라진다.
+    return { outcome: 'open', targetHit: hit, targetIndex: hitIdx, exitPrice: c[end].c, r: R(c[end].c) };
+  }
+
+  // ───────── 백테스트 (걸어가며 재현) ─────────
+  // 봉 i 에서 새 피벗이 확정될 때마다, 그 시점까지의 정보만으로
+  //   · 최근 W 봉 안의 최고가(H)/최저가(L)를 시작점 1 로 삼고
+  //   · 일치 레벨 수 ≥ btMinMatches 인 1순위 0 후보를 스냅샷으로 고정한다.
+  // 같은 시작점에서 0 이 의미 있게 달라지면 새 스냅샷(새 버전)이고, 이전 것은 그 봉에서 끝난다.
+  // 진입은 스냅샷 생성 이후 봉(돌파 포함)에서만 인정한다.
+  function runBacktest(c, o) {
+    o = opt(o);
+    const W = o.btLookback || 300, minM = o.btMinMatches || 2, maxLife = o.btMaxLife || 500, minMove = o.btMinMoveAtr || 3;
+    const A = atr(c, o.atrPeriod), pv = findPivots(c, o);
+    const base = Object.assign({}, o, { pivots: pv, _atr: A });
+    const byConf = new Map(); pv.forEach((p) => { if (!byConf.has(p.confirmedIndex)) byConf.set(p.confirmedIndex, []); byConf.get(p.confirmedIndex).push(p); });
+    const snaps = [], last = new Map();
+    const warm = Math.max(o.emaPeriod, W) ;
+    for (let i = warm; i < c.length; i++) {
+      if (!byConf.has(i) || A[i] == null) continue;
+      let hi = -Infinity, hiI = -1, lo = Infinity, loI = -1;
+      for (let k = i - W; k <= i; k++) { if (c[k].h > hi) { hi = c[k].h; hiI = k; } if (c[k].l < lo) { lo = c[k].l; loI = k; } }
+      for (const kind of ['H', 'L']) {
+        const st = kind === 'H' ? hiI : loI;
+        if (st > i - o.pivotRight) continue; // 아직 확정 안 된 꼭짓점은 시작점이 될 수 없다
+        if (!pv.some((p) => p.index === st && p.type === kind && p.confirmedIndex <= i)) continue;
+        const P1 = kind === 'H' ? c[st].h : c[st].l;
+        if (Math.abs(P1 - c[i].c) < minMove * A[i]) continue;
+        const fit = fitCandidates(c, { startIdx: st, startKind: kind, asOfIdx: i }, base).find((f) => f.count >= minM);
+        if (!fit) continue;
+        const key = st + kind, prev = last.get(key);
+        if (prev && Math.abs(prev.snap.P0 - fit.P0) <= 0.005 * fit.range) continue;
+        const snap = buildSnapshot(c, { startIdx: st, startKind: kind, asOfIdx: i }, fit, o);
+        const rec = { snap, k: i, startIdx: st, kind, end: null };
+        if (prev) prev.end = i;
+        last.set(key, rec); snaps.push(rec);
+      }
+    }
+    // 각 스냅샷의 유효 구간: 다음 버전 직전 / 최대 수명 / 시작점을 넘어서는 새 극값 직전
+    const cands = [];
+    for (const r of snaps) {
+      let end = Math.min(r.end == null ? c.length - 1 : r.end, r.k + maxLife, c.length - 1);
+      const P1 = r.snap.P1;
+      for (let j = r.k + 1; j <= end; j++) { if (r.kind === 'H' ? c[j].h > P1 : c[j].l < P1) { end = j - 1; break; } }
+      r.validEnd = end;
+      const ev = evaluateSetup(c, r.snap, Object.assign({}, base, { asOfIdx: end, fromIdx: r.k + 1 }));
+      // 예측 지표: 이 0 에 실제로 도달했는가 (거래 수익성과 별개)
+      const P0 = r.snap.P0; r.targetHitIdx = null;
+      for (let j = r.k + 1; j < c.length && j <= r.k + maxLife; j++) { if (r.kind === 'H' ? c[j].l <= P0 : c[j].h >= P0) { r.targetHitIdx = j; break; } }
+      for (const lv of ev.levels) if (lv.status === 'candidate') cands.push({ rec: r, level: lv.ratio, e: lv.entry, breakout: lv.breakout });
+    }
+    cands.sort((a, b) => a.e.index - b.e.index || a.level - b.level);
+    for (const x of cands) {
+      const b = biasAt(c, x.e.index, o);
+      x.bias = b.dir; x.biasOk = b.dir === x.e.side;
+    }
+    return { snaps, candidates: cands, atr: A, pivots: pv };
+  }
+
+  // 후보에 청산 전략을 입혀 거래 목록과 통계를 만든다. 한 번에 한 포지션만, 겹치는 신호는 건너뜀.
+  // 한 레벨당 한 번만 진입하므로 SL 뒤에는 새 돌파·리테스트가 생기기 전까지 같은 신호가 다시 나오지 않는다.
+  function tradeAll(c, bt, o, strat, useBias) {
+    o = opt(o);
+    const base = Object.assign({}, o, { pivots: bt.pivots, _atr: bt.atr });
+    const trades = []; let busyUntil = -1, skipped = 0;
+    for (const x of bt.candidates) {
+      if (useBias && !x.biasOk) { skipped++; continue; }
+      if (x.e.index <= busyUntil) { skipped++; continue; }
+      const sim = simulateManaged(c, x.e.index, { side: x.e.side, entry: x.e.price, sl: x.e.sl, tp: x.e.tp }, base, strat);
+      trades.push({ snapId: x.rec.snap.id, level: x.level, side: x.e.side, entryIndex: x.e.index, entryTime: c[x.e.index].t + barMs(c),
+        entry: x.e.price, sl: x.e.sl, tp: x.e.tp, rrNet: x.e.rr.rrNet, bias: x.bias, sim });
+      busyUntil = sim.outcome === 'open' ? Infinity : sim.exitIndex;
+    }
+    return { trades, skipped, stats: summarize(trades, bt) };
+  }
+
+  function summarize(trades, bt) {
+    const done = trades; // 진행 중 거래도 마지막 종가 평가값(r)으로 포함
+    const amb = done.filter((t) => t.sim.outcome === 'ambiguous');
+    const series = (pick) => done.map((t) => (t.sim.outcome === 'ambiguous' ? t.sim[pick] : t.sim.r));
+    const rW = series('rWorst'), rB = series('rBest'), sum = (a) => a.reduce((x, y) => x + y, 0);
+    let eq = 0, peak = 0, dd = 0, streak = 0, ms = 0;
+    rW.forEach((r) => { eq += r; peak = Math.max(peak, eq); dd = Math.max(dd, peak - eq); streak = r <= 0 ? streak + 1 : 0; ms = Math.max(ms, streak); });
+    const gw = sum(rW.filter((r) => r > 0)), gl = -sum(rW.filter((r) => r < 0));
+    const decided = done.filter((t) => t.sim.outcome !== 'ambiguous');
+    const tgt = decided.filter((t) => t.sim.targetHit);
+    const snaps = bt ? bt.snaps : [];
+    return {
+      n: done.length, open: trades.filter((t) => t.sim.outcome === 'open').length, ambiguous: amb.length,
+      winRate: done.length ? rW.filter((r) => r > 0).length / done.length : null,
+      avgR: done.length ? sum(rW) / done.length : null,
+      totalRWorst: sum(rW), totalRBest: sum(rB),
+      profitFactor: gl > 0 ? gw / gl : (gw > 0 ? Infinity : null),
+      maxDD: dd, maxLossStreak: ms,
+      // 거래 안에서 목표 0 에 닿은 비율(예측) — 수익성(avgR)과 따로 본다
+      tradeTargetRate: decided.length ? tgt.length / decided.length : null,
+      snapCount: snaps.length,
+      snapTargetRate: snaps.length ? snaps.filter((s) => s.targetHitIdx != null).length / snaps.length : null
+    };
+  }
+
   // 수동으로 분석해 둔 목표값과 자동 계산값의 차이.
   function compareManual(manual, auto, atrValue) {
     const diff = auto - manual;
@@ -363,5 +504,5 @@
   }
 
   return { LEVELS, DEFAULTS, atr, ema, findPivots, resample, trendOf, biasAt, calcRR, computeR, costPrice,
-    levelPrice, fitCandidates, buildSnapshot, evaluateSetup, simulateTrade, compareManual, positionSize, journalStats };
+    levelPrice, fitCandidates, buildSnapshot, evaluateSetup, simulateTrade, simulateManaged, runBacktest, tradeAll, summarize, compareManual, positionSize, journalStats };
 });
