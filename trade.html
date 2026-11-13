@@ -1,0 +1,724 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>피보 역산 매매 복기</title>
+<meta name="description" content="BTCUSDT 15분봉 피보나치 역산 매매법칙을 만들고 검증하고 복기하는 도구. 주문 기능 없음, 기록은 이 브라우저에만 저장.">
+<link rel="icon" href="favicon.png">
+<style>
+:root{--bg:#0e1116;--panel:#161b22;--panel2:#1c232c;--line:#2a323d;--tx:#e6edf3;--mut:#8b98a5;--up:#26a69a;--dn:#ef5350;--acc:#f0b90b;--blue:#58a6ff;--warn:#d29922}
+@media (prefers-color-scheme:light){:root{--bg:#f4f6f8;--panel:#fff;--panel2:#eef1f4;--line:#d6dbe1;--tx:#1b2430;--mut:#5d6b78;--up:#12877b;--dn:#d1433f;--acc:#b8860b;--blue:#0969da;--warn:#9a6700}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.5 -apple-system,"Segoe UI","Noto Sans KR",sans-serif}
+header{padding:12px 16px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline}
+header h1{font-size:17px;margin:0}
+header .sub{color:var(--mut);font-size:12px}
+nav{display:flex;gap:4px;padding:8px 16px 0;border-bottom:1px solid var(--line);overflow-x:auto}
+nav button{background:none;border:0;border-bottom:2px solid transparent;color:var(--mut);padding:8px 12px;font:inherit;cursor:pointer;white-space:nowrap}
+nav button.on{color:var(--tx);border-color:var(--acc)}
+main{padding:16px;max-width:1200px;margin:0 auto}
+.tab{display:none}.tab.on{display:block}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px}
+.card h2{font-size:14px;margin:0 0 8px}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.kpi .v{font-size:20px;font-weight:700}.kpi .l{color:var(--mut);font-size:12px}
+.up{color:var(--up)}.dn{color:var(--dn)}.mut{color:var(--mut)}.warn{color:var(--warn)}
+label{display:block;font-size:12px;color:var(--mut);margin-bottom:2px}
+input,select,textarea,button.b{background:var(--panel2);color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font:inherit;width:100%}
+textarea{min-height:60px;resize:vertical}
+input[type=checkbox],input[type=radio]{width:auto}
+button.b{width:auto;cursor:pointer}
+button.b.pri{background:var(--acc);color:#111;border-color:var(--acc);font-weight:600}
+button.b:disabled{opacity:.4;cursor:default}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:8px}
+.row>div{flex:1 1 130px}
+.row.tight>div{flex:0 0 auto}
+.chk{display:inline-flex;align-items:center;gap:4px;margin-right:12px;color:var(--tx);font-size:13px}
+.chk label{margin:0;color:inherit;font-size:13px}
+canvas{width:100%;height:440px;display:block;background:var(--panel);border:1px solid var(--line);border-radius:8px;touch-action:none;cursor:crosshair}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{color:var(--mut);font-weight:500;white-space:nowrap}
+tr.sel td{background:var(--panel2)}
+tr.click{cursor:pointer}
+.tbl{overflow-x:auto}
+.pill{display:inline-block;padding:0 8px;border-radius:10px;font-size:12px;border:1px solid var(--line)}
+.pill.long{color:var(--up);border-color:var(--up)}.pill.short{color:var(--dn);border-color:var(--dn)}
+.note{color:var(--mut);font-size:12px}
+.banner{background:var(--panel2);border-left:3px solid var(--warn);padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--mut)}
+#msg{min-height:20px;font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <h1>피보 역산 매매 복기</h1>
+  <span class="sub">BTCUSDT 무기한 15분봉 · 분석·검증·기록 전용 (주문 기능 없음)</span>
+</header>
+<nav id="nav">
+  <button data-t="chart" class="on">차트 분석</button>
+  <button data-t="risk">위험 관리</button>
+  <button data-t="journal">매매일지·심리</button>
+  <button data-t="rules">매매법칙 버전</button>
+</nav>
+<main>
+<div class="banner">수익을 보장하거나 매수·매도를 권하는 도구가 아닙니다. 정해 둔 조건을 객관적으로 판정하고 결과를 남기는 용도입니다.
+일지·법칙·스냅샷은 <b>이 브라우저(localStorage)에만</b> 저장되며 서버로 보내지 않습니다. 브라우저 데이터를 지우면 사라지니 '매매일지' 탭에서 주기적으로 내보내기 하세요.</div>
+
+<!-- ───────── 차트 분석 ───────── -->
+<section class="tab on" id="tab-chart">
+  <div class="grid" id="dash"></div>
+  <div class="card" style="margin-top:12px">
+    <div class="row">
+      <div style="flex:0 0 auto"><button class="b pri" id="btnLoad">BTCUSDT 15분봉 불러오기</button></div>
+      <div style="flex:0 0 auto"><button class="b" id="btnDemo">샘플(가짜) 데이터</button></div>
+      <div style="flex:0 0 auto"><button class="b" id="btnCsv">CSV/JSON 붙여넣기</button></div>
+      <div id="dataInfo" class="note" style="flex:1 1 200px"></div>
+    </div>
+    <div id="csvBox" style="display:none">
+      <textarea id="csvText" placeholder="time,open,high,low,close,volume (time 은 ms 또는 ISO)  또는  바이낸스 klines JSON 배열"></textarea>
+      <button class="b" id="csvGo" style="margin-top:6px">적용</button>
+    </div>
+    <div id="msg"></div>
+  </div>
+
+  <canvas id="cv"></canvas>
+  <div class="note" id="hover" style="margin:4px 0 12px">차트를 클릭해 시작점 1 을 지정하세요 · 드래그 이동 · 휠 확대/축소</div>
+
+  <div class="card">
+    <h2>1. 시작점 1 · 계산 시점</h2>
+    <div class="row">
+      <div><label>시작점 1</label><div id="startInfo">미지정</div></div>
+      <div style="flex:0 0 auto"><label>종류</label>
+        <span class="chk"><input type="radio" name="kind" id="kH" value="H" checked><label for="kH">고점 (하락 파동)</label></span>
+        <span class="chk"><input type="radio" name="kind" id="kL" value="L"><label for="kL">저점 (상승 파동)</label></span></div>
+      <div><label>계산 시점 (마지막 봉에서 N봉 전)</label><input type="number" id="asOfBack" value="0" min="0" step="1"></div>
+      <div style="flex:0 0 auto"><button class="b pri" id="btnFit">0 후보 계산</button></div>
+    </div>
+    <div class="note">피벗은 좌우 5봉이 모두 닫혀야 확정됩니다. '계산 시점'을 과거로 돌리면 그 시점까지 알 수 있던 정보만으로 복기할 수 있습니다.</div>
+  </div>
+
+  <div class="card">
+    <h2>2. 역산 0 후보</h2>
+    <div class="tbl" id="fitTbl"><span class="mut">시작점을 지정하고 계산하세요.</span></div>
+    <div class="row" style="margin-top:8px">
+      <div><label>수동으로 분석했던 목표 0 (비교용)</label><input type="number" id="manual" step="any" placeholder="예: 61250"></div>
+      <div><label>법칙 메모</label><input id="snapNote" placeholder="이 피팅을 고정하는 이유"></div>
+      <div style="flex:0 0 auto"><button class="b pri" id="btnSnap" disabled>선택한 후보로 고정(새 버전 저장)</button></div>
+      <div style="flex:0 0 auto"><button class="b" id="btnSnapManual" disabled>수동 목표값으로 고정</button></div>
+    </div>
+    <div id="cmp" class="note"></div>
+  </div>
+
+  <div class="card">
+    <h2>3. 돌파 · 리테스트 판정</h2>
+    <div class="row">
+      <div><label>고정된 피팅(스냅샷)</label><select id="snapSel"></select></div>
+      <div style="flex:0 0 auto"><button class="b" id="btnSnapDel" disabled>삭제</button></div>
+    </div>
+    <div class="tbl" id="evTbl"><span class="mut">고정된 피팅이 없습니다.</span></div>
+    <div id="evDetail"></div>
+  </div>
+</section>
+
+<!-- ───────── 위험 관리 ───────── -->
+<section class="tab" id="tab-risk">
+  <div class="card">
+    <h2>포지션 크기 · 청산 위험</h2>
+    <div class="row">
+      <div><label>방향</label><select id="rSide"><option value="long">롱</option><option value="short">숏</option></select></div>
+      <div><label>잔고 (USDT)</label><input type="number" id="rBal" value="10000" step="any"></div>
+      <div><label>1회 허용 손실 (%)</label><input type="number" id="rRisk" value="1" step="any"></div>
+      <div><label>레버리지 (x)</label><input type="number" id="rLev" value="10" step="any"></div>
+    </div>
+    <div class="row">
+      <div><label>진입가</label><input type="number" id="rEntry" step="any"></div>
+      <div><label>손절가</label><input type="number" id="rSl" step="any"></div>
+      <div><label>목표가</label><input type="number" id="rTp" step="any"></div>
+      <div><label>보유 시간 (시간)</label><input type="number" id="rHold" value="8" step="any"></div>
+    </div>
+    <div class="row">
+      <div><label>수수료 (편도 %)</label><input type="number" id="rFee" value="0.05" step="any"></div>
+      <div><label>슬리피지 (편도 %)</label><input type="number" id="rSlip" value="0.02" step="any"></div>
+      <div><label>펀딩비 (8시간당 %)</label><input type="number" id="rFund" value="0.01" step="any"></div>
+      <div><label>유지증거금률 (%)</label><input type="number" id="rMmr" value="0.4" step="any"></div>
+    </div>
+    <div id="rOut"></div>
+    <div class="note">청산가는 격리 마진 단순 근사치입니다. 실제 거래소 값(유지증거금 구간, 마진 모드, 펀딩)과 다를 수 있으니 주문 전 거래소 계산기로 다시 확인하세요.</div>
+  </div>
+</section>
+
+<!-- ───────── 매매일지·심리 ───────── -->
+<section class="tab" id="tab-journal">
+  <div class="grid" id="jStats"></div>
+  <div class="card" style="margin-top:12px">
+    <h2 id="jTitle">거래 기록</h2>
+    <input type="hidden" id="jId">
+    <div class="row">
+      <div><label>진입 시각</label><input type="datetime-local" id="jDate"></div>
+      <div><label>방향</label><select id="jSide"><option value="long">롱</option><option value="short">숏</option></select></div>
+      <div><label>진입가</label><input type="number" id="jEntry" step="any"></div>
+      <div><label>손절가</label><input type="number" id="jSl" step="any"></div>
+      <div><label>목표가</label><input type="number" id="jTp" step="any"></div>
+      <div><label>청산가 (진행 중이면 비움)</label><input type="number" id="jExit" step="any"></div>
+    </div>
+    <div class="row">
+      <div><label>연결할 피팅(스냅샷)</label><select id="jFit"></select></div>
+      <div><label>매매법칙 버전</label><select id="jRule"></select></div>
+    </div>
+    <div class="row">
+      <div style="flex:1 1 100%"><span class="chk"><input type="checkbox" id="jFollowed" checked><label for="jFollowed">정해 둔 규칙을 지켰다</label></span>
+      <div style="margin-top:4px" id="jEmo"></div></div>
+    </div>
+    <div class="row">
+      <div><label>규칙 위반 내용 (있다면)</label><input id="jViol"></div>
+    </div>
+    <div class="row">
+      <div><label>진입 당시 근거·판단</label><textarea id="jWhy"></textarea></div>
+      <div><label>복기 (결과를 알고 난 뒤 적기)</label><textarea id="jReview"></textarea></div>
+    </div>
+    <div class="row tight">
+      <div><button class="b pri" id="jSave">저장</button></div>
+      <div><button class="b" id="jReset">새로 쓰기</button></div>
+      <div id="jCalc" class="note" style="align-self:center"></div>
+    </div>
+  </div>
+  <div class="card"><h2>기록</h2><div class="tbl" id="jTbl"></div></div>
+  <div class="card">
+    <h2>백업</h2>
+    <div class="row tight">
+      <div><button class="b" id="exp">JSON 내보내기</button></div>
+      <div><button class="b" id="impBtn">JSON 가져오기</button><input type="file" id="imp" accept=".json,application/json" style="display:none"></div>
+    </div>
+    <div class="note">일지·매매법칙·고정된 피팅 전체가 한 파일로 나갑니다. 가져오기는 같은 id 의 기록을 덮어쓰고 나머지는 합칩니다.</div>
+  </div>
+</section>
+
+<!-- ───────── 매매법칙 ───────── -->
+<section class="tab" id="tab-rules">
+  <div class="card">
+    <h2>현재 적용 값 (차트 분석에 바로 반영)</h2>
+    <div class="row" id="ruleForm"></div>
+    <div class="row">
+      <div><label>변경 사유</label><input id="ruleNote" placeholder="무엇을 왜 바꿨는지"></div>
+      <div style="flex:0 0 auto"><button class="b pri" id="ruleSave">새 버전으로 저장</button></div>
+      <div style="flex:0 0 auto"><button class="b" id="ruleReset">기본값으로</button></div>
+    </div>
+    <div class="note">저장된 버전은 수정되지 않습니다. 값을 바꾸면 새 버전이 쌓이고, 일지와 피팅에는 당시 버전이 기록됩니다.</div>
+  </div>
+  <div class="card"><h2>버전 기록</h2><div class="tbl" id="ruleTbl"></div></div>
+</section>
+</main>
+
+<script src="fib-engine.js"></script>
+<script>
+(function () {
+'use strict';
+const E = FibEngine;
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+const MS = 900000;
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('fibtrade.v1.' + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem('fibtrade.v1.' + k, JSON.stringify(v)); return true; } catch (e) { alert('브라우저 저장소를 쓸 수 없어 저장하지 못했습니다. 내보내기로 따로 보관하세요.'); return false; } }
+};
+const fmtT = (t) => new Date(t).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+const fmtP = (p) => p == null ? '-' : Number(p).toLocaleString('en-US', { maximumFractionDigits: 2 });
+const fmtR = (r) => r == null ? '-' : (r > 0 ? '+' : '') + r.toFixed(2) + 'R';
+const msg = (t, bad) => { $('msg').innerHTML = t ? '<span class="' + (bad ? 'dn' : 'mut') + '">' + esc(t) + '</span>' : ''; };
+
+// ───────── 상태 ─────────
+const S = {
+  c: [], ema: [], src: '', view: { from: 0, count: 150 },
+  startIdx: null, kind: 'H', fits: [], fitSel: null,
+  snaps: store.get('snaps', []), snapId: null, ev: null, selLevel: null,
+  rules: store.get('rules', []), journal: store.get('journal', [])
+};
+const EMOTIONS = ['FOMO', '손절 수용', '수익 반납', '복수매매', '조기 청산', '손절 이동(불리하게)', '원칙대로 수행'];
+
+// ───────── 규칙 파라미터 폼 ─────────
+const PARAM_DEF = [
+  ['pivotLeft', '피벗 좌 (봉)', 1], ['pivotRight', '피벗 우 (봉)', 1],
+  ['bodyRatio', '돌파봉 몸통 비율', 0.05], ['breakAtr', '돌파 거리 (ATR)', 0.05],
+  ['confirmBars', '연속 종가 확인 (봉)', 1], ['retestTolAtr', '리테스트 허용 (ATR)', 0.05],
+  ['slBufferAtr', 'SL 여유 (ATR)', 0.05], ['minRR', '최소 손익비 (비용 반영)', 0.1],
+  ['feeRate', '수수료 (편도, 소수)', 0.0001], ['slipRate', '슬리피지 (편도, 소수)', 0.0001], ['fitTol', '피팅 허용 오차 (구간 비율)', 0.005]
+];
+function paramsFromForm() {
+  const o = {};
+  PARAM_DEF.forEach(([k]) => { const v = parseFloat($('p_' + k).value); o[k] = isFinite(v) ? v : E.DEFAULTS[k]; });
+  return o;
+}
+function buildRuleForm() {
+  const last = S.rules[S.rules.length - 1];
+  const base = Object.assign({}, E.DEFAULTS, last ? last.params : {});
+  $('ruleForm').innerHTML = PARAM_DEF.map(([k, l, st]) =>
+    '<div><label>' + l + '</label><input type="number" id="p_' + k + '" step="' + st + '" value="' + base[k] + '"></div>').join('');
+  PARAM_DEF.forEach(([k]) => $('p_' + k).addEventListener('change', () => { refreshEval(); }));
+}
+const curRule = () => S.rules.length ? S.rules[S.rules.length - 1] : null;
+
+// ───────── 데이터 ─────────
+function setCandles(rows, src) {
+  const now = Date.now();
+  const seen = new Map();
+  rows.forEach((r) => { if (isFinite(r.t) && [r.o, r.h, r.l, r.c].every(isFinite) && r.t + MS <= now) seen.set(r.t, r); }); // 마감된 봉만
+  const c = [...seen.values()].sort((a, b) => a.t - b.t);
+  if (c.length < 300) { msg('봉이 너무 적습니다(' + c.length + '). 최소 300봉이 필요합니다.', true); return; }
+  S.c = c; S.src = src; S.ema = E.ema(c.map((b) => b.c), 200);
+  S.startIdx = null; S.fits = []; S.fitSel = null; S.ev = null;
+  S.view = { from: Math.max(0, c.length - 150), count: 150 };
+  $('dataInfo').textContent = src + ' · ' + c.length + '봉 · ' + fmtT(c[0].t) + ' ~ ' + fmtT(c[c.length - 1].t) + ' (KST, 마감 봉만)';
+  msg('');
+  renderAll();
+}
+async function loadBinance() {
+  msg('불러오는 중…');
+  try {
+    let all = [], end = Date.now();
+    for (let p = 0; p < 3; p++) {
+      const r = await fetch('https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=15m&limit=1500&endTime=' + end);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const a = await r.json();
+      if (!a.length) break;
+      const rows = a.map((k) => ({ t: k[0], o: +k[1], h: +k[2], l: +k[3], c: +k[4], v: +k[5] }));
+      all = rows.concat(all); end = rows[0].t - 1;
+    }
+    setCandles(all, 'Binance USDⓈ-M BTCUSDT 15m');
+  } catch (e) { msg('바이낸스에서 못 가져왔습니다(' + e.message + '). CSV/JSON 붙여넣기나 샘플 데이터를 쓰세요.', true); }
+}
+function demoData() {
+  let seed = 12345; const rnd = () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296;
+  const n = 3000, end = Math.floor(Date.now() / MS) * MS, rows = [];
+  let p = 60000, drift = 0;
+  for (let i = 0; i < n; i++) {
+    if (i % 250 === 0) drift = (rnd() - 0.5) * 30;
+    const o = p, c = p + drift + (rnd() - 0.5) * 140;
+    rows.push({ t: end - (n - i) * MS, o, h: Math.max(o, c) + rnd() * 45, l: Math.min(o, c) - rnd() * 45, c, v: 1 });
+    p = c;
+  }
+  setCandles(rows, '샘플(무작위로 만든 가짜 데이터)');
+}
+function parseInput(text) {
+  text = text.trim();
+  if (text[0] === '[') {
+    return JSON.parse(text).map((k) => Array.isArray(k) ? { t: +k[0], o: +k[1], h: +k[2], l: +k[3], c: +k[4], v: +k[5] || 0 } : { t: +k.t, o: +k.o, h: +k.h, l: +k.l, c: +k.c, v: +k.v || 0 });
+  }
+  return text.split(/\r?\n/).map((ln) => ln.split(/[,\t;]/).map((x) => x.trim())).filter((a) => a.length >= 5).map((a) => {
+    const t = /^\d+$/.test(a[0]) ? (a[0].length <= 10 ? +a[0] * 1000 : +a[0]) : Date.parse(a[0]);
+    return { t, o: +a[1], h: +a[2], l: +a[3], c: +a[4], v: +a[5] || 0 };
+  });
+}
+
+// ───────── 차트 ─────────
+const cv = $('cv'), ctx = cv.getContext('2d');
+function activeSnap() { return S.snaps.find((s) => s.id === S.snapId) || null; }
+function previewFit() { return S.fitSel != null ? S.fits[S.fitSel] : null; }
+function draw() {
+  const dpr = window.devicePixelRatio || 1;
+  const W = cv.clientWidth, H = cv.clientHeight;
+  cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const css = getComputedStyle(document.documentElement);
+  const col = (n) => css.getPropertyValue(n).trim();
+  ctx.fillStyle = col('--panel'); ctx.fillRect(0, 0, W, H);
+  if (!S.c.length) { ctx.fillStyle = col('--mut'); ctx.fillText('데이터를 불러오세요', 20, 30); return; }
+  const padR = 78, padT = 12, padB = 20, pw = W - padR, ph = H - padT - padB;
+  const v = S.view, from = Math.max(0, Math.min(S.c.length - 10, Math.round(v.from))), cnt = Math.max(20, Math.min(S.c.length, Math.round(v.count)));
+  const to = Math.min(S.c.length, from + cnt);
+  const bw = pw / cnt;
+  const snap = activeSnap(), pf = previewFit();
+  const P0s = [snap && snap.P0, pf && pf.P0].filter((x) => x != null);
+  let hi = -Infinity, lo = Infinity;
+  for (let i = from; i < to; i++) { hi = Math.max(hi, S.c[i].h); lo = Math.min(lo, S.c[i].l); }
+  P0s.forEach((p) => { hi = Math.max(hi, p); lo = Math.min(lo, p); });
+  const pad = (hi - lo) * 0.05; hi += pad; lo -= pad;
+  const y = (p) => padT + (hi - p) / (hi - lo) * ph;
+  const x = (i) => (i - from) * bw + bw / 2;
+
+  // 격자·가격축
+  ctx.font = '11px sans-serif'; ctx.strokeStyle = col('--line'); ctx.fillStyle = col('--mut'); ctx.lineWidth = 1;
+  for (let k = 0; k <= 5; k++) {
+    const p = lo + (hi - lo) * k / 5, yy = y(p);
+    ctx.beginPath(); ctx.moveTo(0, yy); ctx.lineTo(pw, yy); ctx.globalAlpha = .4; ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.fillText(fmtP(p), pw + 6, yy + 4);
+  }
+  // 시간축
+  const step = Math.max(1, Math.round(cnt / 6));
+  for (let i = from; i < to; i += step) { const d = new Date(S.c[i].t + 9 * 3600000); ctx.fillText(String(d.getUTCMonth() + 1).padStart(2, '0') + '/' + String(d.getUTCDate()).padStart(2, '0') + ' ' + String(d.getUTCHours()).padStart(2, '0') + ':' + String(d.getUTCMinutes()).padStart(2, '0'), x(i) - 22, H - 5); }
+
+  // 캔들
+  for (let i = from; i < to; i++) {
+    const b = S.c[i], up = b.c >= b.o, cc = up ? col('--up') : col('--dn'), xx = x(i);
+    ctx.strokeStyle = cc; ctx.fillStyle = cc;
+    ctx.beginPath(); ctx.moveTo(xx, y(b.h)); ctx.lineTo(xx, y(b.l)); ctx.stroke();
+    const top = y(Math.max(b.o, b.c)), h = Math.max(1, Math.abs(y(b.o) - y(b.c)));
+    ctx.fillRect(xx - bw * 0.35, top, Math.max(1, bw * 0.7), h);
+  }
+  // EMA200
+  ctx.strokeStyle = col('--blue'); ctx.lineWidth = 1.2; ctx.beginPath(); let st = false;
+  for (let i = from; i < to; i++) { if (S.ema[i] == null) continue; const yy = y(S.ema[i]); if (!st) { ctx.moveTo(x(i), yy); st = true; } else ctx.lineTo(x(i), yy); }
+  ctx.stroke(); ctx.lineWidth = 1;
+
+  // 시작점 / 피보 레벨
+  if (S.startIdx != null && S.startIdx >= from && S.startIdx < to) {
+    const b = S.c[S.startIdx], yy = S.kind === 'H' ? y(b.h) : y(b.l);
+    ctx.fillStyle = col('--acc'); ctx.font = 'bold 12px sans-serif'; ctx.fillText('1', x(S.startIdx) - 3, S.kind === 'H' ? yy - 6 : yy + 15);
+  }
+  const lines = snap ? { P0: snap.P0, P1: snap.P1, levels: snap.levels, solid: true } : (pf ? { P0: pf.P0, P1: pf.P1, levels: E.DEFAULTS.levels.map((r) => ({ ratio: r, price: E.levelPrice(pf.P0, pf.P1, r) })), solid: false } : null);
+  if (lines) {
+    ctx.font = '11px sans-serif';
+    lines.levels.concat([{ ratio: 1, price: lines.P1 }, { ratio: 0, price: lines.P0 }]).forEach((lv) => {
+      const yy = y(lv.price), isEnd = lv.ratio === 0 || lv.ratio === 1;
+      ctx.strokeStyle = lv.ratio === 0 ? col('--acc') : col('--mut'); ctx.fillStyle = ctx.strokeStyle;
+      ctx.setLineDash(lines.solid ? (lv.ratio === 0 ? [] : [4, 3]) : [2, 4]); ctx.lineWidth = lv.ratio === 0 ? 1.6 : 1;
+      ctx.beginPath(); ctx.moveTo(0, yy); ctx.lineTo(pw, yy); ctx.stroke();
+      ctx.fillText((lv.ratio === 0 ? '0 목표 ' : lv.ratio === 1 ? '1 시작 ' : lv.ratio + ' ') + fmtP(lv.price), 4, yy - 3);
+    });
+    ctx.setLineDash([]); ctx.lineWidth = 1;
+  }
+  // 확정 피벗(후보 미리보기)
+  if (pf && !snap) pf.matches.forEach((m) => {
+    if (m.pivot.index < from || m.pivot.index >= to) return;
+    ctx.fillStyle = col('--acc'); ctx.beginPath(); ctx.arc(x(m.pivot.index), y(m.pivot.price), 4, 0, 7); ctx.fill();
+  });
+  // 판정 마커
+  if (S.ev) S.ev.levels.forEach((r) => {
+    if (r.breakout && r.breakout.index >= from && r.breakout.index < to) {
+      ctx.fillStyle = col('--blue'); ctx.fillText('돌파' + r.ratio, x(r.breakout.index) - 12, y(r.price) + (S.ev.side === 'short' ? 14 : -6));
+    }
+    if (r.entry && r.entry.index >= from && r.entry.index < to) {
+      ctx.fillStyle = r.status === 'candidate' ? col('--acc') : col('--mut');
+      ctx.beginPath(); ctx.arc(x(r.entry.index), y(r.entry.price), 5, 0, 7); ctx.fill();
+    }
+    if (S.selLevel === r.ratio && r.entry) {
+      [['SL', r.entry.sl, col('--dn')], ['TP', r.entry.tp, col('--up')], ['진입', r.entry.price, col('--acc')]].forEach(([n, p, cc]) => {
+        ctx.strokeStyle = cc; ctx.fillStyle = cc; ctx.setLineDash([6, 3]);
+        ctx.beginPath(); ctx.moveTo(x(r.entry.index), y(p)); ctx.lineTo(pw, y(p)); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillText(n + ' ' + fmtP(p), pw - 70, y(p) - 3);
+      });
+    }
+  });
+  // 계산 시점 표시
+  const asOf = asOfIdx();
+  if (asOf >= from && asOf < to && asOf < S.c.length - 1) {
+    ctx.strokeStyle = col('--warn'); ctx.setLineDash([2, 3]); ctx.beginPath(); ctx.moveTo(x(asOf) + bw / 2, padT); ctx.lineTo(x(asOf) + bw / 2, padT + ph); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = col('--warn'); ctx.fillText('계산 시점', x(asOf) - 20, padT + 10);
+  }
+  draw.geo = { from, cnt, bw };
+}
+
+// 상호작용: 클릭 = 시작점 선택, 드래그 = 이동, 휠 = 확대
+let drag = null;
+cv.addEventListener('pointerdown', (e) => { cv.setPointerCapture(e.pointerId); drag = { x: e.clientX, from: S.view.from, moved: false }; });
+cv.addEventListener('pointermove', (e) => {
+  const g = draw.geo;
+  if (drag && g) {
+    const dx = e.clientX - drag.x;
+    if (Math.abs(dx) > 4) drag.moved = true;
+    if (drag.moved) { S.view.from = Math.max(0, Math.min(S.c.length - 20, drag.from - dx / g.bw)); draw(); }
+  }
+  if (g && S.c.length) {
+    const i = g.from + Math.floor(e.offsetX / g.bw), b = S.c[i];
+    if (b) $('hover').textContent = fmtT(b.t) + '  O ' + fmtP(b.o) + '  H ' + fmtP(b.h) + '  L ' + fmtP(b.l) + '  C ' + fmtP(b.c) + '  (index ' + i + ')';
+  }
+});
+cv.addEventListener('pointerup', (e) => {
+  const g = draw.geo;
+  if (drag && !drag.moved && g && S.c.length) pickStart(g.from + Math.floor(e.offsetX / g.bw));
+  drag = null;
+});
+cv.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const g = draw.geo; if (!g) return;
+  const f = e.deltaY > 0 ? 1.15 : 1 / 1.15, anchor = g.from + e.offsetX / g.bw;
+  const cnt = Math.max(20, Math.min(S.c.length, g.cnt * f));
+  S.view.count = cnt; S.view.from = Math.max(0, Math.min(S.c.length - 20, anchor - (e.offsetX / (cv.clientWidth - 78)) * cnt));
+  draw();
+}, { passive: false });
+window.addEventListener('resize', draw);
+
+function pickStart(i) {
+  if (i < 0 || i >= S.c.length) return;
+  const a = Math.max(0, i - 10), b = Math.min(S.c.length - 1, i + 10);
+  let isH = true, isL = true;
+  for (let k = a; k <= b; k++) { if (S.c[k].h > S.c[i].h) isH = false; if (S.c[k].l < S.c[i].l) isL = false; }
+  if (isH && !isL) S.kind = 'H'; else if (isL && !isH) S.kind = 'L';
+  $(S.kind === 'H' ? 'kH' : 'kL').checked = true;
+  S.startIdx = i; S.fits = []; S.fitSel = null;
+  renderStart(); renderFits(); draw();
+}
+document.querySelectorAll('input[name=kind]').forEach((r) => r.addEventListener('change', () => { S.kind = r.value; S.fits = []; S.fitSel = null; renderStart(); renderFits(); draw(); }));
+const asOfIdx = () => Math.max(0, S.c.length - 1 - Math.max(0, parseInt($('asOfBack').value, 10) || 0));
+$('asOfBack').addEventListener('change', () => { renderDash(); draw(); });
+
+// ───────── 렌더 ─────────
+function renderStart() {
+  if (S.startIdx == null) { $('startInfo').textContent = '미지정 — 차트를 클릭'; return; }
+  const b = S.c[S.startIdx];
+  $('startInfo').innerHTML = fmtT(b.t) + ' · <b>' + fmtP(S.kind === 'H' ? b.h : b.l) + '</b> (' + (S.kind === 'H' ? '고점' : '저점') + ')';
+}
+function renderDash() {
+  if (!S.c.length) { $('dash').innerHTML = '<div class="card kpi"><div class="l">데이터</div><div class="v mut">없음</div></div>'; return; }
+  const i = asOfIdx(), P = paramsFromForm(), b = E.biasAt(S.c, i, P);
+  const name = { long: ['롱', 'up'], short: ['숏', 'dn'], flat: ['관망', 'mut'] }[b.dir];
+  const tr = { up: '↑', down: '↓', flat: '–' };
+  const snap = activeSnap();
+  let state = '고정된 피팅 없음', sc = 'mut';
+  if (S.ev) {
+    const fc = S.ev.firstCandidate;
+    const prog = S.ev.levels.filter((r) => r.status === 'wait-retest' || r.status === 'confirming');
+    if (fc) { state = '진입 후보 (' + fc.ratio + ' 레벨)'; sc = 'up'; }
+    else if (prog.length) { state = '리테스트 대기 (' + prog.map((r) => r.ratio).join(', ') + ')'; sc = 'warn'; }
+    else state = '조건 미충족';
+    if (fc && b.dir !== 'flat' && ((S.ev.side === 'short') !== (b.dir === 'short'))) { state += ' · 방향 불일치'; sc = 'warn'; }
+    else if (fc && b.dir === 'flat') { state += ' · 방향 관망'; sc = 'warn'; }
+  }
+  const key = snap ? snap.levels.filter((l) => [0.382, 0.5, 0.618].includes(l.ratio)).map((l) => l.ratio + ': ' + fmtP(l.price)).join(' · ') : '-';
+  $('dash').innerHTML =
+    '<div class="card kpi"><div class="l">시장 방향 (' + fmtT(S.c[i].t) + ' 봉 기준)</div><div class="v ' + name[1] + '">' + name[0] + '</div>' +
+    '<div class="note">4H ' + tr[b.h4 === 'up' ? 'up' : b.h4] + ' · 1H ' + tr[b.h1] + ' · 15m 200EMA ' + tr[b.m15] + '</div></div>' +
+    '<div class="card kpi"><div class="l">전략 상태</div><div class="v ' + sc + '" style="font-size:16px">' + esc(state) + '</div></div>' +
+    '<div class="card kpi"><div class="l">고정된 목표 0</div><div class="v">' + (snap ? fmtP(snap.P0) : '-') + '</div><div class="note">' + esc(key) + '</div></div>';
+}
+function renderFits() {
+  const el = $('fitTbl'), snapBtn = $('btnSnap');
+  snapBtn.disabled = S.fitSel == null;
+  $('btnSnapManual').disabled = S.startIdx == null;
+  if (!S.fits.length) { el.innerHTML = '<span class="mut">' + (S.startIdx == null ? '시작점을 지정하고 계산하세요.' : '후보가 없습니다 — 확정 피벗이 부족하거나 계산 시점이 너무 이릅니다.') + '</span>'; renderCmp(); return; }
+  el.innerHTML = '<table><tr><th>#</th><th>0 후보</th><th>일치 레벨 수</th><th>맞은 피벗 (레벨 · 오차 · 확정 시각)</th></tr>' +
+    S.fits.map((f, i) => '<tr class="click ' + (i === S.fitSel ? 'sel' : '') + '" data-i="' + i + '"><td>' + (i + 1) + '</td><td><b>' + fmtP(f.P0) + '</b></td><td>' + f.count + (f.count < 2 ? ' <span class="warn">(근거 약함)</span>' : '') + '</td><td>' +
+      f.matches.sort((a, b) => a.level - b.level).map((m) => m.level + ' · ' + fmtP(m.pivot.price) + ' (±' + m.err.toFixed(1) + ') · ' + fmtT(m.pivot.confirmedAt)).join('<br>') + '</td></tr>').join('') + '</table>';
+  el.querySelectorAll('tr.click').forEach((tr) => tr.addEventListener('click', () => { S.fitSel = +tr.dataset.i; S.snapId = null; renderFits(); renderSnaps(); refreshEval(); }));
+  renderCmp();
+}
+function renderCmp() {
+  const m = parseFloat($('manual').value), el = $('cmp');
+  const f = previewFit(), snap = activeSnap();
+  const auto = snap ? snap.P0 : (f ? f.P0 : null);
+  if (!isFinite(m) || auto == null) { el.textContent = '수동 목표를 넣으면 자동 계산값과의 차이를 보여 줍니다.'; return; }
+  const A = S.c.length ? E.atr(S.c, 14)[asOfIdx()] : null, d = E.compareManual(m, auto, A);
+  el.innerHTML = '수동 ' + fmtP(m) + ' vs 자동 ' + fmtP(auto) + ' → 차이 <b>' + (d.diff > 0 ? '+' : '') + fmtP(d.diff) + '</b> (' + d.pct.toFixed(2) + '%' + (d.atr != null ? ', ' + d.atr.toFixed(2) + ' ATR' : '') + ')';
+}
+$('manual').addEventListener('input', renderCmp);
+
+function renderSnaps() {
+  const sel = $('snapSel');
+  sel.innerHTML = '<option value="">— 선택 —</option>' + S.snaps.slice().reverse().map((s) =>
+    '<option value="' + esc(s.id) + '"' + (s.id === S.snapId ? ' selected' : '') + '>' + fmtT(s.startTime) + ' ' + (s.direction === 'down' ? '▼' : '▲') + ' 0=' + fmtP(s.P0) + ' · 법칙 v' + (s.ruleVersion || 0) + ' · ' + (s.source === 'manual' ? '수동' : '자동') + (s.note ? ' · ' + esc(s.note) : '') + '</option>').join('');
+  $('btnSnapDel').disabled = !S.snapId;
+  fillJournalSelects();
+}
+$('snapSel').addEventListener('change', (e) => { S.snapId = e.target.value || null; S.fitSel = null; renderFits(); renderSnaps(); refreshEval(); });
+$('btnSnapDel').addEventListener('click', () => {
+  if (!S.snapId || !confirm('이 고정 피팅을 삭제할까요? 연결된 일지의 피팅 연결은 id 만 남습니다.')) return;
+  S.snaps = S.snaps.filter((s) => s.id !== S.snapId); store.set('snaps', S.snaps); S.snapId = null; S.ev = null; renderSnaps(); refreshEval();
+});
+
+function refreshEval() {
+  const snap = activeSnap(); S.ev = null; S.selLevel = null;
+  if (snap && S.c.length) {
+    try { S.ev = E.evaluateSetup(S.c, snap, Object.assign(paramsFromForm(), { asOfIdx: asOfIdx() })); }
+    catch (e) { $('evTbl').innerHTML = '<span class="dn">' + esc(e.message) + ' — 이 피팅의 시작 봉이 지금 불러온 데이터 범위에 없습니다.</span>'; $('evDetail').innerHTML = ''; renderDash(); draw(); return; }
+  }
+  renderEval(); renderCmp(); renderDash(); draw();
+}
+const STATUS_CLS = { candidate: 'up', 'rr-fail': 'warn', missed: 'dn', 'wait-retest': 'warn', confirming: 'warn', none: 'mut' };
+function renderEval() {
+  const el = $('evTbl'), det = $('evDetail');
+  if (!S.ev) { el.innerHTML = '<span class="mut">고정된 피팅이 없습니다.</span>'; det.innerHTML = ''; return; }
+  const snap = activeSnap();
+  el.innerHTML = '<div class="note" style="margin-bottom:6px">방향 ' + (S.ev.side === 'short' ? '숏(하락 파동)' : '롱(상승 파동)') + ' · 목표 0 = ' + fmtP(snap.P0) + ' (신호 당시 값으로 고정) · 피벗 확정 시각 ' + snap.pivots.map((p) => fmtT(p.confirmedAt)).join(', ') + '</div>' +
+    '<table><tr><th>레벨</th><th>가격</th><th>상태</th><th>돌파봉</th><th>진입 / SL / 손익비(비용 반영)</th></tr>' +
+    S.ev.levels.map((r) => '<tr class="click ' + (S.selLevel === r.ratio ? 'sel' : '') + '" data-r="' + r.ratio + '"><td>' + r.ratio + '</td><td>' + fmtP(r.price) + '</td><td class="' + STATUS_CLS[r.status] + '">' + esc(r.label) + '</td><td>' +
+      (r.breakout ? fmtT(r.breakout.time) + '<br><span class="note">몸통 ' + (r.breakout.body * 100).toFixed(0) + '% · ' + r.breakout.distAtr.toFixed(2) + ' ATR</span>' : '-') + '</td><td>' +
+      (r.entry ? fmtP(r.entry.price) + ' / ' + fmtP(r.entry.sl) + ' / ' + (r.entry.rr ? '1:' + r.entry.rr.rrNet.toFixed(2) : '-') : '-') + '</td></tr>').join('') + '</table>';
+  el.querySelectorAll('tr.click').forEach((tr) => tr.addEventListener('click', () => { S.selLevel = +tr.dataset.r; renderEval(); draw(); }));
+  const r = S.ev.levels.find((x) => x.ratio === S.selLevel);
+  if (!r) { det.innerHTML = '<div class="note">레벨 행을 누르면 SL/TP 와 시도 기록이 차트에 표시됩니다.</div>'; return; }
+  let h = '<div class="card" style="margin-top:8px"><b>' + r.ratio + ' 레벨 (' + fmtP(r.price) + ')</b>';
+  if (r.attempts.length) h += '<div class="note" style="margin-top:4px">돌파 시도 기록</div><ul style="margin:2px 0 6px 18px;padding:0">' + r.attempts.map((a) => '<li>' + fmtT(a.time) + ' — ' + (a.ok ? '<span class="up">돌파 확정</span>' : '<span class="mut">불인정: ' + esc(a.why) + '</span>') + '</li>').join('') + '</ul>';
+  if (r.entry) {
+    const e = r.entry, bias = E.biasAt(S.c, e.index, paramsFromForm());
+    const aligned = (e.side === 'short' && bias.dir === 'short') || (e.side === 'long' && bias.dir === 'long');
+    h += '<div>진입 ' + fmtP(e.price) + ' · SL ' + fmtP(e.sl) + ' · TP(0) ' + fmtP(e.tp) + '</div>';
+    if (e.rr) h += '<div class="note">위험 ' + fmtP(e.rr.risk) + ' · 보상 ' + fmtP(e.rr.reward) + ' · 왕복 비용 ' + fmtP(e.rr.cost) + ' → 손익비 비용 전 1:' + e.rr.rrGross.toFixed(2) + ' / 비용 후 <b>1:' + e.rr.rrNet.toFixed(2) + '</b></div>';
+    h += '<div class="note">진입 시점 방향 필터: 4H ' + bias.h4 + ' · 1H ' + bias.h1 + ' · 15m ' + bias.m15 + ' → <b class="' + (aligned ? 'up' : 'warn') + '">' + (aligned ? '파동 방향과 일치' : '일치하지 않음(' + bias.dir + ')') + '</b></div>';
+    const sim = E.simulateTrade(S.c, e.index, e, paramsFromForm());
+    h += '<div class="note">이후 봉 결과(참고): ' + ({ tp: '<span class="up">목표 0 도달 ' + fmtR(sim.r) + '</span>', sl: '<span class="dn">손절 ' + fmtR(sim.r) + '</span>', open: '진행 중', ambiguous: '<span class="warn">한 봉에서 SL·TP 모두 닿음 — 순서 불명 (' + fmtR(sim.rWorst) + ' ~ ' + fmtR(sim.rBest) + ')</span>' }[sim.outcome]) + '</div>';
+    h += '<div class="note">※ 목표 도달 여부(예측)와 실제 수익성(비용 반영 R)은 별개 지표입니다. 진입은 리테스트 봉 종가로 가정합니다.</div>';
+    h += '<div style="margin-top:6px"><button class="b" id="toJournal">이 신호로 일지 쓰기</button> <button class="b" id="toRisk">위험 관리로 보내기</button></div>';
+  }
+  det.innerHTML = h + '</div>';
+  const tj = $('toJournal'); if (tj) tj.addEventListener('click', () => {
+    const e = r.entry; switchTab('journal'); resetJournal();
+    $('jSide').value = e.side; $('jEntry').value = e.price.toFixed(2); $('jSl').value = e.sl.toFixed(2); $('jTp').value = e.tp.toFixed(2);
+    $('jDate').value = toLocalInput(e.time + MS); $('jFit').value = snap.id; calcJ();
+  });
+  const tr2 = $('toRisk'); if (tr2) tr2.addEventListener('click', () => {
+    const e = r.entry; $('rSide').value = e.side; $('rEntry').value = e.price.toFixed(2); $('rSl').value = e.sl.toFixed(2); $('rTp').value = e.tp.toFixed(2); switchTab('risk'); calcRisk();
+  });
+}
+
+// ───────── 피팅 / 스냅샷 ─────────
+$('btnFit').addEventListener('click', () => {
+  if (S.startIdx == null) { msg('먼저 차트에서 시작점 1 을 클릭하세요.', true); return; }
+  const ai = asOfIdx();
+  if (ai <= S.startIdx + 10) { msg('계산 시점이 시작점과 너무 가깝습니다.', true); return; }
+  S.fits = E.fitCandidates(S.c, { startIdx: S.startIdx, startKind: S.kind, asOfIdx: ai }, paramsFromForm());
+  S.fitSel = S.fits.length ? 0 : null; S.snapId = null; msg('');
+  renderFits(); renderSnaps(); refreshEval();
+});
+function saveSnap(fit) {
+  const P = paramsFromForm(), snap = Object.assign({}, E.buildSnapshot(S.c, { startIdx: S.startIdx, startKind: S.kind, asOfIdx: asOfIdx() }, fit, P));
+  snap.note = $('snapNote').value.trim(); snap.ruleVersion = curRule() ? curRule().v : 0;
+  snap.manualTarget = parseFloat($('manual').value); if (!isFinite(snap.manualTarget)) snap.manualTarget = null;
+  snap.savedAt = Date.now(); snap.dataSource = S.src;
+  snap.dataRange = [S.c[0].t, S.c[S.c.length - 1].t + MS];
+  S.snaps.push(snap);
+  if (!store.set('snaps', S.snaps)) { S.snaps.pop(); return; }
+  S.snapId = snap.id; S.fitSel = null; renderFits(); renderSnaps(); refreshEval();
+}
+$('btnSnap').addEventListener('click', () => { if (S.fitSel != null) saveSnap(S.fits[S.fitSel]); });
+$('btnSnapManual').addEventListener('click', () => {
+  const m = parseFloat($('manual').value);
+  if (!isFinite(m)) { msg('수동 목표값을 먼저 입력하세요.', true); return; }
+  const b = S.c[S.startIdx], P1 = S.kind === 'H' ? b.h : b.l;
+  if (S.kind === 'H' ? m >= P1 : m <= P1) { msg('목표 0 이 시작점 방향과 맞지 않습니다.', true); return; }
+  saveSnap({ P0: m, P1, manual: true, matches: [] });
+});
+
+// ───────── 위험 관리 ─────────
+function calcRisk() {
+  const g = (id) => parseFloat($(id).value);
+  const p = { side: $('rSide').value, balance: g('rBal'), riskPct: g('rRisk'), entry: g('rEntry'), sl: g('rSl'), leverage: g('rLev'), mmr: g('rMmr') / 100, fundingRate: g('rFund') / 100, holdHours: g('rHold') };
+  const o = { feeRate: g('rFee') / 100, slipRate: g('rSlip') / 100 }, tp = g('rTp');
+  if (![p.balance, p.riskPct, p.entry, p.sl, p.leverage].every(isFinite) || p.entry === p.sl) { $('rOut').innerHTML = '<span class="mut">값을 입력하세요.</span>'; return; }
+  const long = p.side === 'long';
+  if (long ? p.sl >= p.entry : p.sl <= p.entry) { $('rOut').innerHTML = '<span class="dn">손절가가 방향과 맞지 않습니다.</span>'; return; }
+  const r = E.positionSize(p, o), rr = isFinite(tp) ? E.calcRR(p.side, p.entry, p.sl, tp, o) : null;
+  $('rOut').innerHTML = '<div class="grid">' +
+    [['허용 손실', fmtP(r.riskAmt) + ' USDT'], ['수량', r.qty.toFixed(4) + ' BTC'], ['명목 가치', fmtP(r.notional) + ' USDT'], ['필요 증거금', fmtP(r.margin) + ' USDT (' + r.marginPct.toFixed(1) + '%)'],
+      ['예상 청산가', fmtP(r.liq)], ['보유 중 펀딩비', fmtP(r.funding) + ' USDT'], ['왕복 비용', fmtP(r.qty * E.costPrice(p.entry, o)) + ' USDT'],
+      ['손익비 (비용 후)', rr ? '1:' + rr.rrNet.toFixed(2) + ' (전 1:' + rr.rrGross.toFixed(2) + ')' : '-']].map((x) => '<div class="card kpi"><div class="l">' + x[0] + '</div><div class="v" style="font-size:16px">' + x[1] + '</div></div>').join('') + '</div>' +
+    (r.liqBeforeSL ? '<div class="dn"><b>경고:</b> 청산가가 손절가보다 먼저입니다. 손절이 작동하기 전에 청산됩니다. 레버리지를 낮추세요.</div>' : '') +
+    (rr && rr.rrNet < E.DEFAULTS.minRR ? '<div class="warn">비용 반영 손익비가 1:' + E.DEFAULTS.minRR + ' 미만이라 진입 후보에서 제외되는 구간입니다.</div>' : '') +
+    (r.margin > p.balance ? '<div class="warn">필요 증거금이 잔고보다 큽니다.</div>' : '');
+}
+document.querySelectorAll('#tab-risk input,#tab-risk select').forEach((el) => el.addEventListener('input', calcRisk));
+
+// ───────── 일지 ─────────
+const toLocalInput = (t) => { const d = new Date(t - new Date().getTimezoneOffset() * 60000); return d.toISOString().slice(0, 16); };
+function fillJournalSelects() {
+  const cur = $('jFit').value;
+  $('jFit').innerHTML = '<option value="">(없음)</option>' + S.snaps.map((s) => '<option value="' + esc(s.id) + '">' + fmtT(s.startTime) + ' 0=' + fmtP(s.P0) + (s.note ? ' · ' + esc(s.note) : '') + '</option>').join('');
+  $('jFit').value = cur;
+  const rc = $('jRule').value;
+  $('jRule').innerHTML = '<option value="0">(버전 없음)</option>' + S.rules.map((r) => '<option value="' + r.v + '">v' + r.v + ' · ' + esc(r.note || '') + '</option>').join('');
+  $('jRule').value = rc || (curRule() ? curRule().v : 0);
+}
+function buildEmo(sel) {
+  $('jEmo').innerHTML = EMOTIONS.map((t, i) => '<span class="chk"><input type="checkbox" id="em' + i + '" value="' + esc(t) + '"' + (sel && sel.includes(t) ? ' checked' : '') + '><label for="em' + i + '">' + esc(t) + '</label></span>').join('');
+}
+function readJ() {
+  const n = (id) => { const v = parseFloat($(id).value); return isFinite(v) ? v : null; };
+  const e = { id: $('jId').value || ('j' + Date.now()), date: $('jDate').value, side: $('jSide').value, entry: n('jEntry'), sl: n('jSl'), tp: n('jTp'), exit: n('jExit'),
+    fitId: $('jFit').value || null, ruleVersion: +$('jRule').value || 0, followed: $('jFollowed').checked, violation: $('jViol').value.trim(),
+    emotions: [...document.querySelectorAll('#jEmo input:checked')].map((x) => x.value), why: $('jWhy').value.trim(), review: $('jReview').value.trim() };
+  const P = paramsFromForm();
+  if (e.entry != null && e.sl != null && e.exit != null) { const r = E.computeR(e, P); if (r) { e.r = +r.net.toFixed(3); e.rGross = +r.gross.toFixed(3); } }
+  return e;
+}
+function calcJ() {
+  const e = readJ(); let t = '';
+  if (e.entry != null && e.sl != null && e.tp != null) { const rr = E.calcRR(e.side, e.entry, e.sl, e.tp, paramsFromForm()); t += rr ? '계획 손익비(비용 후) 1:' + rr.rrNet.toFixed(2) : '손절/목표 방향 확인'; }
+  if (e.r != null) t += (t ? ' · ' : '') + '결과 ' + fmtR(e.r) + ' (비용 전 ' + fmtR(e.rGross) + ')';
+  $('jCalc').textContent = t;
+}
+document.querySelectorAll('#tab-journal .card:nth-of-type(1) input, #tab-journal .card:nth-of-type(1) select').forEach((el) => el.addEventListener('input', calcJ));
+function resetJournal() {
+  ['jId', 'jEntry', 'jSl', 'jTp', 'jExit', 'jViol', 'jWhy', 'jReview'].forEach((id) => { $(id).value = ''; });
+  $('jDate').value = toLocalInput(Date.now()); $('jFollowed').checked = true; $('jFit').value = ''; $('jTitle').textContent = '거래 기록'; buildEmo([]); calcJ();
+}
+$('jReset').addEventListener('click', resetJournal);
+$('jSave').addEventListener('click', () => {
+  const e = readJ();
+  if (!e.date || e.entry == null || e.sl == null) { alert('진입 시각, 진입가, 손절가는 필수입니다.'); return; }
+  if (e.side === 'long' ? e.sl >= e.entry : e.sl <= e.entry) { alert('손절가가 방향과 맞지 않습니다.'); return; }
+  if (!e.followed && !e.violation) { if (!confirm('규칙을 어겼다고 체크했는데 위반 내용이 비어 있습니다. 그대로 저장할까요?')) return; }
+  const i = S.journal.findIndex((x) => x.id === e.id); e.savedAt = Date.now();
+  if (i >= 0) S.journal[i] = e; else S.journal.push(e);
+  store.set('journal', S.journal); resetJournal(); renderJournal();
+});
+function renderJournal() {
+  const st = E.journalStats(S.journal), pct = (x) => x == null ? '-' : (x * 100).toFixed(0) + '%';
+  $('jStats').innerHTML = [
+    ['기록 / 청산', st.total + ' / ' + st.closed], ['승률', pct(st.winRate)], ['누적 R (비용 후)', fmtR(st.totalR)], ['평균 R', fmtR(st.avgR)],
+    ['규칙 준수율', pct(st.adherence)], ['준수 시 평균 R (' + st.nFollowed + '건)', fmtR(st.avgRFollowed)], ['위반 시 평균 R (' + st.nBroke + '건)', fmtR(st.avgRBroke)], ['최대 연속 손실', st.maxLossStreak + '회']
+  ].map((x) => '<div class="card kpi"><div class="l">' + x[0] + '</div><div class="v">' + x[1] + '</div></div>').join('') +
+    '<div class="card kpi" style="grid-column:1/-1"><div class="l">심리 태그 횟수</div><div>' + (Object.keys(st.tags).length ? Object.keys(st.tags).map((k) => '<span class="pill">' + esc(k) + ' ' + st.tags[k] + '</span> ').join('') : '<span class="mut">아직 없음</span>') + '</div></div>';
+  const rows = S.journal.slice().sort((a, b) => (a.date < b.date ? 1 : -1));
+  $('jTbl').innerHTML = rows.length ? '<table><tr><th>시각</th><th>방향</th><th>진입/SL/TP</th><th>청산</th><th>결과</th><th>규칙</th><th>태그</th><th></th></tr>' + rows.map((e) =>
+    '<tr><td>' + esc(e.date.replace('T', ' ')) + '</td><td><span class="pill ' + e.side + '">' + (e.side === 'long' ? '롱' : '숏') + '</span></td><td>' + fmtP(e.entry) + ' / ' + fmtP(e.sl) + ' / ' + fmtP(e.tp) + '</td><td>' + fmtP(e.exit) + '</td>' +
+    '<td class="' + (e.r > 0 ? 'up' : e.r < 0 ? 'dn' : '') + '">' + (e.r != null ? fmtR(e.r) : '진행 중') + '</td><td>' + (e.followed ? '<span class="up">준수</span>' : '<span class="dn">위반</span><br><span class="note">' + esc(e.violation) + '</span>') + '</td>' +
+    '<td>' + (e.emotions || []).map(esc).join(', ') + '</td><td><button class="b" data-ed="' + esc(e.id) + '">수정</button> <button class="b" data-del="' + esc(e.id) + '">삭제</button></td></tr>' +
+    (e.why || e.review ? '<tr><td></td><td colspan="7" class="note">' + (e.why ? '<b>근거</b> ' + esc(e.why) + '<br>' : '') + (e.review ? '<b>복기</b> ' + esc(e.review) : '') + '</td></tr>' : '')).join('') + '</table>' : '<span class="mut">아직 기록이 없습니다.</span>';
+  $('jTbl').querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => { if (confirm('삭제할까요?')) { S.journal = S.journal.filter((x) => x.id !== b.dataset.del); store.set('journal', S.journal); renderJournal(); } }));
+  $('jTbl').querySelectorAll('[data-ed]').forEach((b) => b.addEventListener('click', () => {
+    const e = S.journal.find((x) => x.id === b.dataset.ed); if (!e) return;
+    $('jId').value = e.id; $('jDate').value = e.date; $('jSide').value = e.side; $('jEntry').value = e.entry == null ? '' : e.entry; $('jSl').value = e.sl == null ? '' : e.sl; $('jTp').value = e.tp == null ? '' : e.tp; $('jExit').value = e.exit == null ? '' : e.exit;
+    $('jFit').value = e.fitId || ''; $('jRule').value = e.ruleVersion || 0; $('jFollowed').checked = e.followed; $('jViol').value = e.violation || ''; $('jWhy').value = e.why || ''; $('jReview').value = e.review || '';
+    buildEmo(e.emotions); $('jTitle').textContent = '거래 기록 수정'; calcJ(); window.scrollTo(0, $('jTitle').offsetTop);
+  }));
+}
+$('exp').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify({ app: 'fibtrade', version: 1, exportedAt: new Date().toISOString(), journal: S.journal, rules: S.rules, snaps: S.snaps }, null, 1)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'fibtrade-' + new Date().toISOString().slice(0, 10) + '.json'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+$('impBtn').addEventListener('click', () => $('imp').click());
+$('imp').addEventListener('change', async (ev) => {
+  try {
+    const d = JSON.parse(await ev.target.files[0].text());
+    if (d.app !== 'fibtrade') throw new Error('이 앱의 백업 파일이 아닙니다');
+    const merge = (cur, inc, key) => { const m = new Map(cur.map((x) => [x[key], x])); (inc || []).forEach((x) => m.set(x[key], x)); return [...m.values()]; };
+    S.journal = merge(S.journal, d.journal, 'id'); S.rules = merge(S.rules, d.rules, 'v'); S.snaps = merge(S.snaps, d.snaps, 'id');
+    store.set('journal', S.journal); store.set('rules', S.rules); store.set('snaps', S.snaps);
+    buildRuleForm(); renderRules(); renderSnaps(); renderJournal(); alert('가져왔습니다.');
+  } catch (e) { alert('가져오기 실패: ' + e.message); }
+  ev.target.value = '';
+});
+
+// ───────── 매매법칙 버전 ─────────
+function renderRules() {
+  $('ruleTbl').innerHTML = S.rules.length ? '<table><tr><th>버전</th><th>저장 시각</th><th>변경 사유</th><th>값</th><th>이 버전으로 고정한 피팅 / 일지</th></tr>' + S.rules.slice().reverse().map((r) => {
+    const ss = S.snaps.filter((s) => s.ruleVersion === r.v), js = S.journal.filter((j) => j.ruleVersion === r.v), cl = js.filter((j) => j.r != null);
+    return '<tr><td>v' + r.v + '</td><td>' + fmtT(r.savedAt) + '</td><td>' + esc(r.note) + '</td><td class="note">' + PARAM_DEF.map(([k]) => k + '=' + r.params[k]).join(', ') + '<br>데이터: ' + esc(r.dataSource || '-') + (r.dataRange ? ' (' + fmtT(r.dataRange[0]) + ' ~ ' + fmtT(r.dataRange[1]) + ')' : '') + '</td><td>피팅 ' + ss.length + ' · 일지 ' + js.length + (cl.length ? ' · 평균 ' + fmtR(cl.reduce((a, b) => a + b.r, 0) / cl.length) : '') + '</td></tr>';
+  }).join('') + '</table>' : '<span class="mut">저장된 버전이 없습니다. 위에서 값을 확인하고 첫 버전을 저장하세요.</span>';
+}
+$('ruleSave').addEventListener('click', () => {
+  const note = $('ruleNote').value.trim();
+  if (!note) { alert('변경 사유를 적어 주세요. 나중에 왜 바꿨는지 복기할 때 필요합니다.'); return; }
+  const v = (S.rules.length ? S.rules[S.rules.length - 1].v : 0) + 1;
+  S.rules.push({ v, savedAt: Date.now(), note, params: paramsFromForm(), dataSource: S.src || null, dataRange: S.c.length ? [S.c[0].t, S.c[S.c.length - 1].t + MS] : null });
+  if (!store.set('rules', S.rules)) { S.rules.pop(); return; }
+  $('ruleNote').value = ''; renderRules(); fillJournalSelects();
+});
+$('ruleReset').addEventListener('click', () => { PARAM_DEF.forEach(([k]) => { $('p_' + k).value = E.DEFAULTS[k]; }); refreshEval(); });
+
+// ───────── 공통 ─────────
+function switchTab(t) {
+  document.querySelectorAll('#nav button').forEach((b) => b.classList.toggle('on', b.dataset.t === t));
+  document.querySelectorAll('.tab').forEach((s) => s.classList.toggle('on', s.id === 'tab-' + t));
+  if (t === 'chart') draw();
+}
+$('nav').addEventListener('click', (e) => { if (e.target.dataset.t) switchTab(e.target.dataset.t); });
+$('btnLoad').addEventListener('click', loadBinance);
+$('btnDemo').addEventListener('click', demoData);
+$('btnCsv').addEventListener('click', () => { const b = $('csvBox'); b.style.display = b.style.display === 'none' ? 'block' : 'none'; });
+$('csvGo').addEventListener('click', () => { try { setCandles(parseInput($('csvText').value), '붙여넣은 데이터'); } catch (e) { msg('해석 실패: ' + e.message, true); } });
+
+function renderAll() { renderStart(); renderFits(); renderSnaps(); renderDash(); renderEval(); draw(); }
+buildRuleForm(); buildEmo([]); resetJournal(); renderRules(); renderJournal(); renderAll(); calcRisk();
+})();
+</script>
+</body>
+</html>
