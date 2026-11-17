@@ -3,6 +3,9 @@
 //   GET    /api/board                 최근 포스트잇 목록
 //   POST   /api/board  {text,color}   새 포스트잇
 //   POST   /api/board  {action:'agree',id}   "나도 불편해" +1 (IP 당 한 번)
+//
+// 포스트잇 벽(최근 글)에서 "나도 불편"이 PROMOTE_AT 개에 이르면 그 글은 벽에서
+// "공통 불편 게시판"으로 옮겨 간다. 게시판은 공감 많은 순으로 보여 준다.
 //   DELETE /api/board?id=...          관리자 삭제 (헤더 x-admin-key = BOARD_ADMIN_KEY)
 //
 // 저장소는 Upstash Redis(사주 사용량 제한과 같은 환경변수). 없으면 서버 메모리에
@@ -12,14 +15,17 @@ const crypto = require('crypto');
 
 const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
-const MAX_LEN = 140;
+const MAX_LEN = 30;
 const KEEP = 200;                                   // 보관하는 최대 장수
+const KEEP_BOARD = 300;                             // 게시판에 보관하는 최대 장수
+const PROMOTE_AT = Number(process.env.BOARD_PROMOTE_AT) || 5;   // 이만큼 공감받으면 게시판으로
 const SHOW = 100;                                   // 한 번에 보여 주는 장수
 const IP_HOURLY_LIMIT = Number(process.env.BOARD_IP_HOURLY_LIMIT) || 10;
 const COLORS = ['yellow', 'pink', 'blue', 'green'];
 
 // ---- 저장소 ---------------------------------------------------------------
-const mem = { notes: [], agree: {}, voters: {}, hits: {} };
+// 개발 서버는 요청마다 모듈을 새로 읽으므로, 메모리 저장소는 전역에 둬서 살아남게 한다.
+const mem = globalThis.__boardMem = globalThis.__boardMem || { notes: [], promoted: [], agree: {}, voters: {}, hits: {} };
 
 async function redis(commands) {
   const res = await fetch(REDIS_URL + '/pipeline', {
@@ -35,11 +41,12 @@ const store = {
   persistent: !!(REDIS_URL && REDIS_TOKEN),
 
   async list() {
-    if (!this.persistent) return { notes: mem.notes.slice(0, SHOW), agree: mem.agree };
-    const [raw, agree] = await redis([['LRANGE', 'board:notes', 0, SHOW - 1], ['HGETALL', 'board:agree']]);
+    if (!this.persistent) return { notes: mem.notes.slice(0, SHOW), promoted: mem.promoted.slice(), agree: mem.agree };
+    const [raw, hall, agree] = await redis([['LRANGE', 'board:notes', 0, SHOW - 1],
+      ['LRANGE', 'board:promoted', 0, KEEP_BOARD - 1], ['HGETALL', 'board:agree']]);
     const map = {};
     for (let i = 0; agree && i < agree.length; i += 2) map[agree[i]] = Number(agree[i + 1]);
-    return { notes: raw.map((s) => JSON.parse(s)), agree: map };
+    return { notes: raw.map((s) => JSON.parse(s)), promoted: hall.map((s) => JSON.parse(s)), agree: map };
   },
 
   async add(note) {
@@ -47,27 +54,46 @@ const store = {
     await redis([['LPUSH', 'board:notes', JSON.stringify(note)], ['LTRIM', 'board:notes', 0, KEEP - 1]]);
   },
 
-  // 같은 IP 가 같은 글에 두 번 누르지 못하게 한다. 새로 올랐으면 true.
+  // 같은 IP 가 같은 글에 두 번 누르지 못하게 한다. { added, count } 를 돌려준다.
   async agree(id, voter) {
     if (!this.persistent) {
       const set = (mem.voters[id] = mem.voters[id] || new Set());
-      if (set.has(voter)) return false;
-      set.add(voter); mem.agree[id] = (mem.agree[id] || 0) + 1; return true;
+      if (set.has(voter)) return { added: false, count: mem.agree[id] || 0 };
+      set.add(voter); mem.agree[id] = (mem.agree[id] || 0) + 1; return { added: true, count: mem.agree[id] };
     }
     const [added] = await redis([['SADD', 'board:v:' + id, voter], ['EXPIRE', 'board:v:' + id, 60 * 60 * 24 * 30]]);
-    if (!added) return false;
-    await redis([['HINCRBY', 'board:agree', id, 1]]);
+    if (!added) return { added: false, count: 0 };
+    const [count] = await redis([['HINCRBY', 'board:agree', id, 1]]);
+    return { added: true, count: Number(count) };
+  },
+
+  // 벽의 글 하나를 게시판으로 옮긴다. 벽에 없으면(이미 옮겼거나 지워졌으면) 아무것도 안 한다.
+  async promote(id) {
+    if (!this.persistent) {
+      const i = mem.notes.findIndex((n) => n.id === id);
+      if (i < 0) return false;
+      mem.promoted.unshift(mem.notes.splice(i, 1)[0]); mem.promoted.length = Math.min(mem.promoted.length, KEEP_BOARD);
+      return true;
+    }
+    const [raw] = await redis([['LRANGE', 'board:notes', 0, KEEP - 1]]);
+    const hit = raw.find((x) => { try { return JSON.parse(x).id === id; } catch (e) { return false; } });
+    if (!hit) return false;
+    const [removed] = await redis([['LREM', 'board:notes', 0, hit]]);
+    if (!removed) return false;                       // 동시에 다른 요청이 먼저 옮겼다
+    await redis([['LPUSH', 'board:promoted', hit], ['LTRIM', 'board:promoted', 0, KEEP_BOARD - 1]]);
     return true;
   },
 
   async remove(id) {
     if (!this.persistent) {
-      mem.notes = mem.notes.filter((n) => n.id !== id); delete mem.agree[id]; return;
+      mem.notes = mem.notes.filter((n) => n.id !== id); mem.promoted = mem.promoted.filter((n) => n.id !== id);
+      delete mem.agree[id]; return;
     }
-    const raw = await redis([['LRANGE', 'board:notes', 0, KEEP - 1]]);
-    const hit = raw[0].find((s) => { try { return JSON.parse(s).id === id; } catch (e) { return false; } });
+    const [wall, hall] = await redis([['LRANGE', 'board:notes', 0, KEEP - 1], ['LRANGE', 'board:promoted', 0, KEEP_BOARD - 1]]);
+    const find = (list) => list.find((s) => { try { return JSON.parse(s).id === id; } catch (e) { return false; } });
     const cmds = [['HDEL', 'board:agree', id], ['DEL', 'board:v:' + id]];
-    if (hit) cmds.unshift(['LREM', 'board:notes', 0, hit]);
+    if (find(wall)) cmds.unshift(['LREM', 'board:notes', 0, find(wall)]);
+    if (find(hall)) cmds.unshift(['LREM', 'board:promoted', 0, find(hall)]);
     await redis(cmds);
   },
 
@@ -104,10 +130,13 @@ async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   try {
     if (req.method === 'GET') {
-      const { notes, agree } = await store.list();
+      const { notes, promoted, agree } = await store.list();
+      const view = (n) => ({ id: n.id, text: n.text, color: n.color, t: n.t, agree: agree[n.id] || 0 });
       return res.status(200).json({
         persistent: store.persistent,
-        notes: notes.map((n) => ({ id: n.id, text: n.text, color: n.color, t: n.t, agree: agree[n.id] || 0 }))
+        promoteAt: PROMOTE_AT,
+        notes: notes.map(view),
+        board: promoted.map(view).sort((a, b) => b.agree - a.agree || b.t - a.t)
       });
     }
 
@@ -130,7 +159,9 @@ async function handler(req, res) {
     if (body.action === 'agree') {
       const id = String(body.id || '');
       if (!/^[a-z0-9]{6,32}$/.test(id)) return fail(res, 400, '잘못된 id 입니다.');
-      return res.status(200).json({ ok: true, added: await store.agree(id, voter) });
+      const r = await store.agree(id, voter);
+      const promoted = r.added && r.count >= PROMOTE_AT ? await store.promote(id) : false;
+      return res.status(200).json({ ok: true, added: r.added, promoted });
     }
 
     const text = cleanText(body.text);

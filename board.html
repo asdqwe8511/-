@@ -17,7 +17,7 @@
   form{max-width:420px;margin:18px auto;padding:0 16px}
   .new{position:relative;padding:14px;border-radius:2px;background:var(--y);box-shadow:0 6px 14px rgba(0,0,0,.3);transform:rotate(-1deg)}
   .new[data-c=pink]{background:var(--p)}.new[data-c=blue]{background:var(--b)}.new[data-c=green]{background:var(--g)}
-  textarea{width:100%;height:110px;border:0;background:transparent;resize:none;font:inherit;font-size:1.05rem;outline:none}
+  textarea{width:100%;height:80px;border:0;background:transparent;resize:none;font:inherit;font-size:1.1rem;outline:none}
   .row{display:flex;align-items:center;justify-content:space-between;gap:8px}
   .dots{display:flex;gap:8px}
   .dots button{width:24px;height:24px;border-radius:50%;border:2px solid rgba(0,0,0,.25);cursor:pointer;padding:0}
@@ -37,6 +37,15 @@
   .agree{position:absolute;right:8px;bottom:8px;border:0;border-radius:14px;background:rgba(255,255,255,.65);
     padding:4px 10px;font:inherit;font-size:.82rem;cursor:pointer}
   .agree[disabled]{background:rgba(0,0,0,.12);cursor:default}
+  #hall{max-width:560px;margin:8px auto 0;padding:0 16px}
+  #hall h2{margin:0 0 8px;color:#fff;font-size:1.15rem;text-shadow:0 1px 3px rgba(0,0,0,.4)}
+  #hall small{font-weight:400;font-size:.8rem;opacity:.9}
+  #hall ol{margin:0;padding:12px 14px 12px 38px;background:#fffdf6;border-radius:4px;box-shadow:0 5px 10px rgba(0,0,0,.28)}
+  #hall li{padding:7px 0;border-bottom:1px dashed #d8cfb8;word-break:break-word}
+  #hall li:last-child{border-bottom:0}
+  #hall .c{float:right;margin-left:10px;font-size:.85rem;font-weight:700;color:#c0392b}
+  #hall .none{list-style:none;margin-left:-24px;color:#888;font-size:.9rem}
+  .wall-title{max-width:1000px;margin:26px auto 0;padding:0 16px;color:#fff;font-size:1.05rem;text-shadow:0 1px 3px rgba(0,0,0,.4)}
   .empty{grid-column:1/-1;text-align:center;color:#fff;padding:40px 0}
   .warn{max-width:420px;margin:0 auto;padding:8px 14px;background:#fff3cd;border-radius:6px;font-size:.85rem;text-align:center}
   footer{text-align:center;color:#fff;font-size:.8rem;padding-bottom:30px;opacity:.85}
@@ -50,7 +59,7 @@
 
 <form id="f">
   <div class="new" id="paper" data-c="yellow">
-    <textarea id="text" maxlength="140" placeholder="요즘 뭐가 불편했나요?" aria-label="불편한 점"></textarea>
+    <textarea id="text" rows="3" maxlength="30" placeholder="불편한 걸 짧게 (30자)" aria-label="불편한 점"></textarea>
     <div class="row">
       <div class="dots" role="group" aria-label="포스트잇 색">
         <button type="button" data-c="yellow" style="background:var(--y)" aria-label="노랑" aria-pressed="true"></button>
@@ -58,7 +67,7 @@
         <button type="button" data-c="blue" style="background:var(--b)" aria-label="파랑" aria-pressed="false"></button>
         <button type="button" data-c="green" style="background:var(--g)" aria-label="초록" aria-pressed="false"></button>
       </div>
-      <span class="cnt"><span id="n">0</span>/140</span>
+      <span class="cnt"><span id="n">0</span>/30</span>
       <button class="post" id="go" disabled>붙이기</button>
     </div>
   </div>
@@ -66,6 +75,11 @@
 </form>
 
 <div id="warn"></div>
+<section id="hall" aria-label="공통 불편 게시판">
+  <h2>📋 다들 불편해해요 <small id="hallnote"></small></h2>
+  <ol id="hallList"></ol>
+</section>
+<h2 class="wall-title">📌 새로 붙은 포스트잇</h2>
 <main id="board" aria-live="polite"></main>
 <footer>누가 썼는지는 저장하지 않아요. 개인정보·욕설·특정인 비방은 올리지 마세요.</footer>
 
@@ -80,6 +94,20 @@
   function tilt(id) {
     var h = 0; for (var i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
     return ((Math.abs(h) % 61) - 30) / 10;            // -3.0 ~ +3.0 도
+  }
+
+  function renderHall(list, at) {
+    $('hallnote').textContent = '(포스트잇이 ' + at + '명에게 공감받으면 여기로 올라와요)';
+    var ol = $('hallList'); ol.textContent = '';
+    if (!list.length) {
+      var li = document.createElement('li'); li.className = 'none';
+      li.textContent = '아직 없어요. 공감이 모이면 이곳에 올라옵니다.'; ol.appendChild(li); return;
+    }
+    list.forEach(function (n) {
+      var li = document.createElement('li');
+      var c = document.createElement('span'); c.className = 'c'; c.textContent = '나도 ' + n.agree;
+      li.appendChild(c); li.appendChild(document.createTextNode(n.text)); ol.appendChild(li);
+    });
   }
 
   function render(notes) {
@@ -99,7 +127,10 @@
         b.disabled = true; n.agree++; label(); agreed[n.id] = 1;
         try { localStorage.setItem('board-agreed', JSON.stringify(agreed)); } catch (e) {}
         fetch('/api/board', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'agree', id: n.id }) }).catch(function () {});
+          body: JSON.stringify({ action: 'agree', id: n.id }) })
+          .then(function (r) { return r.json(); })
+          .then(function (d) { if (d.promoted) setTimeout(load, 600); })   // 게시판으로 올라갔으면 새로 그린다
+          .catch(function () {});
       };
       el.appendChild(p); el.appendChild(b); box.appendChild(el);
     });
@@ -112,6 +143,7 @@
         var w = document.createElement('div'); w.className = 'warn';
         w.textContent = '임시 저장 모드예요. 서버가 다시 켜지면 글이 사라집니다.'; $('warn').appendChild(w);
       }
+      renderHall(d.board || [], d.promoteAt || 5);
       render(d.notes || []);
     }).catch(function () { $('msg').textContent = '목록을 불러오지 못했어요.'; });
   }
