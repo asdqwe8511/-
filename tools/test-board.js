@@ -33,14 +33,17 @@ let n = 0; const ok = (name) => { n++; console.log('  ok  ' + name); };
   // 공감이 모이면 게시판으로 올라간다
   r = await call('POST', { body: { text: '와이파이 느림' }, headers: { 'x-forwarded-for': '9.9.9.9' } }); const hot = r.body.note.id;
   for (const ip of ['3.3.3.3', '4.4.4.4']) { r = await call('POST', { body: { action: 'agree', id: hot }, headers: { 'x-forwarded-for': ip } }); assert.strictEqual(r.body.promoted, false); }
-  r = await call('GET'); assert.strictEqual(r.body.board.length, 0); ok('기준 미만이면 벽에 남음');
+  const ADM = { 'x-admin-key': 'secret-admin' };
+  r = await call('GET', { headers: ADM }); assert.strictEqual(r.body.board.length, 0); ok('기준 미만이면 벽에 남음');
   r = await call('POST', { body: { action: 'agree', id: hot }, headers: { 'x-forwarded-for': '5.5.5.5' } }); assert.strictEqual(r.body.promoted, true);
-  r = await call('GET'); assert.strictEqual(r.body.board.length, 1); assert.strictEqual(r.body.board[0].agree, 3);
+  r = await call('GET'); assert.ok(!('board' in r.body) && !r.body.admin); ok('관리자가 아니면 게시판이 내려가지 않음');
+  r = await call('GET', { headers: { 'x-admin-key': 'wrong' } }); assert.ok(!('board' in r.body));
+  r = await call('GET', { headers: ADM }); assert.strictEqual(r.body.board.length, 1); assert.strictEqual(r.body.board[0].agree, 3);
   assert.ok(!r.body.notes.some((x) => x.id === hot)); ok('공감 3개에 벽에서 게시판으로 이동');
   r = await call('POST', { body: { action: 'agree', id: hot }, headers: { 'x-forwarded-for': '6.6.6.6' } }); assert.strictEqual(r.body.promoted, false);
-  r = await call('GET'); assert.strictEqual(r.body.board[0].agree, 4); ok('게시판 글도 공감 계속 집계');
+  r = await call('GET', { headers: ADM }); assert.strictEqual(r.body.board[0].agree, 4); ok('게시판 글도 공감 계속 집계');
   r = await call('DELETE', { query: { id: hot }, headers: { 'x-admin-key': 'secret-admin' } });
-  r = await call('GET'); assert.strictEqual(r.body.board.length, 0); ok('게시판 글도 관리자 삭제');
+  r = await call('GET', { headers: ADM }); assert.strictEqual(r.body.board.length, 0); ok('게시판 글도 관리자 삭제');
   let last; for (let i = 0; i < 6; i++) last = await call('POST', { body: { text: 'spam' + i } });
   assert.strictEqual(last.code, 429); ok('시간당 횟수 제한');
   console.log('\n' + n + '가지 통과');

@@ -1,6 +1,6 @@
 // 불편 게시판 엔드포인트. 로그인 없이 누구나 포스트잇을 붙인다.
 //
-//   GET    /api/board                 최근 포스트잇 목록
+//   GET    /api/board                 최근 포스트잇 목록. 관리자 키가 있을 때만 공통 불편 게시판(board)도 담긴다
 //   POST   /api/board  {text,color}   새 포스트잇
 //   POST   /api/board  {action:'agree',id}   "나도 불편해" +1 (IP 당 한 번)
 //
@@ -124,6 +124,13 @@ function cleanText(v) {
     .replace(/\r\n?/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
+// 관리자 키 확인. 키가 설정돼 있지 않으면 아무도 관리자가 아니다.
+function isAdmin(req) {
+  const key = process.env.BOARD_ADMIN_KEY;
+  const a = Buffer.from(String(req.headers['x-admin-key'] || '')), b = Buffer.from(key || '');
+  return !!key && a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
 function fail(res, code, message) { return res.status(code).json({ error: { message } }); }
 
 async function handler(req, res) {
@@ -134,17 +141,15 @@ async function handler(req, res) {
       const view = (n) => ({ id: n.id, text: n.text, color: n.color, t: n.t, agree: agree[n.id] || 0 });
       return res.status(200).json({
         persistent: store.persistent,
-        promoteAt: PROMOTE_AT,
         notes: notes.map(view),
-        board: promoted.map(view).sort((a, b) => b.agree - a.agree || b.t - a.t)
+        // 게시판은 나(관리자)만 본다. 다른 사람에게는 이 필드 자체가 내려가지 않는다.
+        ...(isAdmin(req) ? { admin: true, promoteAt: PROMOTE_AT,
+          board: promoted.map(view).sort((a, b) => b.agree - a.agree || b.t - a.t) } : {})
       });
     }
 
     if (req.method === 'DELETE') {
-      const key = process.env.BOARD_ADMIN_KEY;
-      const given = String(req.headers['x-admin-key'] || '');
-      const a = Buffer.from(given), b = Buffer.from(key || '');
-      if (!key || a.length !== b.length || !crypto.timingSafeEqual(a, b)) return fail(res, 403, '권한이 없습니다.');
+      if (!isAdmin(req)) return fail(res, 403, '권한이 없습니다.');
       const id = String((req.query && req.query.id) || '');
       if (!/^[a-z0-9]{6,32}$/.test(id)) return fail(res, 400, '잘못된 id 입니다.');
       await store.remove(id);
