@@ -30,6 +30,10 @@ tools/blog-watch.js     N드라이브 같은 사진 폴더(라이브포토 HEIC�
                          txt 로 만들어 둡니다(내 PC 에서 실행, blog-drafts/ 에 저장).
 tools/heic-to-jpg.js    N드라이브 사진(HEIC)을 JPG 로 바꿔 바탕화면 "네이버마이박스" 폴더에 따로
                          모읍니다. 원본은 그대로 두고, 수정 시각을 원본과 맞춥니다.
+board.html             불편 게시판(/board). 로그인 없이 포스트잇을 붙이고 "나도 불편"을 누릅니다.
+api/board.js            게시판 엔드포인트. Upstash Redis 에 저장(없으면 메모리). 글쓴이 정보는 저장하지 않고,
+                         IP 해시로 시간당 횟수만 셉니다. 삭제는 BOARD_ADMIN_KEY 로만.
+tools/test-board.js     게시판 검증·중복 공감·사용량 제한·삭제 점검
 api/health.js           설정 점검. 어떤 키가 들어갔고 무엇이 켜졌는지 알려 줍니다.
 og-saju.png             링크 미리보기 이미지
 favicon.png             브라우저 탭 아이콘
